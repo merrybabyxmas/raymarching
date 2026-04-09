@@ -60,10 +60,6 @@ def test_train_vca_processor_fp16_input():
 
 def test_unet_frozen_after_inject():
     """inject_vca_train 후 UNet parameters requires_grad = False"""
-    if torch.cuda.is_available():
-        free_gb = torch.cuda.mem_get_info()[0] / 1024**3
-        if free_gb < 7.0:
-            pytest.skip(f"GPU memory low: {free_gb:.1f} GB")
     try:
         from scripts.train_animatediff_vca import inject_vca_train, build_entity_context
         from scripts.run_animatediff import load_pipeline
@@ -92,10 +88,6 @@ def test_unet_frozen_after_inject():
 
 def test_encode_frames_shape():
     """encode_frames_to_latents → (1, 4, T, H//8, W//8)"""
-    if torch.cuda.is_available():
-        free_gb = torch.cuda.mem_get_info()[0] / 1024**3
-        if free_gb < 7.0:
-            pytest.skip(f"GPU memory low: {free_gb:.1f} GB")
     try:
         from scripts.train_animatediff_vca import load_frames, encode_frames_to_latents
         from scripts.run_animatediff import load_pipeline
@@ -133,16 +125,30 @@ def test_depth_order_parsing():
 
 # ─── subprocess 통합 테스트 ──────────────────────────────────────────────────
 
+def _pick_gpu() -> str:
+    """사용 가능한 GPU 중 가장 여유 있는 것을 선택 (CUDA_VISIBLE_DEVICES 형식)."""
+    if not torch.cuda.is_available():
+        return ''
+    best_gpu, best_free = 0, 0
+    for i in range(torch.cuda.device_count()):
+        try:
+            free, _ = torch.cuda.mem_get_info(i)
+            if free > best_free:
+                best_free = free
+                best_gpu = i
+        except Exception:
+            continue
+    if best_free < 7 * 1024 ** 3:
+        pytest.skip(f"All GPUs have < 7 GB free. Best GPU {best_gpu}: "
+                    f"{best_free / 1024**3:.1f} GB free.")
+    return str(best_gpu)
+
+
 @pytest.fixture(scope='module')
 def train_result():
     """5 에폭, 4 프레임, 256×256으로 빠른 검증"""
-    # GPU 메모리 부족 시 skip (다른 프로세스가 VRAM 점유 중일 수 있음)
-    if torch.cuda.is_available():
-        free_bytes = torch.cuda.mem_get_info()[0]
-        free_gb = free_bytes / 1024 ** 3
-        if free_gb < 7.0:
-            pytest.skip(f"Insufficient GPU memory: {free_gb:.1f} GB free (need ~7 GB). "
-                        f"Kill other CUDA processes first.")
+    gpu_id = _pick_gpu()
+    env = {**__import__('os').environ, 'CUDA_VISIBLE_DEVICES': gpu_id} if gpu_id else None
     r = subprocess.run(
         [sys.executable, 'scripts/train_animatediff_vca.py',
          '--scenario',   'chain',
@@ -155,7 +161,7 @@ def train_result():
          '--lambda-ortho', '0.05',
          '--save-dir',   str(CKPT_DIR),
          '--debug-dir',  str(DEBUG_DIR)],
-        capture_output=True, text=True, timeout=600,
+        capture_output=True, text=True, timeout=600, env=env,
     )
     return r
 
