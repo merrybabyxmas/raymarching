@@ -67,16 +67,16 @@ def analyze_sequence(seq_dir: Path) -> dict:
             d1 = float(depth[m1_only].mean())
             depth_orders.append(d0 < d1)  # True = entity0이 앞
 
-        # occlusion (mask overlap)
+        # occlusion: mask 겹침 여부 (어느 픽셀이라도 겹치면 True)
         intersection = (m0 & m1).sum()
-        union = (m0 | m1).sum()
-        if union > 0:
-            iou = intersection / union
-            occlusions.append(float(iou))
+        occlusions.append(intersection > 10)   # 10픽셀 이상 겹치면 occlusion 있음
 
     # depth reversal: True/False가 섞여 있으면 역전 있음
     has_reversal = (0 < sum(depth_orders) < len(depth_orders)) if depth_orders else False
     depth_reversal_rate = (1.0 if has_reversal else 0.0)
+
+    # occlusion_rate: 이 시퀀스에서 겹치는 프레임이 1개라도 있으면 1.0
+    has_occlusion = any(occlusions) if occlusions else False
 
     return {
         'keyword0':   meta.get('keyword0', ''),
@@ -85,7 +85,7 @@ def analyze_sequence(seq_dir: Path) -> dict:
         'camera':     meta.get('camera', ''),
         'n_frames':   n_frames,
         'depth_reversal_rate': depth_reversal_rate,
-        'occlusion_rate':      float(np.mean(occlusions)) if occlusions else 0.0,
+        'has_occlusion':       1.0 if has_occlusion else 0.0,
         'avg_depth_sep':       float(np.std(depth_orders)) if len(depth_orders) > 1 else 0.0,
     }
 
@@ -106,38 +106,41 @@ def analyze_objaverse_dataset(data_root: str, out_dir: str):
         if r:
             results.append(r)
             print(f"  {seq_dir.name}: depth_rev={r['depth_reversal_rate']:.2f}  "
-                  f"occ={r['occlusion_rate']:.2f}", flush=True)
+                  f"occ={r['has_occlusion']:.2f}", flush=True)
 
     if not results:
         print("[warn] No valid sequences found", flush=True)
-        stats = {'total_samples': 0}
+        stats = {'total_samples': 0, 'total_frames': 0}
     else:
         # 집계
         mode_counts = defaultdict(int)
         kw_pair_counts = defaultdict(int)
+        total_frames = sum(r['n_frames'] for r in results)
         for r in results:
             mode_counts[r['mode']] += 1
             kw_pair_counts[f"{r['keyword0']}+{r['keyword1']}"] += 1
 
         total = len(results)
         avg_depth_rev = float(np.mean([r['depth_reversal_rate'] for r in results]))
-        avg_occlusion = float(np.mean([r['occlusion_rate']      for r in results]))
-        avg_depth_sep = float(np.mean([r['avg_depth_sep']        for r in results]))
+        # occlusion_rate = 시퀀스 중 1프레임이라도 겹치는 비율
+        occlusion_rate = float(np.mean([r['has_occlusion'] for r in results]))
+        avg_depth_sep  = float(np.mean([r['avg_depth_sep'] for r in results]))
 
         stats = {
-            'total_samples':        total,
-            'depth_reversal_rate':  avg_depth_rev,
-            'occlusion_rate':       avg_occlusion,
-            'avg_depth_sep':        avg_depth_sep,
-            'mode_distribution':    dict(mode_counts),
-            'pair_distribution':    dict(sorted(kw_pair_counts.items(),
-                                                key=lambda x: -x[1])[:20]),
+            'total_samples':       total,
+            'total_frames':        total_frames,
+            'depth_reversal_rate': avg_depth_rev,
+            'occlusion_rate':      occlusion_rate,
+            'avg_depth_sep':       avg_depth_sep,
+            'mode_distribution':   dict(mode_counts),
+            'pair_distribution':   dict(sorted(kw_pair_counts.items(),
+                                               key=lambda x: -x[1])[:20]),
             'sequences': results,
         }
 
-        print(f"\n[stats] total={total}", flush=True)
+        print(f"\n[stats] total_samples={total}  total_frames={total_frames}", flush=True)
         print(f"[stats] depth_reversal_rate={avg_depth_rev:.3f}", flush=True)
-        print(f"[stats] occlusion_rate={avg_occlusion:.3f}", flush=True)
+        print(f"[stats] occlusion_rate(seq-level)={occlusion_rate:.3f}", flush=True)
         print(f"[stats] mode_distribution={dict(mode_counts)}", flush=True)
 
     # JSON 저장
