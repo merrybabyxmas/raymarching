@@ -66,7 +66,12 @@ def load_mesh_as_pyvista(glb_path: Path) -> pv.PolyData:
         raise ValueError(f"Unexpected type: {type(result)}")
 
     if len(mesh.vertices) > 50_000:
-        mesh = mesh.simplify_quadric_decimation(10_000)
+        target_faces = min(10_000, len(mesh.faces) - 1)
+        if target_faces > 0 and target_faces < len(mesh.faces):
+            try:
+                mesh = mesh.simplify_quadric_decimation(target_faces)
+            except Exception:
+                pass  # decimation 실패 시 원본 사용
 
     mesh = normalize_mesh(mesh)
 

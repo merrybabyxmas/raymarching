@@ -75,9 +75,14 @@ def load_and_normalize(glb_path: Path) -> trimesh.Trimesh:
     else:
         raise ValueError(f"Unexpected type: {type(result)}")
 
-    # 버텍스 과도 시 decimation
+    # 버텍스 과도 시 decimation (face_count 기준, 실패 시 원본 사용)
     if len(mesh.vertices) > 50_000:
-        mesh = mesh.simplify_quadric_decimation(10_000)
+        target_faces = min(10_000, len(mesh.faces) - 1)
+        if target_faces > 0 and target_faces < len(mesh.faces):
+            try:
+                mesh = mesh.simplify_quadric_decimation(target_faces)
+            except Exception:
+                pass  # decimation 실패 시 원본 사용
 
     return normalize_mesh(mesh)
 
