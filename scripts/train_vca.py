@@ -7,6 +7,7 @@ UNet 없이 VCALayer만 학습. toy/data에서 depth + mask를 supervision으로
 손실: L = w_depth * l_depth_ranking + w_ortho * l_ortho
 """
 import argparse
+import json
 import sys
 import math
 from pathlib import Path
@@ -107,6 +108,124 @@ class ToyVCADataset(Dataset):
             torch.from_numpy(ctx).unsqueeze(0),           # (1, N, CD)
             [front, back],
             torch.from_numpy(rgb_p.reshape(ph*p, pw*p, 3)),  # RGB for GIF
+        )
+
+
+# ─── ObjaverseVCADataset ─────────────────────────────────────────────────────
+
+class ObjaverseVCADataset(Dataset):
+    """
+    toy/data_objaverse/ 아래 meta.json이 있는 서브디렉토리 자동 스캔.
+    ToyVCADataset과 동일한 __getitem__ 인터페이스 유지.
+
+    entity context는 meta.json의 prompt_entity0/1 텍스트에서
+    sinusoidal 인코딩으로 생성 (CLIP 대신 — 학습 시 속도).
+    실제 AnimateDiff 학습에서는 get_entity_embedding_mean()으로 교체.
+    """
+
+    def __init__(
+        self,
+        data_root: str = "toy/data_objaverse",
+        query_dim: int = 64,
+        context_dim: int = 128,
+        patch_size: int = 16,
+        n_entities: int = 2,
+        max_samples: int = None,
+        seed: int = 42,
+    ):
+        self.query_dim   = query_dim
+        self.context_dim = context_dim
+        self.patch_size  = patch_size
+        self.n_entities  = n_entities
+
+        self.samples = []
+        for meta_path in Path(data_root).rglob("meta.json"):
+            d = meta_path.parent
+            frames = sorted((d / "frames").glob("*.png"))
+            depths = sorted((d / "depth").glob("*.npy"))
+            if len(frames) >= 8 and len(depths) >= 8:
+                with open(meta_path) as f:
+                    meta = json.load(f)
+                self.samples.append({"dir": d, "meta": meta, "frames": frames, "depths": depths})
+
+        if max_samples and max_samples < len(self.samples):
+            rng = np.random.RandomState(seed)
+            idxs = rng.choice(len(self.samples), max_samples, replace=False)
+            self.samples = [self.samples[i] for i in idxs]
+
+        print(f"ObjaverseVCADataset: {len(self.samples)} samples loaded from {data_root}",
+              flush=True)
+
+    def __len__(self):
+        return len(self.samples)
+
+    def _text_to_ctx(self, text: str, entity_idx: int) -> np.ndarray:
+        """텍스트를 간단한 hash 기반 sinusoidal 임베딩으로 변환 (context_dim,)."""
+        h = hash(text) % (2 ** 31)
+        ctx = np.zeros(self.context_dim, dtype=np.float32)
+        for k in range(self.context_dim):
+            freq = (k + 1) * 0.3
+            ctx[k] = np.sin(h * freq * 1e-9 + entity_idx * np.pi)
+        return ctx
+
+    def __getitem__(self, idx):
+        sample = self.samples[idx]
+        d      = sample['dir']
+        frames = sample['frames']
+        depths = sample['depths']
+        meta   = sample['meta']
+
+        # 중간 프레임 선택
+        fi = len(frames) // 2
+        rgb = iio.imread(str(frames[fi]))[..., :3].astype(np.float32) / 255.0
+        depth = np.load(str(depths[fi]))
+        H, W = rgb.shape[:2]
+
+        # ── x: RGB 패치 → (1, S, query_dim) ─────────────────────────────────
+        p  = self.patch_size
+        rh = H // p * p
+        rw = W // p * p
+        rgb_p   = rgb[:rh, :rw]
+        patches = rgb_p.reshape(rh // p, p, rw // p, p, 3).mean((1, 3))
+        ph, pw  = patches.shape[:2]
+        S       = ph * pw
+        x_raw   = patches.reshape(S, 3)
+
+        reps = (self.query_dim + 2) // 3
+        x = np.tile(x_raw, (1, reps))[:, :self.query_dim].astype(np.float32)
+        x_std_val = max(float(x.std()), 1e-6)
+        x = (x - x.mean()) / x_std_val * 0.3
+
+        # ── ctx: entity 텍스트 기반 임베딩 → (1, N, context_dim) ─────────────
+        ctx = np.zeros((self.n_entities, self.context_dim), dtype=np.float32)
+        depths_mean = []
+        for ei in range(self.n_entities):
+            mask_path = d / 'mask' / f'{fi:04d}_entity{ei}.png'
+            if mask_path.exists():
+                mask = iio.imread(str(mask_path)) > 128
+            else:
+                mask = np.zeros((H, W), dtype=bool)
+
+            if mask.sum() > 0:
+                mean_depth = float(depth[mask].mean())
+            else:
+                mean_depth = float(ei)
+
+            # entity 텍스트 임베딩
+            text_key = f'prompt_entity{ei}'
+            text = meta.get(text_key, f'entity {ei}')
+            text_emb = self._text_to_ctx(text, ei)
+            ctx[ei] = text_emb
+            depths_mean.append(mean_depth)
+
+        front = int(np.argmin(depths_mean))
+        back  = 1 - front
+
+        return (
+            torch.from_numpy(x).unsqueeze(0),                   # (1, S, D)
+            torch.from_numpy(ctx).unsqueeze(0),                  # (1, N, CD)
+            [front, back],
+            torch.from_numpy(rgb_p.reshape(rh // p * p, rw // p * p, 3)),  # RGB
         )
 
 
