@@ -202,17 +202,11 @@ class ObjaverseVCADataset(Dataset):
         for ei in range(self.n_entities):
             mask_path = d / 'mask' / f'{fi:04d}_entity{ei}.png'
             if mask_path.exists():
-                mask_img = iio.imread(str(mask_path))
-                # RGBA (bpy film_transparent) → alpha channel; else grayscale
-                if mask_img.ndim == 3:
-                    mask = mask_img[..., 3] > 128 if mask_img.shape[2] == 4 \
-                           else mask_img.mean(-1) > 128
-                else:
-                    mask = mask_img > 128
+                mask = iio.imread(str(mask_path)) > 128
             else:
                 mask = np.zeros((H, W), dtype=bool)
 
-            if mask.sum() > 0 and mask.shape == depth.shape:
+            if mask.sum() > 0:
                 mean_depth = float(depth[mask].mean())
             else:
                 mean_depth = float(ei)
@@ -233,54 +227,6 @@ class ObjaverseVCADataset(Dataset):
             [front, back],
             torch.from_numpy(rgb_p.reshape(rh // p * p, rw // p * p, 3)),  # RGB
         )
-
-
-# ─── Phase 17: Animated Objaverse Dataset ────────────────────────────────────
-class AnimatedObjaverseDataset(ObjaverseVCADataset):
-    """
-    Phase 17 bpy 렌더 데이터를 로드.
-    Phase 15 PyVista 데이터와 동일한 __getitem__ 인터페이스 유지.
-
-    data_roots가 여러 개이면 합산:
-      data_roots = ["toy/data_objaverse", "toy/data_animated"]
-    """
-
-    def __init__(
-        self,
-        data_roots: list,        # Phase 15 + Phase 17 모두 포함 가능
-        query_dim: int = 64,
-        context_dim: int = 128,
-        patch_size: int = 16,
-        n_entities: int = 2,
-        max_samples: int = None,
-        seed: int = 42,
-    ):
-        self.query_dim   = query_dim
-        self.context_dim = context_dim
-        self.patch_size  = patch_size
-        self.n_entities  = n_entities
-
-        self.samples = []
-        for root in data_roots:
-            for meta_path in Path(root).rglob("meta.json"):
-                d = meta_path.parent
-                frames = sorted((d / "frames").glob("*.png"))
-                depths = sorted((d / "depth").glob("*.npy"))
-                if len(frames) >= 8 and len(depths) >= 8:
-                    with open(meta_path) as f:
-                        meta = json.load(f)
-                    self.samples.append({
-                        "dir": d, "meta": meta,
-                        "frames": frames, "depths": depths,
-                    })
-
-        if max_samples and max_samples < len(self.samples):
-            rng = np.random.RandomState(seed)
-            idxs = rng.choice(len(self.samples), max_samples, replace=False)
-            self.samples = [self.samples[i] for i in idxs]
-
-        print(f"AnimatedObjaverseDataset: {len(self.samples)} samples "
-              f"from {len(data_roots)} root(s)", flush=True)
 
 
 # ─── Trainer ────────────────────────────────────────────────────────────────
