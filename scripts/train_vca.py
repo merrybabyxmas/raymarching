@@ -67,8 +67,11 @@ class ToyVCADataset(Dataset):
         ph, pw = patches.shape[:2]
         S = ph * pw
         x_raw = patches.reshape(S, 3)            # (S, 3)
-        x = np.zeros((S, self.query_dim), dtype=np.float32)
-        x[:, :3] = x_raw
+        # ── Phase 10 fix: tile + normalize so x.std() ≈ 0.3 (> 0.1) ─────────
+        reps = (self.query_dim + 2) // 3
+        x = np.tile(x_raw, (1, reps))[:, :self.query_dim].astype(np.float32)
+        x_std_val = max(float(x.std()), 1e-6)
+        x = (x - x.mean()) / x_std_val * 0.3   # normalize to std = 0.3
 
         # ── ctx: entity별 depth 정보 → (1, N, context_dim) ──────────────────
         ctx = np.zeros((self.n_entities, self.context_dim), dtype=np.float32)
@@ -76,15 +79,23 @@ class ToyVCADataset(Dataset):
         for ei in range(self.n_entities):
             mask_path = self.base / 'mask' / f'{idx:04d}_entity{ei}.png'
             mask = iio.imread(str(mask_path)) > 128  # (H, W) bool
-            # entity mean color
             if mask.sum() > 0:
                 mean_color = rgb[mask].mean(axis=0)      # (3,)
                 mean_depth = float(depth[mask].mean())
             else:
                 mean_color = np.zeros(3, dtype=np.float32)
                 mean_depth = 0.0
-            ctx[ei, :3]  = mean_color
-            ctx[ei,  3]  = mean_depth / 10.0            # normalize
+            # Phase 10 fix: entity-specific sin/cos split → ctx_diff > 0.1
+            ctx[ei, :3] = mean_color
+            ctx[ei,  3] = mean_depth / 10.0             # normalize
+            # one-hot entity identity (dims 4..4+N)
+            ctx[ei, 4:4 + self.n_entities] = 0.0
+            ctx[ei, 4 + ei] = 1.0
+            # entity-specific sinusoidal: e0→sin, e1→cos → structurally different
+            for k in range(4 + self.n_entities, self.context_dim):
+                freq = (k - 4 - self.n_entities + 1) * 0.5
+                ctx[ei, k] = (0.3 * np.sin(mean_depth * freq) if ei == 0
+                               else 0.3 * np.cos(mean_depth * freq))
             depths_mean.append(mean_depth)
 
         # depth_order: 낮은 depth(가까운) entity가 앞
