@@ -1,0 +1,12 @@
+torch>=2.1.0
+diffusers>=0.27.0
+transformers>=4.38.0
+einops>=0.7.0
+pyvista[all]>=0.43.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.4.9
+matplotlib>=3.8.0
+numpy>=1.26.0
+tqdm>=4.66.0
+pytest>=8.0.0
+pytest-order>=1.2.0
