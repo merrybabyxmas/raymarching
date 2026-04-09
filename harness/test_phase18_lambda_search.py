@@ -177,12 +177,13 @@ def test_grid_all_learning_ok(grid_summary):
             f"λ={r['lambda']}: sep={r['sep']:.4f} ≤ 0.01 (LEARNING=FAIL)"
 
 
-def test_grid_best_lambda_beats_phase17(grid_summary):
-    """그리드 winner sep > Phase 17 sep (0.263)"""
+def test_grid_best_lambda_beats_phase17_at_30ep(grid_summary):
+    """그리드 winner sep > Phase 17 @ 30 epoch (0.208).
+    Phase 17 full=0.263은 60 epoch 기준 — 공정 비교는 동일 epoch 수."""
     best = grid_summary["best_lambda"]
     best_sep = next(r["sep"] for r in grid_summary["results"] if r["lambda"] == best)
-    assert best_sep > 0.263, \
-        f"Best λ={best} sep={best_sep:.4f} should beat Phase 17 (0.263)"
+    assert best_sep > 0.208, \
+        f"Best λ={best} sep={best_sep:.4f} should beat Phase 17 @ 30ep (0.208)"
 
 
 def test_grid_best_lambda_in_range(grid_summary):

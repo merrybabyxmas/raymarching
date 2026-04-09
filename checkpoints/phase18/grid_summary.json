@@ -1,0 +1,23 @@
+{
+  "best_lambda": 0.3,
+  "results": [
+    {
+      "lambda": 0.1,
+      "sep": 0.22900390625,
+      "epoch": 12,
+      "lambda_final": 0.1
+    },
+    {
+      "lambda": 0.2,
+      "sep": 0.22802734375,
+      "epoch": 12,
+      "lambda_final": 0.1
+    },
+    {
+      "lambda": 0.3,
+      "sep": 0.234619140625,
+      "epoch": 12,
+      "lambda_final": 0.15
+    }
+  ]
+}
