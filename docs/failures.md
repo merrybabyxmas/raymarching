@@ -208,3 +208,57 @@ assert both_high > 0.1   # ← Sigmoid: ~50%, Softmax: ~0%
 ```
 
 **논문 시사점**: 이 발견은 VCA가 Softmax 대비 갖는 핵심 강점을 테스트 레벨에서 직접 증명한다. Sigmoid에서는 두 entity가 같은 픽셀을 동시에 높은 밀도로 점유할 수 있고(transmittance가 depth ordering을 결정), Softmax에서는 구조적으로 불가능하다.
+
+---
+
+### FM-I5: Phase 16 λ_depth=1.0 → UNet feature 파괴 (kaleidoscope 현상)
+
+**현상**: Phase 16 full training (λ_depth=1.0, 30 epoch, 1 sample/epoch) 후 비교 inference 시:
+- `cat_dog` 프롬프트 → 고양이 4마리 kaleidoscope 타일링
+- `fighters` 프롬프트 → 검은 X자 패턴
+
+sigma_separation=0.31로 수치 지표는 좋았지만 생성 품질이 완전히 파괴됨.
+
+**원인**:
+1. λ_depth=1.0이 l_diff(≈0.4)와 동일 수준 → depth loss가 UNet feature를 압도
+2. sigma가 극단값(0 또는 1)으로 수렴 → Transmittance weight 비정상 → 출력 폭발
+3. 1 sample/epoch × 30 epoch → dog+sword 4회, red person 3회 반복 노출 → 과적합
+
+**교훈**: `l_diff > l_depth_weighted × 10` 비율이 VCA의 불변 원칙 (FM-I7 참조).
+체크포인트: `checkpoints/objaverse/best.pt`
+
+---
+
+### FM-I6: last_sigma (detach) 사용 시 gradient 미전달
+
+**현상**: 학습 초기에 loss.backward()가 성공해도 VCA 파라미터 gradient가 0으로 남아 학습이 전혀 일어나지 않음. sigma 값이 epoch 내내 고정.
+
+**원인**: `vca_layer.last_sigma`는 detach된 값이어서 computation graph와 연결이 끊겨 있음.
+```python
+# WRONG: detach — backward 시 gradient 미전달
+sigma_raw_for_loss = vca_layer.last_sigma
+l_depth = l_depth_ranking(sigma_raw_for_loss, order)  # grad = 0
+```
+
+**해결(fix)**: `last_sigma_raw` 사용 (grad 있음).
+```python
+# CORRECT: grad 있는 raw — backward 정상 작동
+sigma_raw_for_loss = vca_layer.last_sigma_raw
+l_depth = l_depth_ranking(sigma_raw_for_loss, order)
+```
+
+---
+
+### FM-I7: Phase 17 λ_depth=0.02 → depth 감독 신호 너무 약함
+
+**현상**: Phase 17 full training (λ_depth=0.02, 60 epoch, 168 samples/epoch) 결과:
+- sigma_separation=0.263 (Phase 16의 0.313보다 낮음)
+- Phase 16 대비: chain(-0.065), dancers(-0.021), snakes(-0.010) — toy/zero-shot에서 열세
+- 생성 품질은 보존 (DEGRADED 0회, ratio 항상 75x 이상)
+
+**원인**: λ_depth를 1/50으로 줄였더니 depth ordering 학습 자체가 불충분해짐.
+l_depth_weighted가 l_diff 대비 너무 작아(ratio 75~8095x) VCA가 depth를 사실상 무시.
+
+**교훈**: 최적 λ_depth는 Phase 16(1.0, 파괴)과 Phase 17(0.02, 미약) 사이 어딘가.
+→ Phase 18에서 λ_depth ∈ {0.1, 0.2, 0.3} 그리드 탐색으로 최적값 결정.
+체크포인트: `checkpoints/phase17/best.pt`
