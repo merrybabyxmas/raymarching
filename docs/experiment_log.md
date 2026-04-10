@@ -290,11 +290,19 @@ Phase 27과 동일 (lambda_depth=5.0, lambda_diff=0.05, lambda_attn=3.0, LoRA ra
 
 | Epoch | DRA | l_attn | probe_sep | 비고 |
 |-------|-----|--------|-----------|------|
-| ... | | | | |
+| 9 | 0.637 | -1.75 | 0.19 | |
+| 24 | 0.794 | -2.49 | 0.18 | |
+| 29 | 0.806 | -2.54 | 0.16 | DRA >80% |
+| 59 | **0.806** | -2.66 | 0.26 | **FINAL** |
+
+**FINAL: probe_sep=0.285, DRA=0.8350 (334/400) — Phase 27과 동일 (학습 로직 변경 없음)**
 
 ### 결론
 
-> (학습 완료 후 작성)
+- 학습 결과: Phase 27과 완전히 동일 (visualization fix만)
+- **text_attn_chart.png**: LoRA-modified attention 표시 → entity별 분리 확인 필요
+- **multiangle_depth_chart.png**: entity_masks masking → crossing 패턴 확인 필요
+- debug 파일: `debug/train_phase28/epoch_059/` 참조
 
 ---
 
