@@ -761,6 +761,111 @@ def debug_vca_internals(pipe, vca_layer, orig_procs, train_procs,
     return mean_ratio   # 호출부에서 경고 조건 판단용
 
 
+# ─── 학습 denoising 품질 직접 시각화 ────────────────────────────────────────
+
+@torch.no_grad()
+def debug_train_denoising(pipe, vca_layer, probe_latents, probe_enc_hs,
+                          probe_frames_np, out_dir: Path,
+                          height=256, width=256,
+                          t_values=(10, 50, 100, 150, 190)):
+    """
+    학습 중 denoising 품질 직접 시각화.
+
+    고정 probe 훈련 샘플에 대해 여러 t 값별로:
+      Row 1 — GT:        원본 영상 프레임 (첫 컬럼에만, 나머지는 blank)
+      Row 2 — Noised:    x_t = add_noise(latents, t) → VAE decode
+      Row 3 — Denoised:  x̂₀ pred = (x_t - √(1-ā)·ε̂) / √ā → VAE decode
+
+    GIF 애니메이션 = video frame 순환
+    각 column = t 값 (작은 noise → 큰 noise)
+
+    저장: out_dir/train_denoise.gif
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import imageio.v2 as iio2
+
+    vca_layer.eval()
+    P = height
+
+    def _lbl(arr, text, fs=10):
+        img = Image.fromarray(arr.astype(np.uint8))
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fs)
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((2, 2), text, fill=(255, 255, 255), font=font)
+        return np.array(img)
+
+    # VAE dtype 확인 (pipeline이 fp16으로 로드되면 VAE도 fp16)
+    _vae_dtype = next(pipe.vae.parameters()).dtype
+
+    def _decode_frame(latents_5d, frame_idx):
+        """(1, 4, T, lH, lW) → (H, W, 3) uint8 at frame_idx."""
+        try:
+            lat = latents_5d[0, :, frame_idx, :, :]       # (4, lH, lW)
+            scaling = pipe.vae.config.scaling_factor
+            # VAE dtype에 맞춰 입력 변환 (fp16 VAE에 fp32 넣으면 dtype 에러)
+            lat_in = lat.unsqueeze(0).to(_vae_dtype) / scaling  # (1,4,lH,lW)
+            dec = pipe.vae.decode(lat_in).sample[0]        # (3, H, W)
+            arr = dec.float().permute(1, 2, 0).cpu().numpy()
+            return np.clip((arr + 1) / 2 * 255, 0, 255).astype(np.uint8)
+        except Exception as e:
+            print(f"  [decode_frame err f={frame_idx}] {e}", flush=True)
+            return np.zeros((P, P, 3), np.uint8)
+
+    alphas_cumprod = pipe.scheduler.alphas_cumprod.to(probe_latents.device)
+    noise = torch.randn_like(probe_latents)
+    T_frames = probe_latents.shape[2]  # video frame 수
+    N_cols = len(t_values)
+
+    gif_frames = []
+    for fi in range(min(T_frames, len(probe_frames_np))):
+        # GT row
+        gt_raw = np.array(
+            Image.fromarray(probe_frames_np[fi]).resize((P, P), Image.BILINEAR))
+        gt_row = [_lbl(gt_raw, f"GT f={fi}")] + \
+                 [np.zeros((P, P, 3), np.uint8)] * (N_cols - 1)
+
+        noised_row   = []
+        denoised_row = []
+
+        for t_val in t_values:
+            t = torch.tensor([t_val], device=probe_latents.device)
+
+            # noised
+            noisy = pipe.scheduler.add_noise(probe_latents, noise, t)
+            n_frame = _decode_frame(noisy, fi)
+            noised_row.append(_lbl(
+                np.array(Image.fromarray(n_frame).resize((P, P), Image.BILINEAR)),
+                f"t={t_val}"))
+
+            # model prediction → x̂₀
+            pred_eps = pipe.unet(
+                noisy, t, encoder_hidden_states=probe_enc_hs).sample
+            alpha_bar = alphas_cumprod[t_val]
+            pred_x0 = (noisy - (1 - alpha_bar).sqrt() * pred_eps) / alpha_bar.sqrt()
+            d_frame = _decode_frame(pred_x0.clamp(-4, 4), fi)
+            denoised_row.append(_lbl(
+                np.array(Image.fromarray(d_frame).resize((P, P), Image.BILINEAR)),
+                f"Denoised t={t_val}"))
+
+        gif_frames.append(np.concatenate([
+            np.concatenate(gt_row,       axis=1),
+            np.concatenate(noised_row,   axis=1),
+            np.concatenate(denoised_row, axis=1),
+        ], axis=0))
+
+    if gif_frames:
+        out_path = out_dir / "train_denoise.gif"
+        iio2.mimsave(str(out_path), gif_frames, duration=300)
+        print(f"  [debug] train_denoise → {out_path.parent.name}/{out_path.name}",
+              flush=True)
+
+    vca_layer.train()
+
+
 # ─── training_step ───────────────────────────────────────────────────────────
 
 def training_step_p21(pipe, vca_layer, latents, encoder_hidden_states,
@@ -963,37 +1068,48 @@ def train(args):
             print(f"[ckpt] best.pt (probe_sep={best_sep:.4f} dra={best_dra:.3f})",
                   flush=True)
 
-        if (epoch + 1) % 10 == 0 or epoch == args.epochs - 1:
-            gif_path = debug_dir / f"sigma_epoch{epoch:03d}.gif"
-            save_sigma_gif(last_frames_np, vca_layer.last_sigma, gif_path)
-            print(f"[gif] → {gif_path}", flush=True)
-
         # recon 디버그: 5 epoch마다 + 첫/마지막 epoch
         if (epoch + 1) % args.debug_every == 0 or epoch == 0 or epoch == args.epochs - 1:
+            # epoch 전용 서브폴더
+            epoch_dir = debug_dir / f"epoch_{epoch:03d}"
+            epoch_dir.mkdir(parents=True, exist_ok=True)
+
+            # sigma gif → epoch 폴더
+            gif_path = epoch_dir / "sigma.gif"
+            save_sigma_gif(last_frames_np, vca_layer.last_sigma, gif_path)
+            print(f"[gif] sigma → epoch_{epoch:03d}/sigma.gif", flush=True)
+
             # train_procs를 probe_entity_ctx 기준으로 업데이트
             proc = train_procs.get(INJECT_KEY)
             if isinstance(proc, AdditiveVCAProcessor):
                 proc.ctx = probe_entity_ctx.float()
+
             debug_generation(
                 pipe, vca_layer, orig_procs, train_procs,
                 probe_frames, probe_meta, probe_entity_ctx,
-                debug_dir, epoch, height=args.height, width=args.width,
+                epoch_dir, epoch, height=args.height, width=args.width,
             )
-            # 다양한 각도 시각화 (같은 entity pair, 다른 카메라 뷰)
             debug_multiview(
                 pipe, vca_layer, orig_procs, train_procs,
-                probe_meta, args.data_root, debug_dir, epoch,
+                probe_meta, args.data_root, epoch_dir, epoch,
                 height=args.height, width=args.width,
             )
-            # 심층 진단: denoising traj / delta scale / ray3d internals
             delta_ratio = debug_vca_internals(
                 pipe, vca_layer, orig_procs, train_procs,
                 probe_frames, probe_meta, probe_entity_ctx,
-                debug_dir, epoch, height=args.height, width=args.width,
+                epoch_dir, epoch, height=args.height, width=args.width,
             )
             if delta_ratio > 0.5:
                 print(f"  ⚠ [epoch {epoch}] |Δ|/|text|={delta_ratio:.3f} > 0.5 "
                       f"— VCA가 diffusion manifold를 과도하게 수정 중", flush=True)
+
+            # ★ 학습 denoising 품질: noised vs model denoised
+            debug_train_denoising(
+                pipe, vca_layer,
+                probe_latents, probe_enc_hs,
+                probe_frames, epoch_dir,
+                height=args.height, width=args.width,
+            )
 
     # ─── 최종 평가 ────────────────────────────────────────────────────────────
     final_dra, fc, ft = measure_depth_rank_accuracy(
