@@ -306,6 +306,40 @@ Phase 27과 동일 (lambda_depth=5.0, lambda_diff=0.05, lambda_attn=3.0, LoRA ra
 
 ---
 
+## Phase 30 — Condition Dropout + Learnable Gamma (100 epochs, GPU 2)
+
+**날짜**: 2026-04-11  
+**스크립트**: `scripts/train_phase30.py`
+
+### 배경 (Phase 29 문제점)
+
+Phase 29 ablation 결과: `l_diff_on=0.063, l_diff_off=0.065, ratio=0.964x → BACKBONE_DOMINANT`
+→ VCA가 실제 generation에 미치는 영향이 매우 미미함
+
+### 수정
+
+| 항목 | Phase 29 | Phase 30 |
+|------|----------|----------|
+| Condition Dropout | 없음 | 15% null text prompt → backbone이 VCA 없이 denoise 불가 → VCA로 강한 gradient |
+| Alpha | fixed=0.3 | learnable gamma (init=0.3, lr×0.1) → VCA 기여도 자동 조절 |
+
+### 이론적 근거
+- cond_dropout=0.15: text="" → 텍스트 cross-attention 신호 없음 → VCA entity_ctx가 유일한 conditioning → backbone이 VCA를 무시하면 l_diff 증가 → VCA로 강한 gradient 전달
+- learnable gamma: VCA가 도움이 되면 gamma↑, 해로우면 gamma↓ (진단 지표)
+
+### 결과
+
+| Epoch | DRA | l_diff | gamma | ablation ratio | 비고 |
+|-------|-----|--------|-------|----------------|------|
+| 4 | - | - | 0.304 | - | gamma 0.3→0.304 (소폭 상승) |
+| ... | | | | | |
+
+### 결론
+
+> (학습 완료 후 작성)
+
+---
+
 ## Phase 29 — Backbone health diagnostics (100 epochs, GPU 1)
 
 **날짜**: 2026-04-11  
