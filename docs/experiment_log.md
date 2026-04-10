@@ -306,6 +306,44 @@ Phase 27과 동일 (lambda_depth=5.0, lambda_diff=0.05, lambda_attn=3.0, LoRA ra
 
 ---
 
+## Phase 29 — Backbone health diagnostics (100 epochs, GPU 1)
+
+**날짜**: 2026-04-11  
+**스크립트**: `scripts/train_phase29.py`
+
+### 배경: 두 가지 아키텍처 우려
+
+| 질문 | 의미 | 진단 방법 |
+|------|------|-----------|
+| Q1: 백본 손상? | VCA/LoRA가 diffusion path 망가뜨리는지 | l_diff_on vs l_diff_off (alpha=0) 비교 |
+| Q2: 백본 지배? | 백본이 너무 강해 VCA 신호를 무시하는지 | swapped ctx 생성 — normal vs swapped가 다른지 확인 |
+
+### 추가 진단 기능
+
+| 기능 | 내용 |
+|------|------|
+| `vca_ratio` (매 epoch) | AdditiveVCAProcessor: `\|vca_delta\| / \|text_out\|` → 항상 0.300 이어야 함 |
+| `[ablation]` (10 epoch마다) | l_diff_on, l_diff_off, ratio + BACKBONE_DOMINANT / VCA_AFFECTS / VCA_HURTS 판정 |
+| `debug_generation` 4열 | GT / Baseline / VCA(normal ctx) / VCA(swapped ctx) 비교 |
+
+### 판정 기준
+
+- `l_diff ratio < 1.05`: BACKBONE_DOMINANT → VCA가 generation에 실질 영향 없음
+- `1.05 ~ 1.30`: VCA_AFFECTS_GENERATION → 이상적
+- `> 1.30`: VCA_HURTS_BACKBONE → 백본 손상
+
+### 결과
+
+| Epoch | DRA | l_diff_on | l_diff_off | ratio | 판정 |
+|-------|-----|-----------|------------|-------|------|
+| ... | | | | | |
+
+### 결론
+
+> (학습 완료 후 작성)
+
+---
+
 ## 실험 설계 가이드
 
 ### 새 Phase 추가 시 체크리스트
