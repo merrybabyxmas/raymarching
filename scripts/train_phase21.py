@@ -89,9 +89,18 @@ class AdditiveVCAProcessor:
         ctx = self.ctx.expand(BF, -1, -1).float()
         x   = layer_norm(hidden_states.float(), hidden_states.shape[-1:])
         vca_out   = self.vca(x, ctx)          # (BF, S, D), sets last_sigma_raw/acc
-        vca_delta = (vca_out - x) * self.alpha  # scaled additive bias
+        delta_raw = vca_out - x               # LN-space delta, O(1) scale
 
-        # 3. text quality 유지 + depth bias 추가
+        # FM-I13 수정: delta를 text_out magnitude에 비례 정규화
+        # text_out은 fp16 attn projection (scale ≈ 0.05~0.1),
+        # delta_raw는 LN-space (scale ≈ 1) → 초기 ratio ≈ 4~10x → manifold escape
+        # 정규화: |vca_delta| = alpha * |text_out|  (alpha = 상대 강도)
+        with torch.no_grad():
+            text_mag  = text_out.float().abs().mean() + 1e-8
+            delta_mag = delta_raw.abs().mean() + 1e-8
+        vca_delta = delta_raw * (text_mag / delta_mag) * self.alpha
+
+        # 3. text quality 유지 + depth bias 추가 (이제 비율이 정확히 alpha)
         return text_out + vca_delta.to(text_out.dtype)
 
 
@@ -103,6 +112,9 @@ class AdditiveVCAInferProcessor:
         self.ctx   = entity_ctx
         self.orig  = orig_processor
         self.alpha = alpha
+        # 진단용 (debug_vca_internals에서 읽음)
+        self.last_text_out  = None   # (BF, S, D) fp32
+        self.last_vca_delta = None   # (BF, S, D) fp32
 
     def __call__(self, attn, hidden_states, encoder_hidden_states=None,
                  attention_mask=None, temb=None, *args, **kwargs):
@@ -112,7 +124,14 @@ class AdditiveVCAInferProcessor:
         ctx = self.ctx.expand(BF, -1, -1).float()
         x   = layer_norm(hidden_states.float(), hidden_states.shape[-1:])
         vca_out   = self.vca(x, ctx)
-        vca_delta = (vca_out - x) * self.alpha
+        delta_raw = vca_out - x
+        # FM-I13: text_out magnitude 기준 정규화 (ratio ≈ alpha 로 고정)
+        text_mag  = text_out.float().abs().mean() + 1e-8
+        delta_mag = delta_raw.abs().mean() + 1e-8
+        vca_delta = delta_raw * (text_mag / delta_mag) * self.alpha
+        # 마지막 호출 저장 (진단용)
+        self.last_text_out  = text_out.detach().float()
+        self.last_vca_delta = vca_delta.detach()
         return text_out + vca_delta.to(text_out.dtype)
 
 
@@ -487,6 +506,261 @@ def debug_multiview(pipe, vca_layer, orig_procs, train_procs,
         print(f"  [debug] multiview ({len(rows)} views) → {out_path.name}", flush=True)
 
 
+# ─── 심층 VCA 진단 시각화 ────────────────────────────────────────────────────
+
+def _heat_map(m, lo=None, hi=None):
+    """(H, W) float → (H, W, 3) uint8 컬러 히트맵 (파랑→초록→빨강)."""
+    lo = float(m.min()) if lo is None else lo
+    hi = float(m.max()) if hi is None else hi
+    n = (m - lo) / (hi - lo + 1e-8)
+    r = np.clip(n * 3 - 2,       0, 1)
+    g = np.clip(1 - np.abs(n * 3 - 1.5), 0, 1)
+    b = np.clip(1 - n * 3,       0, 1)
+    return (np.stack([r, g, b], -1) * 255).astype(np.uint8)
+
+
+def _decode_latents_safe(pipe, latents):
+    """
+    AnimateDiff latent (1, C, T, H, W) or (T, C, H, W) → (T, H, W, 3) uint8.
+    VAE decode는 한 번에 한 frame씩 처리해 OOM 방지.
+    """
+    try:
+        if latents.dim() == 5:
+            lat = latents[0].permute(1, 0, 2, 3)  # (T, C, H, W)
+        elif latents.dim() == 4:
+            lat = latents                           # (T, C, H, W)
+        else:
+            return None
+        lat = lat.float() / pipe.vae.config.scaling_factor
+        frames = []
+        for i in range(lat.shape[0]):
+            dec = pipe.vae.decode(lat[i:i+1]).sample  # (1, 3, H, W)
+            frames.append(dec[0].permute(1, 2, 0).cpu().numpy())
+        arr = np.stack(frames)                          # (T, H, W, 3)
+        return np.clip((arr + 1) / 2 * 255, 0, 255).astype(np.uint8)
+    except Exception:
+        return None
+
+
+def debug_vca_internals(pipe, vca_layer, orig_procs, train_procs,
+                        probe_frames_np, probe_meta, probe_entity_ctx,
+                        debug_dir: Path, epoch: int, height=256, width=256):
+    """
+    Phase 21 심층 진단. 세 가지 GIF 저장:
+
+    1. denoise_traj_epoch{N}.gif   — Baseline vs VCA 디노이징 경과
+       step=0,4,9,14,19 × 8 frames.  어느 step에서 artifact가 발생하는지 포착.
+
+    2. vca_delta_epoch{N}.gif      — VCA delta 강도 + weight collapse 진단
+       패널: |Δ|/|text_out| 비율 / ΣWeight map / σ(E0) / σ(E1)
+       mean ratio > 0.5 시 경고.  배경 collapse (ΣW→0) 시각화.
+
+    3. ray3d_epoch{N}.gif          — ray marching 3D internals
+       σ(E0,E1) × z=0,1 / Transmittance T × z=0,1 / ΣWeight / sep map
+       3D module이 실제로 동작하는지 확인.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import imageio.v2 as iio2
+
+    vca_layer.eval()
+    orig_proc_ref = orig_procs.get(INJECT_KEY)
+    if orig_proc_ref is None:
+        orig_proc_ref = AttnProcessor2_0()
+
+    prompt = (f"{probe_meta.get('prompt_entity0','entity0')} and "
+              f"{probe_meta.get('prompt_entity1','entity1')}")
+    P = height
+
+    def _lbl(arr, text, fs=11):
+        img = Image.fromarray(arr.astype(np.uint8))
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fs)
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((2, 2), text, fill=(255, 255, 255), font=font)
+        return np.array(img)
+
+    def _to_panel(arr_hw, title, colormap=True):
+        """1D spatial 배열 (S,) or 2D (H, W) → (P, P, 3) labeled panel."""
+        m = arr_hw.reshape(int(len(arr_hw.flat) ** 0.5 + 0.5),
+                           -1) if arr_hw.ndim == 1 else arr_hw
+        hw_h, hw_w = m.shape
+        if colormap:
+            img = _heat_map(m)
+        else:
+            n = (m - m.min()) / (m.max() - m.min() + 1e-8)
+            img = (np.stack([n, n, n], -1) * 255).astype(np.uint8)
+        img_p = np.array(Image.fromarray(img).resize((P, P), Image.NEAREST))
+        return _lbl(img_p, title)
+
+    # ── Instrumented processor ────────────────────────────────────────────────
+    instr_proc = AdditiveVCAInferProcessor(
+        vca_layer, probe_entity_ctx, orig_proc_ref, alpha=VCA_ALPHA)
+
+    # ── 1. Denoising trajectory ───────────────────────────────────────────────
+    traj_baseline: dict = {}
+    traj_vca:      dict = {}
+    capture_steps  = {0, 4, 9, 14, 19}
+
+    # Denoising trajectory: step count 변화로 근사 (callback 불필요)
+    # step_counts = [3, 6, 10, 15, 20] → 점점 더 많이 denoising한 결과
+    step_counts = [3, 6, 10, 15, 20]
+
+    def _run_steps(procs, n_steps, gen_seed):
+        pipe.unet.set_attn_processor(procs)
+        g = torch.Generator(device=pipe.device).manual_seed(gen_seed)
+        try:
+            out = pipe(prompt=prompt, num_frames=8,
+                       num_inference_steps=n_steps,
+                       guidance_scale=7.5, height=height, width=width,
+                       generator=g, output_type='pil')
+            return np.stack([np.array(f) for f in out.frames[0]])
+        except Exception:
+            return None
+
+    for n_steps in step_counts:
+        arr_b = _run_steps(dict(orig_procs), n_steps, 99)
+        if arr_b is not None:
+            traj_baseline[n_steps] = arr_b
+
+    infer_procs = dict(orig_procs)
+    infer_procs[INJECT_KEY] = instr_proc
+    for n_steps in step_counts:
+        infer_procs_n = dict(orig_procs)
+        infer_procs_n[INJECT_KEY] = instr_proc
+        arr_v = _run_steps(infer_procs_n, n_steps, 99)
+        if arr_v is not None:
+            traj_vca[n_steps] = arr_v
+
+    # 학습용 복원
+    pipe.unet.set_attn_processor(dict(train_procs))
+    vca_layer.train()
+
+    # Build denoise_traj GIF: columns = step counts, rows = [Base | VCA]
+    # GIF frame = (frame_index, step_count) — 가로: Base vs VCA, 세로: step 진행
+    step_keys = sorted(traj_baseline.keys() | traj_vca.keys())
+    if step_keys:
+        traj_gif = []
+        for fi in range(8):
+            panels = []
+            for n_steps in step_keys:
+                b_arr = traj_baseline.get(n_steps)
+                v_arr = traj_vca.get(n_steps)
+                def _get(arr, i=fi):
+                    if arr is None or i >= len(arr):
+                        return np.zeros((P, P, 3), np.uint8)
+                    return np.array(Image.fromarray(arr[i]).resize((P, P), Image.BILINEAR))
+                col = np.concatenate([
+                    _lbl(_get(b_arr), f"Base {n_steps}steps"),
+                    _lbl(_get(v_arr), f"VCA  {n_steps}steps"),
+                ], axis=0)  # [Base위 VCA아래]
+                panels.append(col)
+            traj_gif.append(np.concatenate(panels, axis=1))
+        if traj_gif:
+            iio2.mimsave(str(debug_dir / f"denoise_traj_epoch{epoch:03d}.gif"),
+                         traj_gif, duration=250)
+            print(f"  [debug] denoise_traj → denoise_traj_epoch{epoch:03d}.gif", flush=True)
+
+    # ── 2. VCA delta magnitude + weight collapse ──────────────────────────────
+    delta_gif = []
+    mean_ratio = 0.0
+    if (instr_proc.last_vca_delta is not None
+            and instr_proc.last_text_out is not None):
+        delta  = instr_proc.last_vca_delta.float()     # (BF, S, D)
+        ttext  = instr_proc.last_text_out.float()
+        BF, S, D = delta.shape
+        hw = max(1, int(S ** 0.5))
+
+        # |Δ|/|text| per token (manifold escape indicator)
+        ratio    = delta.abs().mean(-1) / (ttext.abs().mean(-1) + 1e-8)   # (BF, S)
+        mean_ratio = float(ratio.mean())
+        max_ratio  = float(ratio.max())
+
+        # weight sum from vca_layer
+        weight_sum_np = None
+        if (vca_layer.last_sigma is not None
+                and vca_layer.last_transmittance is not None):
+            sig_t = vca_layer.last_sigma.float()       # (BF, S, N, Z)
+            T_t   = vca_layer.last_transmittance.float()  # (BF, S, Z)
+            # w = T[z] * sigma[n,z], sum over N,Z
+            ws = (T_t.unsqueeze(2) * sig_t).sum(dim=(2, 3))  # (BF, S)
+            weight_sum_np = ws.cpu().numpy()
+
+        for fi in range(BF):
+            panels = []
+            ratio_map = ratio[fi].cpu().numpy().reshape(hw, hw)
+            panels.append(_to_panel(ratio_map,
+                                    f"|Δ|/|txt| e{epoch:02d}f{fi} m={mean_ratio:.3f}"))
+
+            if weight_sum_np is not None:
+                ws_map = weight_sum_np[fi].reshape(hw, hw)
+                panels.append(_to_panel(ws_map, f"ΣWeight (0=collapse) f{fi}"))
+
+            if vca_layer.last_sigma is not None:
+                sig_np = vca_layer.last_sigma[fi].cpu().numpy()  # (S, N, Z)
+                panels.append(_to_panel(sig_np[:, 0, 0].reshape(hw, hw), "σ E0 z=0"))
+                panels.append(_to_panel(sig_np[:, 1, 0].reshape(hw, hw), "σ E1 z=0"))
+
+            delta_gif.append(np.concatenate(panels, axis=1))
+
+        if delta_gif:
+            iio2.mimsave(str(debug_dir / f"vca_delta_epoch{epoch:03d}.gif"),
+                         delta_gif, duration=200)
+            warn = "  ⚠ LARGE — manifold escape 위험" if mean_ratio > 0.5 else ""
+            print(f"  [debug] vca_delta |Δ|/|txt| mean={mean_ratio:.3f} "
+                  f"max={max_ratio:.3f}{warn}", flush=True)
+
+    # ── 3. Ray marching 3D internals ─────────────────────────────────────────
+    if vca_layer.last_sigma is not None:
+        sig_np = vca_layer.last_sigma.float().cpu().numpy()        # (BF, S, N, Z)
+        T_np   = (vca_layer.last_transmittance.float().cpu().numpy()
+                  if vca_layer.last_transmittance is not None else None)
+        BF, S, N, Z = sig_np.shape
+        hw = max(1, int(S ** 0.5))
+        n_per_row = 4
+        ray_gif = []
+
+        for fi in range(BF):
+            panels = []
+            # σ per entity × z-bin
+            for n_e in range(N):
+                for z in range(Z):
+                    m = sig_np[fi, :, n_e, z].reshape(hw, hw)
+                    panels.append(_to_panel(m, f"σ E{n_e} z={z}"))
+            # Transmittance
+            if T_np is not None:
+                for z in range(Z):
+                    m = T_np[fi, :, z].reshape(hw, hw)
+                    panels.append(_to_panel(m, f"T z={z} (1=통과)"))
+            # ΣWeight per token
+            if T_np is not None:
+                ws = (T_np[fi, :, :, None] * sig_np[fi]).sum(axis=(1, 2)).reshape(hw, hw)
+                panels.append(_to_panel(ws, "ΣWeight (ray hit)"))
+            # Separation map: σ(E0,z=0) - σ(E1,z=0) → 양수=E0 앞
+            sep = (sig_np[fi, :, 0, 0] - sig_np[fi, :, 1, 0]).reshape(hw, hw)
+            sep_col = _heat_map(sep, lo=-1.0, hi=1.0)
+            sep_img  = np.array(Image.fromarray(sep_col).resize((P, P), Image.NEAREST))
+            panels.append(_lbl(sep_img, "σ(E0)-σ(E1) [R=E0앞/B=E1앞]"))
+
+            # 4-per-row 격자
+            rows_out = []
+            for i in range(0, len(panels), n_per_row):
+                chunk = panels[i:i+n_per_row]
+                while len(chunk) < n_per_row:
+                    chunk.append(np.zeros((P, P, 3), np.uint8))
+                rows_out.append(np.concatenate(chunk, axis=1))
+            ray_gif.append(np.concatenate(rows_out, axis=0))
+
+        if ray_gif:
+            iio2.mimsave(str(debug_dir / f"ray3d_epoch{epoch:03d}.gif"),
+                         ray_gif, duration=200)
+            print(f"  [debug] ray3d internals → ray3d_epoch{epoch:03d}.gif", flush=True)
+
+    return mean_ratio   # 호출부에서 경고 조건 판단용
+
+
 # ─── training_step ───────────────────────────────────────────────────────────
 
 def training_step_p21(pipe, vca_layer, latents, encoder_hidden_states,
@@ -711,6 +985,15 @@ def train(args):
                 probe_meta, args.data_root, debug_dir, epoch,
                 height=args.height, width=args.width,
             )
+            # 심층 진단: denoising traj / delta scale / ray3d internals
+            delta_ratio = debug_vca_internals(
+                pipe, vca_layer, orig_procs, train_procs,
+                probe_frames, probe_meta, probe_entity_ctx,
+                debug_dir, epoch, height=args.height, width=args.width,
+            )
+            if delta_ratio > 0.5:
+                print(f"  ⚠ [epoch {epoch}] |Δ|/|text|={delta_ratio:.3f} > 0.5 "
+                      f"— VCA가 diffusion manifold를 과도하게 수정 중", flush=True)
 
     # ─── 최종 평가 ────────────────────────────────────────────────────────────
     final_dra, fc, ft = measure_depth_rank_accuracy(
