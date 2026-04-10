@@ -1,0 +1,220 @@
+# VCA Experiment Log (Phase 22+)
+
+Phase 1~21 기록은 `docs/failures.md` 참조.
+
+---
+
+## Phase 22 — VCA 주입 레이어 up_blocks.2 이동 + text attention 고해상도 캡처
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase22.py`  
+**데이터**: `toy/data_objaverse` (180 samples, bad asset 제거 완료)
+
+### 배경 (Phase 21 문제점)
+
+| 항목 | Phase 21 | Phase 22 |
+|------|----------|----------|
+| VCA 주입 레이어 | `mid_block` (4×4=16 spatial) | `up_blocks.2` (16×16=256 spatial) |
+| query_dim | 1280 | 640 |
+| text_attn 캡처 레이어 | `mid_block` (4×4) | `up_blocks.3` (32×32=1024 spatial) |
+
+**Phase 21 문제**: `mid_block`은 4×4=16 spatial token. 두 entity가 같은 quadrant에
+있으면 같은 token에 묶임 → "cat" 어텐션이 dog 위치로 가는 binding problem 발생.
+sigma map이 entity를 공간적으로 분리하지 못함.
+
+**Phase 22 수정**:
+- VCA를 `up_blocks.2`(16×16)에 주입 → sigma map 해상도 16배 향상
+- text_attn 캡처를 `up_blocks.3`(32×32)에서 → 라텐트 동일 해상도, 픽셀 수준 매핑
+
+### 하이퍼파라미터
+
+```
+INJECT_KEY       = up_blocks.2.attentions.0.transformer_blocks.0.attn2.processor
+ATTN_CAPTURE_KEY = up_blocks.3.attentions.0.transformer_blocks.0.attn2.processor
+INJECT_QUERY_DIM = 640
+VCA_ALPHA        = 0.3
+lambda_depth     = 0.3 (adaptive)
+lr               = 5e-5
+epochs           = 60
+depth_pe_init_scale = 0.3
+```
+
+### 결과
+
+| Epoch | DRA | probe_sep | 비고 |
+|-------|-----|-----------|------|
+| 0 | - | - | |
+| 5 | - | - | |
+| ... | | | |
+
+### 주요 관찰
+
+- [ ] text_attn.gif: cat/dog 어텐션이 각자 올바른 entity 위치로 가는지
+- [ ] depth_effect.gif: VCA가 실제로 depth 변화를 만드는지
+- [ ] multiangle_depth_chart.png: angle별 depth ordering 정확도
+- [ ] DRA > 80% 달성 여부
+
+### 결론
+
+> (학습 완료 후 작성)
+
+---
+
+## Phase 23 — Color-qualified 프롬프트 + Direct z-order loss
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase23.py`  
+**데이터**: `toy/data_objaverse` (180 samples)
+
+### 배경 (Phase 22 문제점)
+
+| 항목 | Phase 22 | Phase 23 |
+|------|----------|----------|
+| 텍스트 프롬프트 | "a cat", "a dog" (색상 없음) | "a red cat", "a blue dog" (색+객체) |
+| Depth loss | `l_depth_ranking_perframe` (ranking, 간접) | `l_zorder_direct` (z-bin 직접 할당) |
+| text_attn 시각화 | 2 토큰 (entity0, entity1) | 4 토큰 (color0, entity0, color1, entity1) |
+
+**Phase 22 문제**: text_attn이 cat/dog를 구분 못함 → 색 없는 텍스트로는 CLIP 임베딩이 비슷함.  
+ranking loss는 front>back 비교만 → z-bin 자체 할당 안 배움.
+
+**Phase 23 수정**:
+1. `make_color_prompts(meta)`: meta.json의 color0/color1 RGB → "a red cat and a blue dog"
+2. `get_color_entity_context`: color+entity 결합 CLIP 임베딩 (1, 2, 768)
+3. `l_zorder_direct`: σ(front,z=0)↑ + σ(back,z=-1)↑ + σ(front,z=-1)↓ + σ(back,z=0)↓
+4. `debug_text_attn` 5행: GT + color0 + entity0 + color1 + entity1 overlay
+
+### 하이퍼파라미터
+
+```
+INJECT_KEY       = up_blocks.2.attentions.0.transformer_blocks.0.attn2.processor
+ATTN_CAPTURE_KEY = up_blocks.3.attentions.0.transformer_blocks.0.attn2.processor
+INJECT_QUERY_DIM = 640
+VCA_ALPHA        = 0.3
+lambda_depth     = 0.3 (adaptive)
+lr               = 5e-5
+epochs           = 60
+depth_pe_init_scale = 0.3
+```
+
+### 결과
+
+| Epoch | DRA | probe_sep | 비고 |
+|-------|-----|-----------|------|
+| 0 | - | - | |
+| 5 | - | - | |
+| ... | | | |
+
+### 주요 관찰
+
+- [ ] text_attn.gif: color+entity 4토큰이 각자 올바른 entity 위치로 가는지
+- [ ] depth_effect.gif: l_zorder_direct가 실제로 z-bin 분리를 만드는지
+- [ ] multiangle_depth_chart.png: angle별 depth ordering 정확도
+- [ ] DRA > 85% 달성 여부
+
+### 결론
+
+> (학습 완료 후 작성)
+
+---
+
+## Phase 24 — Depth-focused: lambda_depth 증가 + ratio fix (GPU 0)
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase24.py`
+
+### 배경 (Phase 23 문제)
+- `ratio=73M`: l_depth가 negative → `max(l_depth_w, 1e-9)=1e-9` → ratio 폭발, adaptive lambda 오작동
+- `lambda_depth=0.3`이 `l_diff=0.07`에 완전히 묻혀 depth 신호 없음
+
+### 수정
+| 항목 | Phase 23 | Phase 24 |
+|------|----------|----------|
+| lambda_depth | 0.3 | 5.0 (17x) |
+| lambda_diff | 1.0 | 0.05 (20x 감소) |
+| ratio 계산 | max(l_depth_w, 1e-9) | max(abs(l_depth_w), 1e-9) |
+| adaptive 조건 | l_depth_w > 0 | abs(l_depth_w) > 1e-8 |
+
+### 결과
+
+| Epoch | DRA | probe_sep | ratio | 비고 |
+|-------|-----|-----------|-------|------|
+| ... | | | | |
+
+---
+
+## Phase 25 — Text attention supervision: TrainableAttnProcessor (GPU 1)
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase25.py`
+
+### 배경
+- text_attn_chart: cross-attention frozen → gradient 없음 → chart 개선 불가
+- Phase 24 depth fix도 포함
+
+### 수정
+1. `TrainableAttnProcessor` @ ATTN_CAPTURE_KEY: weight tensor with grad
+2. `l_attn_mask_loss`: entity 토큰 attention mass → GT mask 내 최대화
+3. unfreeze attn2.to_q + to_k @ up_blocks.3 (lr * 0.1로 보수적 fine-tune)
+4. trainable: VCA 843K + attn2 to_q/to_k
+
+### 결과
+
+| Epoch | DRA | text_attn_overlap | probe_sep | 비고 |
+|-------|-----|-------------------|-----------|------|
+| ... | | | | |
+
+---
+
+## Phase 26 — Text attention 강한 supervision: lambda_attn=30.0 + clip=0.5 (GPU 0)
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase26.py`
+
+### 배경 (Phase 25 문제)
+
+| 항목 | Phase 25 | Phase 26 |
+|------|----------|----------|
+| lambda_attn | 0.3 | 3.0 (10x) |
+| attn grad clip | 0.01 | 0.1 (10x 완화) |
+| attn lr | args.lr × 0.1 | args.lr (full) |
+
+**Phase 25 문제**: `l_attn`이 14 epoch 동안 -0.010~-0.011에 완전 고착.
+- entity mask coverage ≈ 1% of 1024 spatial tokens → weighted l_attn = -0.003 (depth의 5000배 약함)
+- gradient too weak → to_q/to_k 실질적으로 학습 안됨
+
+**시도 실패 (lambda_attn=30.0)**:
+- epoch 1에서 l_attn=-11.0, l_depth=-0.68 → attn이 16배 dominant
+- probe_sep: 0.036 → 0.010 → 0.001 (depth 파괴)
+- DRA: 0.412 (random 이하) → 즉시 중단
+
+**Phase 26 수정 (lambda_attn=3.0)**:
+- l_attn 기여: 3.0 × 0.034 = 0.10 vs l_depth 기여: 5.0 × 0.6 = 3.0 → depth 30배 dominant, 균형 유지
+- clip=0.1 (10x), full lr: 충분한 attn 학습 허용
+- 목표: DRA >80% 유지 + l_attn 개선
+
+### 결과
+
+| Epoch | DRA | l_attn | text_attn_overlap | 비고 |
+|-------|-----|--------|-------------------|------|
+| ... | | | | |
+
+---
+
+## 실험 설계 가이드
+
+### 새 Phase 추가 시 체크리스트
+
+1. `scripts/train_phase{N}.py` 생성 (이전 phase 복사 후 수정)
+2. `pytest.ini`에 phase{N} marker 추가
+3. `docs/experiment_log.md` 에 Phase {N} 섹션 추가
+4. 학습 실행: `CUDA_VISIBLE_DEVICES=1 python scripts/train_phase{N}.py ...`
+5. debug GIF 확인 후 결과 기록
+
+### 핵심 지표 의미
+
+| 지표 | 의미 | 목표 |
+|------|------|------|
+| `depth_rank_accuracy` | sigma가 실제 depth 순서를 맞추는 비율 | > 80% |
+| `probe_sep` | 고정 probe에서 두 entity sigma 분리도 | > 0.1 |
+| `ratio` | l_diff / l_depth_weighted | 1~30x (adaptive) |
+| text_attn | cat/dog 어텐션이 각자 영역으로 분리 | 육안 확인 |
