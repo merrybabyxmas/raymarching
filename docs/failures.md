@@ -301,3 +301,91 @@ for fi, order in enumerate(depth_orders):
     frame_sigma = sigma_acc[layer_idx][fi:fi+1]
     loss += l_depth_ranking(frame_sigma, order)
 ```
+
+---
+
+### FM-I10: Phase 19 6-layer inference injection → zero-shot generalization 감소
+
+**현상**: Phase 19는 학습 시 INJECT_KEYS_P19 (6개 레이어) 주입 + 4가지 수정 적용.
+inference 비교(compare_phase19.py) 결과 Phase 19는 8개 프롬프트 중 1개(cat_dog, in-dist objaverse)만 이겼고,
+zero-shot에서 Phase 16/18 대비 10~60% 수준으로 크게 감소 (p19 zero-shot 평균 0.006 vs p16 0.028).
+
+| prompt_id | phase16 | phase18 | phase19 | winner |
+|-----------|---------|---------|---------|--------|
+| cat_dog (in-dist objaverse) | 0.006 | 0.007 | 0.033 | phase19 |
+| dancers (zero-shot) | 0.036 | 0.034 | 0.002 | phase16 |
+| snakes (zero-shot) | 0.051 | 0.084 | 0.015 | phase18 |
+| fighters (zero-shot) | 0.008 | 0.011 | 0.001 | phase18 |
+
+**가설 원인**:
+1. **6-layer inference injection 과부하**: 학습 시 VCAProcessor는 TrainVCAProcessor로 sigma_acc 누적용으로 UNet을 단순 통과. inference 시에는 FixedContextVCAProcessor가 6개 레이어에서 entity context를 강제 주입 → UNet의 cross-attention 구조가 학습에서 의도한 것보다 더 강하게 변형됨.
+2. **depth_pe_init_scale=0.3이 zero-shot에서 과도한 편향**: 학습 데이터(objaverse)의 entity embedding 분포에 depth_pe가 맞춰지므로, zero-shot 프롬프트에서는 잘못된 z-bin 편향이 오히려 방해됨.
+3. **VCA layer 1개 공유 × 6 주입**: 단일 VCALayer를 6개 위치에 반복 주입하므로, 한 번의 forward에서 동일 entity context가 6번 누적되어 sigma가 포화(saturation)될 가능성.
+
+**교훈**:
+- Multi-layer injection에서 학습-inference 일관성이 critical. 학습 시 TrainVCAProcessor의 동작과 inference 시 FixedContextVCAProcessor의 동작이 다르게 동작할 수 있다.
+- 6-layer injection은 in-dist objaverse에서는 효과적이지만 zero-shot generalization을 크게 해침.
+- 다음 시도: mid_block 1개 + up_block 1개(2-layer) 또는 학습 시 FixedContextVCAProcessor와 동일한 동작으로 통일.
+
+---
+
+### FM-I11: Phase 20 Fix 1+2+3 (단일 주입) — in-dist 개선 없음, zero-shot 일부 회복
+
+**현상**: Phase 20은 per-frame loss(Fix 1) + fixed probe(Fix 2) + depth_pe_init_scale=0.3(Fix 3)을 mid_block 단일 주입에 적용.
+결과: 8개 프롬프트 중 2개 win (dancers, fighters — 둘 다 zero-shot), in-dist는 오히려 하락.
+
+| 카테고리 | Phase16 avg | Phase18 avg | Phase19 avg | Phase20 avg |
+|----------|-------------|-------------|-------------|-------------|
+| in_dist_objaverse | 0.0121 | 0.0123 | 0.0231 | **0.0069** |
+| in_dist_toy       | 0.0529 | 0.0363 | 0.0187 | **0.0112** |
+| zero_shot         | 0.0279 | 0.0352 | 0.0057 | **0.0212** |
+
+Phase 20 패턴:
+- zero-shot 2개 (dancers: 0.046 최고, fighters: 0.013 최고) — per-frame loss가 zero-shot generalization에 기여
+- in-dist는 Phase 16/18보다 낮음 — depth_pe_init_scale=0.3이 in-dist objaverse에서 오히려 방해?
+
+**가설 원인**:
+1. **probe entity가 학습 내내 고정** (a cat vs a dog): probe_sep 최적화 방향이 probe 시퀀스에 과적합될 수 있음. best 체크포인트가 probe 시퀀스에만 좋은 VCA 파라미터를 저장.
+2. **depth_pe_init_scale=0.3 × single-layer**: Fix 3은 multi-layer 환경에서 설계됨. single-layer에서는 entity embedding(~1.0)과 depth_pe(~0.3)의 비율이 여전히 entity가 지배하여 z-bin 분리가 불충분할 수 있음.
+3. **per-frame loss × 60 epoch adaptive lambda**: lambda가 빠르게 decay(epoch 0: 0.3→0.15)하여 depth supervision이 조기에 약화됨.
+
+**교훈**: Fix 1+2+3이 zero-shot에는 도움되지만 in-dist 퇴보. 다음 시도 방향:
+  a) probe 다양화: 매 epoch 랜덤 probe 3개 평균 (고정 probe 과적합 방지)
+  b) adaptive lambda 완화: min_lambda 높이기 (0.075 이하로 내려가지 않도록)
+  c) depth_pe_init_scale 재검토: single-layer에서 0.5~1.0이 더 적합할 수 있음
+
+---
+
+### FM-I12: Phase 1~20 공통 — VCA가 text cross-attention을 완전 대체 (구조적 버그)
+
+**현상**: `debug/learning_quality`의 reconstruction.gif에서 Baseline(고양이 등 인식 가능한 이미지)에 비해
+Phase 16/18/19/20 모두 격자 무늬, 추상 노이즈, 갈색 덩어리 등 품질이 크게 저하됨.
+sigma_separation을 측정하고 있었지만 이미지 자체가 망가진 상태에서 측정.
+
+**원인**: `FixedContextVCAProcessor.__call__()` 코드:
+```python
+encoder_hidden_states: Optional[torch.Tensor] = None,  # ignored ← 버그
+vca_out = self.vca(x, ctx.float())   # entity context만 사용
+attn_out = vca_out - x               # text attn 완전 대체
+return attn_out
+```
+mid_block의 text cross-attention(77토큰 × 768dim)을 entity context(4벡터)로 대체.
+Text guidance가 사라져 AnimateDiff가 프롬프트를 잃어버림 → 이미지 품질 파괴.
+
+**Phase 21 수정**:
+```python
+class AdditiveVCAProcessor:
+    def __call__(self, attn, hidden_states, encoder_hidden_states=None, ...):
+        # 1. 원본 text cross-attention 유지
+        text_out = self.orig(attn, hidden_states, encoder_hidden_states, ...)
+        # 2. VCA depth delta (alpha=0.3 강도)
+        vca_delta = (VCA(hidden_states) - hidden_states) * self.alpha
+        # 3. additive blend
+        return text_out + vca_delta
+```
+
+**검증**: 5epoch, 20 샘플 smoke test → `depth_rank_accuracy=0.906` (91%), `IDEA=WORKS`.
+전체 데이터(168샘플) epoch 0: dra=0.588 (58.8% > 50% random baseline).
+
+**교훈**: VCA는 text cross-attention을 대체하는 것이 아니라 depth bias로 추가해야 함.
+additive 구조에서만 text quality + depth awareness가 동시에 달성 가능.
