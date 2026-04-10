@@ -127,12 +127,21 @@ def compute_frame_transforms(
 # ─── 페어 생성 ────────────────────────────────────────────────────────────────
 
 def generate_pairs(assets_dir: Path, seed: int = 42) -> list:
-    """assets_dir에서 GLB를 찾아 학습용 페어 생성."""
+    """assets_dir에서 GLB를 찾아 학습용 페어 생성.
+    EXCLUDED_ASSET_IDS에 있는 bad asset은 제외 (육안 검수 결과).
+    """
     rng = np.random.RandomState(seed)
+
+    # 육안 검수로 확인된 bad asset IDs (ring, collar 등 동물이 아닌 메쉬)
+    EXCLUDED_ASSET_IDS = {
+        'faea9af25c584e8aa893b65103c16601',  # dog 폴더에 있으나 실제로는 링/collar 형태
+    }
 
     # 키워드별 GLB 파일 수집
     kw_to_glbs = {}
     for glb in assets_dir.rglob('*.glb'):
+        if glb.stem in EXCLUDED_ASSET_IDS:
+            continue  # bad asset 제외
         kw = glb.parent.name
         kw_to_glbs.setdefault(kw, []).append(glb)
 
