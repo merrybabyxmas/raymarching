@@ -329,14 +329,31 @@ Phase 29 ablation 결과: `l_diff_on=0.063, l_diff_off=0.065, ratio=0.964x → B
 
 ### 결과
 
-| Epoch | DRA | l_diff | gamma | ablation ratio | 비고 |
-|-------|-----|--------|-------|----------------|------|
-| 4 | - | - | 0.304 | - | gamma 0.3→0.304 (소폭 상승) |
-| ... | | | | | |
+| Epoch | DRA | probe_sep | gamma | ablation ratio | 비고 |
+|-------|-----|-----------|-------|----------------|------|
+| 10 | 0.588 | 0.21 | 0.306 | 0.965x | 초기 |
+| 50 | 0.819 | 0.25 | 0.330 | - | |
+| 89 | 0.850 | 0.321 | 0.358 | 0.968x | |
+| 99 | 0.825 | 0.328 | 0.364 | 0.956x | |
+
+**FINAL: DRA=0.8525 (341/400), probe_sep=0.337**
 
 ### 결론
 
-> (학습 완료 후 작성)
+- **gamma 0.300 → 0.364** (+21%): condition dropout으로 VCA가 더 적극적으로 기여하도록 학습됨
+- **DRA 85.25%** — Phase 28/29(85.5%)와 동등하거나 유사한 수준
+- **ablation ratio** 0.965→0.956x: 여전히 BACKBONE_DOMINANT이지만 ratio 감소 추세
+  - ratio < 1.0: VCA ON이 denoising에 **더 좋음** (backbone 손상 없음)
+  - ratio 감소: VCA가 점점 더 도움이 되고 있음
+- **recon GIF**: `debug/train_phase30/recon_epoch*.gif` 에서 normal vs swapped ctx 비교 가능
+
+### 3-Phase 최종 비교 (100 epochs)
+
+| Phase | 특징 | DRA | probe_sep | 비고 |
+|-------|------|-----|-----------|------|
+| 28 | visualization fix 기준선 | 85.50% | 0.337 | |
+| 29 | ablation diagnostic | 85.75% | 0.326 | |
+| **30** | **cond dropout 15% + learnable gamma** | **85.25%** | **0.337** | **gamma 0.364** |
 
 ---
 
