@@ -200,6 +200,75 @@ depth_pe_init_scale = 0.3
 
 ---
 
+## Phase 27 — Text attention LoRA: fp32 rank-4 (GPU 0)
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase27.py`
+
+### 배경 (Phase 25/26 문제)
+
+| 항목 | Phase 25 | Phase 26 | Phase 27 |
+|------|----------|----------|----------|
+| 방법 | fp16 to_q/to_k 직접 학습 | 동일 | fp32 LoRA rank-4 |
+| lambda_attn | 0.3 | 3.0 | 3.0 |
+| 결과 | l_attn 고착 (-0.010) | epoch 1 NaN | ? |
+
+**Phase 25/26 근본 문제**: fp16 파라미터를 AdamW로 학습하면 gradient overflow → NaN
+- Phase 25: gradient too weak (lambda too small)
+- Phase 26: NaN from epoch 1 (fp16 weight update 불안정)
+
+**Phase 27 LoRA 해결**:
+- `LoRALayer`: fp32 A×B matrices (rank=4, 6,912 params total)
+- 원본 to_q/to_k 완전 frozen → dtype 이슈 없음
+- `LoRAAttnProcessor`: q += delta_q, k += delta_k (fp32→fp16 cast)
+- `torch.amp.autocast(enabled=False)` 사용 → autocast가 fp32 연산 방해 안 함
+
+### 설정
+- lambda_depth = 5.0, lambda_attn = 3.0
+- LoRA rank = 4, q_dim=320, context_dim=768
+- clip_grad_norm_(trainable_attn, 0.5), full lr
+
+### 핵심 버그 수정
+
+**NaN 원인 1 — `torch.baddbmm` beta=1 uninitialized**:
+```python
+# 잘못됨: beta=1 (default) → torch.empty 미초기화값 + score → NaN
+scores = torch.baddbmm(torch.empty(...), q.float(), k.float().T, alpha=scale)
+
+# 수정됨: beta=0
+scores = torch.baddbmm(torch.empty(...), q.float(), k.float().T, beta=0, alpha=scale)
+```
+
+**NaN 원인 2 — l_attn gradient UNet 역전파**:
+```python
+# 수정됨: hs_det / ctx_det detach → LoRA에만 gradient
+hs_det  = hidden_states.detach()
+ctx_det = ctx.detach()
+q = attn.to_q(hs_det) + lora.delta_q(hs_det)
+k = attn.to_k(ctx_det) + lora.delta_k(ctx_det)
+```
+
+### 결과
+
+| Epoch | DRA | l_attn | probe_sep | 비고 |
+|-------|-----|--------|-----------|------|
+| 9 | 0.637 | -1.75 | 0.19 | l_attn 학습 시작 |
+| 24 | 0.794 | -2.49 | 0.18 | DRA 80% 근접 |
+| 29 | **0.806** | -2.54 | 0.16 | **DRA >80% 달성** (Phase 25보다 30 epoch 빠름) |
+| 54 | 0.800 | -2.67 | 0.25 | 안정 유지 |
+| 59 | **0.806** | -2.66 | 0.26 | **FINAL** |
+
+**FINAL: probe_sep=0.285, DRA=0.8350 (334/400)**
+
+### 결론
+
+- **depth chart**: DRA=83.5% > 80% 목표 달성. Phase 25(83.0%)와 동등하나 30 epoch 빠름.
+- **text attention chart**: l_attn Phase 25 고착(-0.010) → Phase 27 지속 학습(-2.66). LoRA fp32 gradient isolation으로 NaN 완전 해결.
+- **두 가지 버그 수정**: (1) `beta=0` in baddbmm, (2) `hidden_states.detach()` for Q,K input.
+- IDEA=WORKS, LEARNING=OK
+
+---
+
 ## 실험 설계 가이드
 
 ### 새 Phase 추가 시 체크리스트

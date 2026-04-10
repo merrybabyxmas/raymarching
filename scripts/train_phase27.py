@@ -50,7 +50,7 @@ from scripts.train_phase19 import l_depth_ranking_perframe, PROBE_T_VALUES
 DEFAULT_LAMBDA_DEPTH  = 5.0    # Phase 24/25: depth 집중
 DEFAULT_LAMBDA_DIFF   = 0.05   # Phase 24/25: diff loss 감소
 DEFAULT_LAMBDA_ORTHO  = 0.005
-DEFAULT_LAMBDA_ATTN   = 0.3    # Phase 25: text attention mask loss 강도
+DEFAULT_LAMBDA_ATTN   = 3.0    # Phase 27: LoRA + 10x lambda (Phase 25 gradient too weak)
 DEFAULT_LR            = 5e-5
 DEFAULT_EPOCHS        = 60
 DEFAULT_T_MAX         = 200
@@ -232,7 +232,7 @@ def l_zorder_direct(sigma_acc: list, depth_orders: list,
     return loss / max(count, 1)
 
 
-# ─── Phase 25: Text attention alignment ──────────────────────────────────────
+# ─── Phase 27: LoRA-based text attention alignment ───────────────────────────
 
 def _get_attn_module(unet, processor_key: str):
     """
@@ -246,44 +246,92 @@ def _get_attn_module(unet, processor_key: str):
     return mod
 
 
-class TrainableAttnProcessor:
-    """
-    Phase 25: cross-attention processor (gradient preserved).
+import torch.nn as nn
 
-    CaptureAttnProcessor와 동일 구조이나 last_weights_tensor를 detach하지 않음
-    → to_q / to_k parameter에 gradient 흐름 → l_attn_mask_loss로 직접 supervision
+class LoRALayer(nn.Module):
     """
-    def __init__(self):
+    Phase 27: Low-Rank Adaptation for attn2 to_q / to_k.
+
+    원본 fp16 weights는 완전 frozen.
+    fp32 저랭크 행렬 (A×B)만 학습 → NaN 문제 근본 해결.
+
+    delta_q = B_q @ A_q @ hidden_states   (rank=4 bottleneck)
+    delta_k = B_k @ A_k @ ctx
+
+    초기화: B=0 → 학습 시작 시 delta=0 (모델 동작 무변화)
+    """
+    def __init__(self, q_dim: int, context_dim: int, rank: int = 4):
+        super().__init__()
+        self.lora_A_q = nn.Linear(q_dim,       rank, bias=False)
+        self.lora_B_q = nn.Linear(rank,         q_dim, bias=False)
+        self.lora_A_k = nn.Linear(context_dim,  rank, bias=False)
+        self.lora_B_k = nn.Linear(rank,         q_dim, bias=False)
+        # B=0 init: 시작 시 delta=0 (모델 동작 보존)
+        nn.init.zeros_(self.lora_B_q.weight)
+        nn.init.zeros_(self.lora_B_k.weight)
+        # A ~ N(0, 1/rank): 작은 초기값
+        nn.init.normal_(self.lora_A_q.weight, std=1.0 / rank)
+        nn.init.normal_(self.lora_A_k.weight, std=1.0 / rank)
+
+    def delta_q(self, x: torch.Tensor) -> torch.Tensor:
+        """(BF, S, q_dim) fp16 → LoRA delta fp16"""
+        with torch.amp.autocast("cuda", enabled=False):
+            return self.lora_B_q(self.lora_A_q(x.float())).to(x.dtype)
+
+    def delta_k(self, x: torch.Tensor) -> torch.Tensor:
+        """(BF, L, context_dim) fp16 → LoRA delta fp16"""
+        with torch.amp.autocast("cuda", enabled=False):
+            return self.lora_B_k(self.lora_A_k(x.float())).to(x.dtype)
+
+
+class LoRAAttnProcessor:
+    """
+    Phase 27: frozen to_q/to_k + LoRA delta (fp32, 안정적).
+
+    Phase 25/26 문제: fp16 to_q/to_k 직접 학습 → NaN (optimizer first step overflow)
+    Phase 27 해결: 원본 fp16 weights 완전 frozen + 별도 fp32 LoRA layer만 학습
+    """
+    def __init__(self, lora_layer: LoRALayer):
+        self.lora            = lora_layer
         self.last_weights        = None   # numpy, no grad (debug용)
-        self.last_weights_tensor = None   # torch tensor WITH grad (loss 계산용)
+        self.last_weights_tensor = None   # float32 WITH grad (l_attn_mask_loss 전용)
 
     def __call__(self, attn, hidden_states, encoder_hidden_states=None,
                  attention_mask=None, **kwargs):
-        residual = hidden_states
+        residual = hidden_states  # original (for residual connection gradient path)
         ctx = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
 
-        # Q/K/V: fp16 그대로 projection
-        # scores + softmax만 float32로 올려서 NaN 방지
-        q = attn.head_to_batch_dim(attn.to_q(hidden_states))   # fp16
-        k = attn.head_to_batch_dim(attn.to_k(ctx))             # fp16
-        v = attn.head_to_batch_dim(attn.to_v(ctx))             # fp16
+        # Q/K 입력을 detach: l_attn gradient가 UNet hidden states로 역전파 안 됨
+        # → VCA parameter에 l_attn gradient 오염 없음 (Phase 26/27 NaN 근본 원인 해결)
+        # l_diff gradient는 v와 residual 경로로 정상 흐름 (VCA 학습 유지)
+        hs_det  = hidden_states.detach()
+        ctx_det = ctx.detach()
 
-        # float32로 올려서 score 계산 (NaN 방지)
+        q = attn.to_q(hs_det)             # fp16, gradient: q → hs_det (stops)
+        k = attn.to_k(ctx_det)            # fp16
+        v = attn.head_to_batch_dim(attn.to_v(ctx))   # fp16, ctx not detached (v path)
+
+        # LoRA delta: fp32 → fp16, gradient flows to LoRA.A,B ONLY
+        q = q + self.lora.delta_q(hs_det)    # gradient: q → delta_q → LoRA
+        k = k + self.lora.delta_k(ctx_det)   # gradient: k → delta_k → LoRA
+
+        q = attn.head_to_batch_dim(q)
+        k = attn.head_to_batch_dim(k)
+
+        # float32 scores — beta=0 필수: torch.empty는 미초기화값 포함, beta=1이면 NaN 발생
         scores = torch.baddbmm(
             torch.empty(q.shape[0], q.shape[1], k.shape[1],
                         dtype=torch.float32, device=q.device),
-            q.float(), k.float().transpose(-2, -1), alpha=float(attn.scale),
+            q.float(), k.float().transpose(-2, -1), beta=0, alpha=float(attn.scale),
         )
         if attention_mask is not None:
             scores = scores + attention_mask.float()
 
-        weights_f32 = scores.softmax(dim=-1)   # (BF*h, S, L), float32, has grad
+        weights_f32 = scores.softmax(dim=-1)   # float32, has grad → LoRA
         self.last_weights        = weights_f32.detach().cpu().numpy()
-        self.last_weights_tensor = weights_f32  # float32, retain grad → l_attn_mask_loss 전용
+        self.last_weights_tensor = weights_f32
 
-        # forward output은 detached weights 사용:
-        # l_diff/l_depth 그래디언트가 to_q/to_k로 역전파되는 것을 차단.
-        # l_attn loss만 to_q/to_k를 통해 supervised (제어된 gradient).
+        # forward output detached: l_diff/l_depth이 LoRA로 역전파 안 됨
         out = torch.bmm(weights_f32.detach().to(v.dtype), v)
         out = attn.batch_to_head_dim(out)
         out = attn.to_out[0](out)
@@ -2160,6 +2208,8 @@ def training_step_p21(pipe, vca_layer, latents, encoder_hidden_states,
 
 def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[Phase 27] LoRA-based text attn (rank=4, fp32), lambda_attn={args.lambda_attn}",
+          flush=True)
     print(f"[init] device={device}  lambda_depth={args.lambda_depth}  "
           f"lambda_diff={args.lambda_diff}  lambda_attn={args.lambda_attn}  alpha={VCA_ALPHA}",
           flush=True)
@@ -2200,24 +2250,26 @@ def train(args):
     # Additive VCA 주입
     vca_layer, orig_procs = inject_vca_p21(pipe, probe_entity_ctx)
 
-    # ── Phase 25: TrainableAttnProcessor 주입 + to_q/to_k unfreeze ────────────
-    trainable_attn_proc = TrainableAttnProcessor()
+    # ── Phase 27: LoRALayer 주입 (fp32, 안정적) ──────────────────────────────
+    # Phase 25/26 문제: fp16 to_q/to_k 직접 학습 → NaN (AdamW first step overflow)
+    # Phase 27 해결: 원본 fp16 weights 완전 frozen + fp32 LoRA matrices만 학습
+    attn2_module = _get_attn_module(pipe.unet, ATTN_CAPTURE_KEY)
+    q_dim       = attn2_module.to_q.weight.shape[0]         # 320
+    context_dim = attn2_module.to_k.weight.shape[1]         # 768
+
+    lora_layer = LoRALayer(q_dim, context_dim, rank=4).to(device).float()
+    lora_attn_proc = LoRAAttnProcessor(lora_layer)
+
     attn_procs_now = dict(pipe.unet.attn_processors)
-    attn_procs_now[ATTN_CAPTURE_KEY] = trainable_attn_proc
+    attn_procs_now[ATTN_CAPTURE_KEY] = lora_attn_proc
     pipe.unet.set_attn_processor(attn_procs_now)
 
-    # ATTN_CAPTURE_KEY attn2의 to_q, to_k unfreeze
-    # fp16 weight 유지 + optimizer eps=1e-3 로 overflow 방지
-    # (fp32 변환 시 다른 AttnProcessor2_0 블록에서 dtype mismatch 발생)
-    attn2_module = _get_attn_module(pipe.unet, ATTN_CAPTURE_KEY)
-    for param in list(attn2_module.to_q.parameters()) + list(attn2_module.to_k.parameters()):
-        param.requires_grad = True
-    n_attn_params = sum(p.numel() for p in attn2_module.to_q.parameters()) \
-                  + sum(p.numel() for p in attn2_module.to_k.parameters())
-    print(f"[p25] unfreeze attn2 to_q+to_k (fp16, eps=1e-3): {n_attn_params:,} params  @ {ATTN_CAPTURE_KEY}",
-          flush=True)
+    n_lora_params = sum(p.numel() for p in lora_layer.parameters())
+    print(f"[p27] LoRA attn2 (q_dim={q_dim}, ctx={context_dim}, rank=4): "
+          f"{n_lora_params:,} fp32 params @ {ATTN_CAPTURE_KEY}", flush=True)
 
-    # 학습용 processor dict 저장
+    # 학습용 processor dict 저장 (trainable_attn_proc API 호환)
+    trainable_attn_proc = lora_attn_proc
     train_procs = copy.copy(dict(pipe.unet.attn_processors))
 
     probe_latents = encode_frames_to_latents(pipe, probe_frames, device)
@@ -2231,17 +2283,16 @@ def train(args):
     print(f"[probe_prompt] '{full_probe_color}'", flush=True)
 
     trainable_vca  = [p for p in vca_layer.parameters() if p.requires_grad]
-    trainable_attn = list(attn2_module.to_q.parameters()) + list(attn2_module.to_k.parameters())
+    trainable_attn = list(lora_layer.parameters())   # fp32, 작음 (4 matrices, rank=4)
     trainable = trainable_vca + trainable_attn
     optimizer = torch.optim.AdamW(
-        [{'params': trainable_vca,  'lr': args.lr,       'eps': 1e-8},
-         {'params': trainable_attn, 'lr': args.lr * 0.1, 'eps': 1e-3}],
-        # attn2 eps=1e-3: fp16 weight + AdamW first step에서
-        # v₀≈0 → lr/sqrt(v+eps) ≈ lr/eps^0.5 = 5e-6/0.032 ≈ 1.6e-4 (fp16 safe)
+        [{'params': trainable_vca,  'lr': args.lr, 'eps': 1e-8},
+         {'params': trainable_attn, 'lr': args.lr, 'eps': 1e-8}],
+        # LoRA는 fp32 → eps 트릭 불필요, 동일 lr 사용
         weight_decay=1e-4,
     )
     print(f"[opt] VCA: {sum(p.numel() for p in trainable_vca):,}  "
-          f"attn2: {sum(p.numel() for p in trainable_attn):,}", flush=True)
+          f"LoRA: {sum(p.numel() for p in trainable_attn):,}", flush=True)
 
     lambda_depth = args.lambda_depth
     lambda_ortho = args.lambda_ortho
@@ -2297,10 +2348,10 @@ def train(args):
                 tok_idx_e0=sample_tok_e0, tok_idx_e1=sample_tok_e1,
             )
             step_out["loss_tensor"].backward()
-            # 두 파라미터 그룹 분리 clip: attn2는 매우 보수적 (0.01)
+            # Phase 27: LoRA fp32 → NaN 위험 없음, 적당한 clip
             torch.nn.utils.clip_grad_norm_(trainable_vca,  1.0)
-            torch.nn.utils.clip_grad_norm_(trainable_attn, 0.01)
-            # NaN grad 방지
+            torch.nn.utils.clip_grad_norm_(trainable_attn, 0.5)
+            # 안전을 위해 NaN grad 체크 유지
             for p in trainable_attn:
                 if p.grad is not None and torch.isnan(p.grad).any():
                     p.grad.zero_()
@@ -2464,8 +2515,8 @@ def parse_args():
     p.add_argument("--t-max",        type=int,   default=DEFAULT_T_MAX, dest="t_max")
     p.add_argument("--lambda-diff",  type=float, default=DEFAULT_LAMBDA_DIFF,  dest="lambda_diff")
     p.add_argument("--lambda-attn",  type=float, default=DEFAULT_LAMBDA_ATTN,  dest="lambda_attn")
-    p.add_argument("--save-dir",     default="checkpoints/phase25",    dest="save_dir")
-    p.add_argument("--debug-dir",    default="debug/train_phase25",    dest="debug_dir")
+    p.add_argument("--save-dir",     default="checkpoints/phase27",    dest="save_dir")
+    p.add_argument("--debug-dir",    default="debug/train_phase27",    dest="debug_dir")
     p.add_argument("--n-frames",     type=int,   default=8,  dest="n_frames")
     p.add_argument("--height",       type=int,   default=256)
     p.add_argument("--width",        type=int,   default=256)
