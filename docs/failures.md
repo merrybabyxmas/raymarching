@@ -262,3 +262,42 @@ l_depth_weighted가 l_diff 대비 너무 작아(ratio 75~8095x) VCA가 depth를 
 **교훈**: 최적 λ_depth는 Phase 16(1.0, 파괴)과 Phase 17(0.02, 미약) 사이 어딘가.
 → Phase 18에서 λ_depth ∈ {0.1, 0.2, 0.3} 그리드 탐색으로 최적값 결정.
 체크포인트: `checkpoints/phase17/best.pt`
+
+---
+
+### FM-I8: sigma_separation 지표가 random t 노이즈를 측정 (Phase 16~18 공통)
+
+**현상**: 학습 곡선에서 sigma_separation이 매 epoch 크게 진동 (0.004~0.346).
+실제로 모델이 학습/망각을 반복하는 것처럼 보이지만, 지표 자체가 불안정한 것임.
+
+**원인**: 매 epoch 랜덤 timestep `t` 1회에서만 forward → hidden_states가 t에 따라 완전히 달라짐.
+sigma는 hidden_states 기반이므로 weight 변화가 아니라 **t의 노이즈**를 반영.
+실제 학습 진행도를 측정하지 못함.
+
+**해결 (Phase 19 Fix 2)**: 고정 probe × 5개 t 값 평균으로 probe_sep 측정.
+`PROBE_T_VALUES = [20, 60, 100, 140, 180]`
+
+---
+
+### FM-I9: Majority vote depth order → 50% 역방향 gradient (Phase 16~18 공통)
+
+**현상**: depth_reversal_rate=0.744로 8프레임 중 평균 6프레임이 depth가 뒤집히는 시퀀스.
+8프레임 전체에 단일 majority vote 순서를 적용하면 절반 프레임에 역방향 gradient가 들어감.
+
+**원인**:
+```python
+# 기존 코드 (train_objaverse_vca.py)
+front_votes = sum(1 for d in depth_orders if d[0] == 0)
+order = [0, 1] if front_votes >= len(depth_orders) // 2 else [1, 0]
+l_depth = l_depth_ranking(sigma_raw, order)  # 모든 프레임에 같은 순서
+```
+depth_reversal_rate=0.744인 시퀀스에서 majority vote로 결정해도,
+나머지 26%+교차 구간 프레임들에 틀린 감독 신호가 들어감.
+
+**해결 (Phase 19 Fix 1)**: 프레임별 독립 depth ranking loss.
+```python
+# Phase 19 코드
+for fi, order in enumerate(depth_orders):
+    frame_sigma = sigma_acc[layer_idx][fi:fi+1]
+    loss += l_depth_ranking(frame_sigma, order)
+```

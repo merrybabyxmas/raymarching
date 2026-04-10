@@ -33,9 +33,13 @@ class VCALayer(nn.Module):
     파이프라인을 확정하기 전까지 하드코딩하지 말고 반드시 인자로 받아라.
     """
     def __init__(self, query_dim, context_dim: int, n_heads=8,
-                 n_entities=2, z_bins=2, lora_rank=8, use_softmax=False):
+                 n_entities=2, z_bins=2, lora_rank=8, use_softmax=False,
+                 depth_pe_init_scale: float = 0.02):
         # context_dim에 기본값 없음 — 호출부에서 명시적으로 지정 강제
         # use_softmax=True: Softmax variant (ablation용, 실제 VCA는 항상 False)
+        # depth_pe_init_scale: entity embedding magnitude(~1)보다 충분히 커야 z-bin 분리 학습 가능
+        #   Phase 1~18: 0.02 (너무 작아 entity embedding에 덮힘 → z-bin 학습 미흡)
+        #   Phase 19+:  0.3  (entity embedding과 동일 magnitude → z-bin 분리 활성화)
         super().__init__()
         assert query_dim % n_heads == 0
         self.n_heads, self.n_entities, self.z_bins = n_heads, n_entities, z_bins
@@ -46,12 +50,13 @@ class VCALayer(nn.Module):
         self.to_q = nn.Linear(query_dim, query_dim, bias=False)
         self.to_k = LoRALinear(context_dim, query_dim, rank=lora_rank)
         self.to_v = LoRALinear(context_dim, query_dim, rank=lora_rank)
-        self.depth_pe = nn.Parameter(torch.randn(z_bins, context_dim) * 0.02)
+        self.depth_pe = nn.Parameter(torch.randn(z_bins, context_dim) * depth_pe_init_scale)
         self.to_out = nn.Linear(query_dim, query_dim)
 
         self.last_sigma: Optional[torch.Tensor] = None         # (BF, S, N, Z) detached
         self.last_sigma_raw: Optional[torch.Tensor] = None    # (BF, S, N, Z) with grad (for loss)
         self.last_transmittance: Optional[torch.Tensor] = None # (BF, S, Z)
+        self.sigma_acc: list = []   # multi-layer injection 시 각 레이어 sigma 누적 (for loss)
 
     def _expand_context(self, ctx):
         # ctx: (BF, N, CD) → (BF, N*Z, CD)
@@ -95,5 +100,10 @@ class VCALayer(nn.Module):
         self.last_sigma_raw = sigma_mean                   # with grad — for loss computation
         self.last_sigma = sigma_mean.detach()              # detached — for metrics / GIF
         self.last_transmittance = T.detach()
+        self.sigma_acc.append(sigma_mean)                  # multi-layer 누적
 
         return x + self.to_out(out)
+
+    def reset_sigma_acc(self):
+        """multi-layer 주입 시 각 UNet forward 전에 호출."""
+        self.sigma_acc.clear()
