@@ -269,6 +269,35 @@ k = attn.to_k(ctx_det) + lora.delta_k(ctx_det)
 
 ---
 
+## Phase 28 — Visualization fixes: LoRA attn + masked depth chart
+
+**날짜**: 2026-04-10  
+**스크립트**: `scripts/train_phase28.py`
+
+### 배경 (Phase 27 시각화 버그 2가지)
+
+| 버그 | 원인 | 현상 | 수정 |
+|------|------|------|------|
+| text attn 완전 파괴 | `CaptureAttnProcessor.baddbmm` beta=1 + `torch.empty` → fp16 쓰레기값 | attention map 완전 noise | `beta=0` 추가 |
+| text attn base model 표시 | CaptureAttnProcessor가 LoRA delta 없는 base attention 표시 | LoRA 효과 시각화 불가 | LoRAAttnProcessor.last_weights 직접 사용 |
+| depth chart 평행이동 | `_sigma_depth_scores`가 ALL 256 spatial token 평균 (배경 포함) | entity signal 희석 → 두 entity 동일하게 이동 | entity_masks로 masking (DRA 측정방식과 동일) |
+| depth encoder_hs 버그 | 모든 angle이 angle[0]의 text prompt 사용 | hidden states 불일치 | 각 angle 자체 meta 사용 |
+
+### 설정
+Phase 27과 동일 (lambda_depth=5.0, lambda_diff=0.05, lambda_attn=3.0, LoRA rank=4)
+
+### 결과
+
+| Epoch | DRA | l_attn | probe_sep | 비고 |
+|-------|-----|--------|-----------|------|
+| ... | | | | |
+
+### 결론
+
+> (학습 완료 후 작성)
+
+---
+
 ## 실험 설계 가이드
 
 ### 새 Phase 추가 시 체크리스트
