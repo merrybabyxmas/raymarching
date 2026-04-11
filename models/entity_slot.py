@@ -563,15 +563,18 @@ def l_visible_weights(
     entity_masks_BNS: torch.Tensor,          # (B, 2, S) float
     depth_orders_B:   list,
     eps:              float = 1e-6,
+    bg_weight:        float = 0.2,
 ) -> torch.Tensor:
     """
     L_visible_weights: GT visible target으로 w0, w1 직접 supervision.
 
     exclusive region: 자기 entity w_i→1, 다른 entity w_j→0
     overlap region:   front entity w_front→1, back entity w_back→0
-    background:       w0,w1→0 (mask 없으면 loss 없음)
+    background:       w0,w1→0 (Phase 41: bg_weight으로 명시적 suppression 추가)
 
-    Phase 39에서 가장 핵심적인 loss.
+    Phase 41 fix: background suppression 추가.
+    기존 코드는 entity 픽셀만 감독(m_any 곱) → background에서 w0/w1이 자유롭게 상승.
+    bg_weight term이 background에서 w0,w1→0으로 억제.
     """
     w0_target, w1_target = build_visible_targets(entity_masks_BNS, depth_orders_B)
     w0_target = w0_target.to(device=w0.device)
@@ -579,11 +582,18 @@ def l_visible_weights(
 
     # entity mask: any entity present → non-background
     m_any = (entity_masks_BNS[:, 0, :] + entity_masks_BNS[:, 1, :]).clamp(max=1.0)
-    n     = m_any.sum() + eps
+    n_ent = m_any.sum() + eps
 
-    l0 = ((w0.float() - w0_target).pow(2) * m_any).sum() / n
-    l1 = ((w1.float() - w1_target).pow(2) * m_any).sum() / n
-    return (l0 + l1) * 0.5
+    l0 = ((w0.float() - w0_target).pow(2) * m_any).sum() / n_ent
+    l1 = ((w1.float() - w1_target).pow(2) * m_any).sum() / n_ent
+
+    # Background suppression: w0, w1 → 0 in non-entity regions
+    bg = 1.0 - m_any
+    n_bg = bg.sum() + eps
+    l_bg0 = (w0.float().pow(2) * bg).sum() / n_bg
+    l_bg1 = (w1.float().pow(2) * bg).sum() / n_bg
+
+    return (l0 + l1) * 0.5 + bg_weight * (l_bg0 + l_bg1) * 0.5
 
 
 def l_wrong_slot_suppression(
@@ -620,22 +630,31 @@ def l_sigma_spatial(
 ) -> torch.Tensor:
     """
     L_sigma_spatial: VCA sigma를 공간적으로 entity mask와 일치시킴.
+    Phase 41 fix: class-balanced MSE — entity 픽셀(~4%)과 background(~96%) 균형.
 
     핵심 동기
     ----------
-    VCA는 Phase 31~38에서 depth ordering (front/back) 만 학습했음 → DRA=0.975 달성.
-    하지만 alpha_0/alpha_1 (sigma의 max over z_bins)는 공간적으로 uniform →
-    Porter-Duff w0/w1이 entity mask와 무관하게 됨 → visible_iou가 0.082에서 고착.
+    Phase 39: uniform F.mse_loss → entity가 4%에 불과해 gradient 대부분이 "alpha→0"으로 향함.
+    → 모델이 alpha≈0 everywhere를 학습 (MSE-optimal) → visible_iou = 0.082에 고착.
 
-    Fix: alpha_0 → entity_mask_0, alpha_1 → entity_mask_1 직접 MSE supervision.
+    Phase 41 fix: class-balanced weights
+      entity pixel  weight = 1.0
+      background    weight = n_entity / n_background
 
-    주의: depth loss (l_depth)와 함께 쓰면 spatial + ordering 동시 학습.
+    이로써 entity 픽셀의 total gradient ≈ background total gradient.
+    모델이 alpha→0 shortcut을 택할 수 없게 됨.
     """
     m0 = entity_masks_BNS[:, 0, :].float().to(alpha0.device)
     m1 = entity_masks_BNS[:, 1, :].float().to(alpha1.device)
-    l0 = F.mse_loss(alpha0.float(), m0)
-    l1 = F.mse_loss(alpha1.float(), m1)
-    return (l0 + l1) * 0.5
+
+    def _balanced_mse(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
+        n_pos = gt.sum().clamp(min=1.0)
+        n_neg = (1.0 - gt).sum().clamp(min=1.0)
+        # entity pixels weight=1, bg weight = n_pos/n_neg → equal total gradient
+        w = gt + (1.0 - gt) * (n_pos / n_neg)
+        return ((pred.float() - gt).pow(2) * w).mean()
+
+    return (_balanced_mse(alpha0, m0) + _balanced_mse(alpha1, m1)) * 0.5
 
 
 # =============================================================================
