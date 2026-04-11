@@ -22,6 +22,7 @@ from models.entity_slot import (
     build_visible_targets,
     l_visible_weights,
     l_wrong_slot_suppression,
+    l_sigma_spatial,
     compute_overlap_score,
     val_slot_score,
 )
@@ -307,3 +308,62 @@ class TestValSlotScore:
         s_base = val_slot_score(0.5, 0.0, 0.5, 0.5)
         s_ord  = val_slot_score(0.5, 1.0, 0.5, 0.5)
         assert s_ord - s_base == pytest.approx(0.3, abs=1e-6)
+
+
+# =============================================================================
+# l_sigma_spatial tests
+# =============================================================================
+
+class TestSigmaSpatial:
+
+    def test_zero_loss_for_perfect_prediction(self):
+        """alpha = mask → loss = 0."""
+        m = torch.zeros(2, 2, 8)
+        m[0, 0, :4] = 1.0
+        m[1, 1, 4:] = 1.0
+        alpha0 = m[:, 0, :]
+        alpha1 = m[:, 1, :]
+        loss = l_sigma_spatial(alpha0, alpha1, m)
+        assert float(loss.item()) == pytest.approx(0.0, abs=1e-6)
+
+    def test_nonzero_loss_for_mismatch(self):
+        """alpha = 0.5 everywhere, mask = binary → loss > 0."""
+        m = torch.zeros(1, 2, 8)
+        m[0, 0, :4] = 1.0
+        m[0, 1, 4:] = 1.0
+        alpha0 = torch.full((1, 8), 0.5)
+        alpha1 = torch.full((1, 8), 0.5)
+        loss = l_sigma_spatial(alpha0, alpha1, m)
+        assert float(loss.item()) > 0.0
+
+    def test_gradient_flows_to_alpha0_alpha1(self):
+        """loss.backward()가 alpha0, alpha1로 gradient를 전달하는지."""
+        m = torch.zeros(2, 2, 6)
+        m[:, 0, :3] = 1.0
+        m[:, 1, 3:] = 1.0
+        alpha0 = torch.rand(2, 6, requires_grad=True)
+        alpha1 = torch.rand(2, 6, requires_grad=True)
+        loss = l_sigma_spatial(alpha0, alpha1, m)
+        loss.backward()
+        assert alpha0.grad is not None
+        assert alpha1.grad is not None
+        assert not torch.all(alpha0.grad == 0)
+
+    def test_loss_drives_alpha_toward_mask(self):
+        """Gradient descent로 alpha가 mask에 수렴하는지."""
+        import torch.optim as optim
+        m = torch.zeros(1, 2, 8)
+        m[0, 0, :4] = 1.0
+        m[0, 1, 4:] = 1.0
+        alpha0 = torch.nn.Parameter(torch.zeros(1, 8))
+        alpha1 = torch.nn.Parameter(torch.zeros(1, 8))
+        opt = optim.Adam([alpha0, alpha1], lr=0.1)
+        init_loss = float(l_sigma_spatial(alpha0, alpha1, m).item())
+        for _ in range(200):
+            opt.zero_grad()
+            loss = l_sigma_spatial(alpha0, alpha1, m)
+            loss.backward()
+            opt.step()
+        final_loss = float(l_sigma_spatial(alpha0, alpha1, m).item())
+        assert final_loss < init_loss * 0.01, \
+            f"Loss should drop: {init_loss:.4f} → {final_loss:.4f}"

@@ -88,6 +88,7 @@ from models.entity_slot import (
     l_overlap_ordering,
     l_visible_weights,
     l_wrong_slot_suppression,
+    l_sigma_spatial,
     # Phase 39 metrics (GT mask 기반)
     compute_visible_iou,
     compute_ordering_accuracy,
@@ -124,6 +125,8 @@ DEFAULT_LAMBDA_VIS    = 3.0    # L_visible_weights (핵심 loss)
 DEFAULT_LAMBDA_WRONG  = 1.5    # L_wrong_slot_suppression
 DEFAULT_LAMBDA_DEPTH  = 3.0    # L_depth
 DEFAULT_LAMBDA_OV     = 1.0    # L_overlap_ordering (보조)
+DEFAULT_LAMBDA_SIGMA  = 5.0    # L_sigma_spatial (VCA alpha → entity mask alignment)
+DEFAULT_LAMBDA_EXCL   = 0.5    # L_entity_exclusive (slot adapter gradient source)
 DEFAULT_LAMBDA_DIFF_S1 = 0.0   # stage1: l_diff 꺼둠 (slot 자유 학습)
 DEFAULT_LAMBDA_DIFF_S2 = 0.3   # stage2: 점진 ramp-up 최대값
 DEFAULT_SLOT_BLEND    = 0.3    # initial slot blend
@@ -441,7 +444,8 @@ def train_phase39(args):
 
     print(f"\n[Phase 39] 훈련 시작: {args.epochs} epochs", flush=True)
     print(f"  λ_vis={args.lambda_vis}  λ_wrong={args.lambda_wrong}  "
-          f"λ_depth={args.lambda_depth}  λ_ov={args.lambda_ov}", flush=True)
+          f"λ_depth={args.lambda_depth}  λ_ov={args.lambda_ov}  "
+          f"λ_sigma={args.lambda_sigma}  λ_excl={args.lambda_excl}", flush=True)
     print(f"  λ_diff: stage1={args.lambda_diff_s1} → stage2={args.lambda_diff_s2} "
           f"(stage1 frac={args.stage1_frac})", flush=True)
     print(f"  lr_vca={args.lr_vca:.2e}  lr_slot={args.lr_slot:.2e}  "
@@ -463,6 +467,7 @@ def train_phase39(args):
         epoch_losses = {
             "total": [], "vis": [], "wrong": [],
             "depth": [], "ov": [], "diff": [],
+            "sigma": [], "excl": [],
         }
 
         # hard-overlap oversampling
@@ -553,6 +558,32 @@ def train_phase39(args):
                     l_ov = l_ov + l_overlap_ordering(w0_f, w1_f, m_f, do)
                 l_ov = l_ov / max(T_use, 1)
 
+            # ── L_sigma_spatial (VCA alpha → entity mask alignment) ────────
+            l_sigma = torch.tensor(0.0, device=device)
+            if proc.last_alpha0 is not None and proc.last_alpha1 is not None:
+                BF    = proc.last_alpha0.shape[0]
+                T_use = min(BF, T_frames)
+                for fi in range(T_use):
+                    a0_f = proc.last_alpha0[fi:fi+1].float()
+                    a1_f = proc.last_alpha1[fi:fi+1].float()
+                    m_f  = masks_t[fi:fi+1]
+                    l_sigma = l_sigma + l_sigma_spatial(a0_f, a1_f, m_f)
+                l_sigma = l_sigma / max(T_use, 1)
+
+            # ── L_entity_exclusive (slot adapter gradient source) ──────────
+            l_excl = torch.tensor(0.0, device=device)
+            if (proc.last_F0 is not None and proc.last_F1 is not None
+                    and proc.last_Fg is not None):
+                BF    = proc.last_F0.shape[0]
+                T_use = min(BF, T_frames)
+                for fi in range(T_use):
+                    F0_f = proc.last_F0[fi:fi+1].float()
+                    F1_f = proc.last_F1[fi:fi+1].float()
+                    Fg_f = proc.last_Fg[fi:fi+1].float()
+                    m_f  = masks_t[fi:fi+1]
+                    l_excl = l_excl + l_entity_exclusive(F0_f, F1_f, Fg_f, m_f)
+                l_excl = l_excl / max(T_use, 1)
+
             # ── L_diff (2-stage ramp-up) ──────────────────────────────────
             l_diff_val = loss_diff(noise_pred.float(), noise.float())
 
@@ -561,12 +592,15 @@ def train_phase39(args):
                   + args.lambda_wrong * l_wrong
                   + args.lambda_depth * l_depth
                   + args.lambda_ov    * l_ov
+                  + args.lambda_sigma * l_sigma
+                  + args.lambda_excl  * l_excl
                   + lambda_diff_cur   * l_diff_val)
 
             if not torch.isfinite(loss):
                 print(f"  [warn] non-finite loss ep={epoch} step={batch_idx} "
                       f"vis={l_vis.item():.4f} wrong={l_wrong.item():.4f} "
-                      f"depth={l_depth.item():.4f} → skip", flush=True)
+                      f"depth={l_depth.item():.4f} sigma={l_sigma.item():.4f} → skip",
+                      flush=True)
                 continue
 
             loss.backward()
@@ -590,6 +624,10 @@ def train_phase39(args):
             epoch_losses["depth"].append(float(l_depth.item()))
             epoch_losses["ov"].append(
                 float(l_ov.item()) if isinstance(l_ov, torch.Tensor) else 0.0)
+            epoch_losses["sigma"].append(
+                float(l_sigma.item()) if isinstance(l_sigma, torch.Tensor) else 0.0)
+            epoch_losses["excl"].append(
+                float(l_excl.item()) if isinstance(l_excl, torch.Tensor) else 0.0)
             epoch_losses["diff"].append(float(l_diff_val.item()))
 
         scheduler.step()
@@ -601,6 +639,7 @@ def train_phase39(args):
         print(f"[Phase 39] epoch {epoch:03d}/{args.epochs-1} [{stage_str}]  "
               f"loss={avg['total']:.4f}  vis={avg['vis']:.4f}  "
               f"wrong={avg['wrong']:.4f}  depth={avg['depth']:.4f}  "
+              f"sigma={avg['sigma']:.4f}  excl={avg['excl']:.4f}  "
               f"λ_diff={lambda_diff_cur:.3f}  blend={blend_val:.4f}", flush=True)
 
         # ── Validation (GT mask 기반, held-out overlap-heavy split) ──────
@@ -805,6 +844,8 @@ def _parse_args():
     p.add_argument("--lambda-wrong",      type=float, default=DEFAULT_LAMBDA_WRONG)
     p.add_argument("--lambda-depth",      type=float, default=DEFAULT_LAMBDA_DEPTH)
     p.add_argument("--lambda-ov",         type=float, default=DEFAULT_LAMBDA_OV)
+    p.add_argument("--lambda-sigma",      type=float, default=DEFAULT_LAMBDA_SIGMA)
+    p.add_argument("--lambda-excl",       type=float, default=DEFAULT_LAMBDA_EXCL)
     p.add_argument("--lambda-diff-s1",    type=float, default=DEFAULT_LAMBDA_DIFF_S1)
     p.add_argument("--lambda-diff-s2",    type=float, default=DEFAULT_LAMBDA_DIFF_S2)
     p.add_argument("--stage1-frac",       type=float, default=DEFAULT_STAGE1_FRAC)

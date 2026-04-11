@@ -196,25 +196,29 @@ class EntitySlotAttnProcessor(nn.Module):
         self.toks_e1: List[int] = []
 
         # 훈련 루프에서 loss 계산을 위해 보관
-        self.last_F0:    Optional[torch.Tensor] = None   # (B, S, inner_dim)
-        self.last_F1:    Optional[torch.Tensor] = None
-        self.last_Fg:    Optional[torch.Tensor] = None
-        self.last_w0:    Optional[torch.Tensor] = None   # (B, S)
-        self.last_w1:    Optional[torch.Tensor] = None
-        self.last_blend: Optional[torch.Tensor] = None   # (B, S) or scalar
-        self.last_sigma: Optional[torch.Tensor] = None
-        self.sigma_acc:  list = []
+        self.last_F0:     Optional[torch.Tensor] = None   # (B, S, inner_dim)
+        self.last_F1:     Optional[torch.Tensor] = None
+        self.last_Fg:     Optional[torch.Tensor] = None
+        self.last_w0:     Optional[torch.Tensor] = None   # (B, S)
+        self.last_w1:     Optional[torch.Tensor] = None
+        self.last_blend:  Optional[torch.Tensor] = None   # (B, S) or scalar
+        self.last_sigma:  Optional[torch.Tensor] = None
+        self.last_alpha0: Optional[torch.Tensor] = None   # (B, S) Porter-Duff alpha
+        self.last_alpha1: Optional[torch.Tensor] = None
+        self.sigma_acc:   list = []
 
     # ------------------------------------------------------------------
     def reset_slot_store(self):
-        self.last_F0    = None
-        self.last_F1    = None
-        self.last_Fg    = None
-        self.last_w0    = None
-        self.last_w1    = None
-        self.last_blend = None
-        self.last_sigma = None
-        self.sigma_acc  = []
+        self.last_F0     = None
+        self.last_F1     = None
+        self.last_Fg     = None
+        self.last_w0     = None
+        self.last_w1     = None
+        self.last_blend  = None
+        self.last_sigma  = None
+        self.last_alpha0 = None
+        self.last_alpha1 = None
+        self.sigma_acc   = []
 
     def set_entity_ctx(self, ctx: torch.Tensor):
         self.entity_ctx = ctx
@@ -328,6 +332,10 @@ class EntitySlotAttnProcessor(nn.Module):
                              if self.training else sigma)
                 if self.training and sigma_raw is not None:
                     self.sigma_acc.append(sigma_raw.float())
+                    # Use sigma_raw for Porter-Duff when training:
+                    # last_sigma is detached → alpha_0/1/w0/w1 have NO gradient
+                    # sigma_raw keeps grad → l_vis / l_sigma can train VCA
+                    sigma = sigma_raw
 
         # ── Porter-Duff compositing weights ─────────────────────────────
         if sigma is not None and sigma.shape[:2] == (B, S):
@@ -348,9 +356,10 @@ class EntitySlotAttnProcessor(nn.Module):
             composed = w0_f * F_0 + w1_f * F_1 + wbg_f * F_g
 
             # ── Phase 39: per-pixel blend map ───────────────────────────
+            # NOTE: no detach on inputs — blend_head needs gradient in stage2
             if self.use_blend_head:
                 blend_map = self.blend_head(
-                    alpha_0.detach(), alpha_1.detach(), e0_front.detach()
+                    alpha_0, alpha_1, e0_front
                 )   # (B, S, 1) float32
                 blend_map = blend_map.to(dtype=F_g.dtype)
             else:
@@ -367,16 +376,21 @@ class EntitySlotAttnProcessor(nn.Module):
         # ── Blend: blend_map*composed + (1-blend_map)*F_global ──────────
         blended = blend_map * composed + (1.0 - blend_map) * F_g
 
-        # ── Store for loss computation ───────────────────────────────────
+        # ── Store for loss/metric computation ────────────────────────────
+        # w0/w1/alpha0/alpha1은 training/eval 모두 저장 (validation teacher-forced eval에서 필요)
+        # F0/F1/Fg는 training에서만 저장 (메모리 절약)
+        self.last_w0 = w0
+        self.last_w1 = w1
+        if sigma is not None and sigma.shape[:2] == (B, S):
+            self.last_alpha0 = alpha_0
+            self.last_alpha1 = alpha_1
+        self.last_blend = (blend_map.squeeze(-1)
+                           if isinstance(blend_map, torch.Tensor) and blend_map.dim() == 3
+                           else blend_map)
         if self.training:
-            self.last_F0    = F_0
-            self.last_F1    = F_1
-            self.last_Fg    = F_g
-            self.last_w0    = w0
-            self.last_w1    = w1
-            self.last_blend = (blend_map.squeeze(-1)
-                               if isinstance(blend_map, torch.Tensor) and blend_map.dim() == 3
-                               else blend_map)
+            self.last_F0 = F_0
+            self.last_F1 = F_1
+            self.last_Fg = F_g
 
         # ── Output projection ────────────────────────────────────────────
         out = attn.to_out[0](blended)
@@ -597,6 +611,31 @@ def l_wrong_slot_suppression(
     l_wrong_e0 = (w1.float().pow(2) * excl_0).sum() / n0
     l_wrong_e1 = (w0.float().pow(2) * excl_1).sum() / n1
     return (l_wrong_e0 + l_wrong_e1) * 0.5
+
+
+def l_sigma_spatial(
+    alpha0:           torch.Tensor,          # (B, S) Porter-Duff alpha entity 0
+    alpha1:           torch.Tensor,          # (B, S) Porter-Duff alpha entity 1
+    entity_masks_BNS: torch.Tensor,          # (B, 2, S) float
+) -> torch.Tensor:
+    """
+    L_sigma_spatial: VCA sigma를 공간적으로 entity mask와 일치시킴.
+
+    핵심 동기
+    ----------
+    VCA는 Phase 31~38에서 depth ordering (front/back) 만 학습했음 → DRA=0.975 달성.
+    하지만 alpha_0/alpha_1 (sigma의 max over z_bins)는 공간적으로 uniform →
+    Porter-Duff w0/w1이 entity mask와 무관하게 됨 → visible_iou가 0.082에서 고착.
+
+    Fix: alpha_0 → entity_mask_0, alpha_1 → entity_mask_1 직접 MSE supervision.
+
+    주의: depth loss (l_depth)와 함께 쓰면 spatial + ordering 동시 학습.
+    """
+    m0 = entity_masks_BNS[:, 0, :].float().to(alpha0.device)
+    m1 = entity_masks_BNS[:, 1, :].float().to(alpha1.device)
+    l0 = F.mse_loss(alpha0.float(), m0)
+    l1 = F.mse_loss(alpha1.float(), m1)
+    return (l0 + l1) * 0.5
 
 
 # =============================================================================
