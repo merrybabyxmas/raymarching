@@ -151,14 +151,16 @@ class Phase40Processor(EntitySlotAttnProcessor):
         self.lora_out = SlotLoRA(d, d, rank=lora_rank)
 
         # extra store for solo distillation
-        self.last_F0_ref: Optional[torch.Tensor] = None   # (B, S, D)
-        self.last_F1_ref: Optional[torch.Tensor] = None
+        self.last_F0_ref:    Optional[torch.Tensor] = None   # (B, S, D)
+        self.last_F1_ref:    Optional[torch.Tensor] = None
+        self.last_blended:   Optional[torch.Tensor] = None   # (B, S, D) — full blended output
 
     # ------------------------------------------------------------------
     def reset_slot_store(self):
         super().reset_slot_store()
-        self.last_F0_ref = None
-        self.last_F1_ref = None
+        self.last_F0_ref  = None
+        self.last_F1_ref  = None
+        self.last_blended = None
 
     # ------------------------------------------------------------------
     def __call__(
@@ -280,10 +282,14 @@ class Phase40Processor(EntitySlotAttnProcessor):
         if sigma is not None and sigma.shape[:2] == (B, S):
             self.last_alpha0 = alpha_0
             self.last_alpha1 = alpha_1
-        if self.training:
-            self.last_F0 = F_0
-            self.last_F1 = F_1
-            self.last_Fg = F_g
+        # Always store F0/F1/Fg and blended — needed for solo ref extraction (eval mode)
+        # NOTE: last_blended is used (not last_F0/F1) because F_0/F_1 are identical
+        #       between composite and solo forwards (same masked-attn tokens, same K/V).
+        #       Only the VCA sigma (→ compositing weights) changes in solo forwards.
+        self.last_F0      = F_0
+        self.last_F1      = F_1
+        self.last_Fg      = F_g
+        self.last_blended = blended   # (B, S, D) full composition output
 
         # ── Output projection with LoRA ──────────────────────────────────
         out = (attn.to_out[0](blended)
@@ -304,6 +310,7 @@ def inject_multi_block_entity_slot(
     vca_layer,
     entity_ctx:       torch.Tensor,
     inject_keys:      Optional[List[str]] = None,
+    primary_idx:      int   = 1,
     slot_blend_init:  float = 0.3,
     adapter_rank:     int   = 64,
     lora_rank:        int   = 4,
@@ -311,6 +318,10 @@ def inject_multi_block_entity_slot(
 ) -> Tuple[List[Phase40Processor], Dict]:
     """
     3개 attention block에 Phase40Processor 주입.
+
+    VCA는 primary block(primary_idx)에만 주입.
+    나머지 block은 vca_layer=None — slot attention + LoRA만 사용.
+    각 block은 자신의 inner_dim에 맞는 독립 SlotLoRA를 가짐.
 
     Returns
     -------
@@ -325,17 +336,21 @@ def inject_multi_block_entity_slot(
     new_procs  = dict(unet.attn_processors)
     procs      = []
 
-    for key in inject_keys:
-        inner_dim = BLOCK_INNER_DIMS.get(key, 640)
+    for i, key in enumerate(inject_keys):
+        inner_dim  = BLOCK_INNER_DIMS.get(key, 640)
+        # VCA는 primary block만 사용 (query_dim이 일치하는 block)
+        block_vca  = vca_layer if i == primary_idx else None
+        block_ctx  = entity_ctx if i == primary_idx else None
         proc = Phase40Processor(
             query_dim           = inner_dim,
-            vca_layer           = vca_layer,
-            entity_ctx          = entity_ctx,
+            vca_layer           = block_vca,
+            entity_ctx          = block_ctx,
             slot_blend_init     = slot_blend_init,
             inner_dim           = inner_dim,
             adapter_rank        = adapter_rank,
-            use_blend_head      = use_blend_head,
+            use_blend_head      = (use_blend_head and i == primary_idx),
             lora_rank           = lora_rank,
+            cross_attention_dim = 768,
         )
         new_procs[key] = proc
         procs.append(proc)

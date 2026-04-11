@@ -148,62 +148,83 @@ MIN_VAL_SAMPLES  = 4
 @torch.no_grad()
 def extract_solo_ref_features(
     pipe,
-    manager:      MultiBlockSlotManager,
+    manager:       MultiBlockSlotManager,
     noisy_latents: torch.Tensor,        # (1, C, T, H, W)
-    t_tensor:     torch.Tensor,
-    entity_ctx:   torch.Tensor,         # (1, 2, 768)
-    toks_e0:      list,
-    toks_e1:      list,
-    device:       str,
+    t_tensor:      torch.Tensor,
+    entity_ctx:    torch.Tensor,        # (1, 2, 768)
+    toks_e0:       list,
+    toks_e1:       list,
+    device:        str,
+    enc_hs:        torch.Tensor = None, # (B, 77, 768) — real text encoder output
 ):
     """
-    Entity-prompted reference feature extraction.
+    Entity-prompted blended feature extraction for solo distillation.
 
-    entity0 ref: composite latent + entity0 text 임베딩만 → F_0 추출
-    entity1 ref: composite latent + entity1 text 임베딩만 → F_1 추출
+    blended0_ref: UNet forward with entity1 ctx zeroed → proc.last_blended as ref
+                  (entity1 VCA sigma ≈ 0 → entity0 dominates composition)
+    blended1_ref: UNet forward with entity0 ctx zeroed → proc.last_blended as ref
 
-    solo render가 없을 때의 근사.
-    gradient 없음 (frozen reference).
+    Why last_blended (not last_F0/F1):
+      F_0 raw slot features are IDENTICAL in composite vs solo forwards because
+      masked-attention uses the same K/V (enc_hs) and same entity0 token positions.
+      Only VCA sigma changes when entity_ctx is zeroed → last_blended captures this.
+
+    Returns (blended0_ref, blended1_ref) — both detached, no gradient.
+    gradient 없음 (frozen reference); gradient flows through comp_blended.
     """
     manager.eval()
 
-    F0_ref_list = []
-    F1_ref_list = []
+    # Return blended0_ref, blended1_ref:
+    #   blended0_ref = full composition output when entity1 ctx is zeroed
+    #                  (entity1's VCA sigma ≈ 0 → entity0 is more dominant)
+    #   blended1_ref = full composition output when entity0 ctx is zeroed
+    #
+    # Why last_blended (not last_F0/F1):
+    #   F_0 raw slot features are IDENTICAL between composite and solo forwards
+    #   (same masked-attn tokens, same K/V from text encoder).
+    #   Only VCA sigma changes → only the composition weights differ.
+    #   last_blended captures this: it includes the sigma-weighted mixing.
+    blended0_ref = None
+    blended1_ref = None
 
     for ent_idx in range(2):
         manager.reset_slot_store()
         manager.set_entity_tokens(toks_e0, toks_e1)
 
-        # zero out the other entity's embedding
+        # Zero out the OTHER entity's embedding so processor treats it as solo
         ctx_solo = entity_ctx.clone()
         ctx_solo[:, 1 - ent_idx, :] = 0.0
         manager.set_entity_ctx(ctx_solo.float())
 
-        # build text embedding: use entity-i prompt only
-        # enc_hs from ctx_solo (simplified: expand to match expected shape)
-        # In practice this is a rough approximation of entity-only forward
-        B = noisy_latents.shape[0]
-        enc_solo = ctx_solo.expand(B, -1, -1).to(device).half()
+        # Use real text encoder output for UNet (correct shape: B×77×768)
+        if enc_hs is not None:
+            unet_enc = enc_hs  # already half, already on device
+        else:
+            # fallback: pad entity_ctx to 77 tokens
+            B = noisy_latents.shape[0]
+            pad = torch.zeros(B, 77 - entity_ctx.shape[1], entity_ctx.shape[2],
+                              device=device, dtype=torch.float16)
+            unet_enc = torch.cat([
+                entity_ctx.expand(B, -1, -1).to(device).half(), pad], dim=1)
 
         try:
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
+            with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.float16):
                 _ = pipe.unet(
                     noisy_latents, t_tensor,
-                    encoder_hidden_states=enc_solo,
+                    encoder_hidden_states=unet_enc,
                 ).sample
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[warn] extract_solo_ref_features forward failed: {e}", flush=True)
+            continue
 
         proc = manager.primary
-        if ent_idx == 0:
-            F0_ref_list.append(proc.last_F0)
-        else:
-            F1_ref_list.append(proc.last_F1)
+        if ent_idx == 0 and proc.last_blended is not None:
+            blended0_ref = proc.last_blended.detach().clone()
+        elif ent_idx == 1 and proc.last_blended is not None:
+            blended1_ref = proc.last_blended.detach().clone()
 
     manager.train()
-    F0_ref = F0_ref_list[0] if F0_ref_list else None
-    F1_ref = F1_ref_list[0] if F1_ref_list else None
-    return F0_ref, F1_ref
+    return blended0_ref, blended1_ref
 
 
 # =============================================================================
@@ -720,12 +741,25 @@ def train_phase40(args):
             for blk_F0, blk_F1, blk_Fg in zip(
                     manager.all_F0(), manager.all_F1(), manager.all_Fg()):
                 if blk_F0 is not None and blk_F1 is not None and blk_Fg is not None:
+                    S_blk  = blk_F0.shape[1]
+                    S_mask = masks_t.shape[-1]
+                    if S_blk != S_mask:
+                        # resize mask to block's spatial resolution
+                        H_blk = int(S_blk ** 0.5)
+                        H_msk = int(S_mask ** 0.5)
+                        # masks_t: (T, 2, S) → (T, 2, H, W) → interpolate → (T, 2, S_blk)
+                        m_4d = masks_t.view(masks_t.shape[0], 2, H_msk, H_msk)
+                        m_4d = torch.nn.functional.interpolate(
+                            m_4d.float(), size=(H_blk, H_blk), mode='nearest')
+                        masks_blk = m_4d.view(masks_t.shape[0], 2, S_blk)
+                    else:
+                        masks_blk = masks_t
                     for fi in range(min(blk_F0.shape[0], T_frames)):
                         l_excl = l_excl + l_entity_exclusive(
                             blk_F0[fi:fi+1].float(),
                             blk_F1[fi:fi+1].float(),
                             blk_Fg[fi:fi+1].float(),
-                            masks_t[fi:fi+1])
+                            masks_blk[fi:fi+1])
             if T_use > 0 and len(manager.procs) > 0:
                 l_excl = l_excl / max(T_use * len(manager.procs), 1)
 
@@ -735,54 +769,71 @@ def train_phase40(args):
             l_bg   = torch.tensor(0.0, device=device)
 
             if use_solo and T_use > 0:
-                # Get solo reference features
-                # Method: entity-prompted forward (composite latent + entity-only text)
-                F0_ref, F1_ref = extract_solo_ref_features(
+                # Save composite blended BEFORE ref extraction overwrites last_blended
+                # NOTE: comp_blended (not comp_F0/F1) — raw slot features F_0/F_1 are
+                #       identical in composite vs solo forwards (same masked-attn K/V).
+                #       last_blended captures VCA sigma differences (w1_solo≈0).
+                comp_blended = proc_pri.last_blended  # (BF, S, D)
+                comp_Fg      = proc_pri.last_Fg       # for l_bg_feat
+
+                # Get solo reference blended outputs
+                # blended0_ref: blended when entity1 ctx is zeroed (entity0 dominant)
+                # blended1_ref: blended when entity0 ctx is zeroed (entity1 dominant)
+                blended0_ref, blended1_ref = extract_solo_ref_features(
                     pipe, manager, noisy, t,
                     entity_ctx, toks_e0, toks_e1, device,
+                    enc_hs=enc_hs,
                 )
 
                 # Restore training state after ref extraction
                 manager.train()
                 manager.set_entity_ctx(entity_ctx.float())
                 manager.set_entity_tokens(toks_e0, toks_e1)
-                # Note: proc F0/F1 from primary forward are in manager.primary.last_F0/F1
 
-                if (F0_ref is not None and F1_ref is not None
-                        and proc_pri.last_F0 is not None and proc_pri.last_F1 is not None):
+                if (blended0_ref is not None and blended1_ref is not None
+                        and comp_blended is not None):
 
-                    for fi in range(min(proc_pri.last_F0.shape[0], T_use)):
-                        F0_comp_f  = proc_pri.last_F0[fi:fi+1].float()
-                        F1_comp_f  = proc_pri.last_F1[fi:fi+1].float()
-                        Fg_comp_f  = proc_pri.last_Fg[fi:fi+1].float() if proc_pri.last_Fg is not None else None
-                        F0_ref_f   = F0_ref[fi:fi+1].float() if F0_ref is not None else None
-                        F1_ref_f   = F1_ref[fi:fi+1].float() if F1_ref is not None else None
-                        vis_m_f    = vis_masks_t[fi:fi+1]
-                        m_f        = masks_t[fi:fi+1]
+                    for fi in range(min(comp_blended.shape[0], T_use)):
+                        comp_b_f    = comp_blended[fi:fi+1].float()
+                        ref0_f      = blended0_ref[fi:fi+1].float()
+                        ref1_f      = blended1_ref[fi:fi+1].float()
+                        Fg_comp_f   = comp_Fg[fi:fi+1].float() if comp_Fg is not None else None
+                        vis_m_f     = vis_masks_t[fi:fi+1]
+                        m_f         = masks_t[fi:fi+1]
 
-                        # L_solo_feat_visible
-                        if F0_ref_f is not None:
-                            l_solo = l_solo + l_solo_feat_visible(
-                                F0_comp_f, F0_ref_f, vis_m_f[:, 0, :])
-                        if F1_ref_f is not None:
-                            l_solo = l_solo + l_solo_feat_visible(
-                                F1_comp_f, F1_ref_f, vis_m_f[:, 1, :])
+                        # L_solo_feat_visible:
+                        # In entity0-visible regions: composite blended ≈ entity0-solo blended
+                        l_solo = l_solo + l_solo_feat_visible(
+                            comp_b_f, ref0_f, vis_m_f[:, 0, :])
+                        # In entity1-visible regions: composite blended ≈ entity1-solo blended
+                        l_solo = l_solo + l_solo_feat_visible(
+                            comp_b_f, ref1_f, vis_m_f[:, 1, :])
 
-                        # L_id_contrast
-                        if F0_ref_f is not None and F1_ref_f is not None:
-                            l_id = l_id + l_id_contrast(
-                                F0_comp_f, F1_comp_f, F0_ref_f, F1_ref_f,
-                                m_f[:, 0, :].float(), m_f[:, 1, :].float())
+                        # L_id_contrast: use blended refs as identity anchors
+                        l_id = l_id + l_id_contrast(
+                            comp_b_f, comp_b_f,
+                            ref0_f, ref1_f,
+                            vis_m_f[:, 0, :].float(), vis_m_f[:, 1, :].float())
 
-                        # L_bg_feat
-                        if Fg_comp_f is not None and F0_ref_f is not None:
+                        # L_bg_feat: background should not look like entity solo blended
+                        if Fg_comp_f is not None:
                             bg_mask = (1.0 - (m_f[:, 0, :] + m_f[:, 1, :]).clamp(max=1.0))
-                            l_bg = l_bg + l_bg_feat(Fg_comp_f, F0_ref_f, bg_mask.float())
+                            l_bg = l_bg + l_bg_feat(Fg_comp_f, ref0_f, bg_mask.float())
 
-                    n_div = max(min(proc_pri.last_F0.shape[0], T_use), 1)
+                    n_div = max(min(comp_blended.shape[0], T_use), 1)
                     l_solo = l_solo / n_div
                     l_id   = l_id   / n_div
                     l_bg   = l_bg   / n_div
+
+                    # debug: first step of S2 entry
+                    if batch_idx == 0 and epoch == args.s1_epochs:
+                        print(f"  [debug solo] l_solo={float(l_solo.item()):.6f} "
+                              f"l_id={float(l_id.item()):.6f} "
+                              f"vis_sum={float(vis_masks_t.sum().item()):.1f} "
+                              f"comp_b_shape={comp_blended.shape} "
+                              f"ref0_isNone={blended0_ref is None} "
+                              f"ref1_isNone={blended1_ref is None}",
+                              flush=True)
 
             # ── L_diff ────────────────────────────────────────────────────
             l_diff_val = loss_diff(noise_pred.float(), noise.float())
