@@ -1,0 +1,22 @@
+{
+  "keyword0": "cat",
+  "keyword1": "snake",
+  "mesh0_path": "toy/assets/animals/cat/57abc07bb5f4455aba4b0c14fda4a273.glb",
+  "mesh1_path": "toy/assets/animals/snake/794b77a3e4654a669cf259d20dc89ec7.glb",
+  "prompt_full": "a cat and a snake tangled together",
+  "prompt_entity0": "a cat",
+  "prompt_entity1": "a snake",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "rotate",
+  "camera": "front",
+  "n_frames": 16
+}

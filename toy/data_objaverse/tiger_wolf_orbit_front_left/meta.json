@@ -1,0 +1,22 @@
+{
+  "keyword0": "tiger",
+  "keyword1": "wolf",
+  "mesh0_path": "toy/assets/animals/tiger/b380864d0f9a4f83bb2c7f2a7ab06f4a.glb",
+  "mesh1_path": "toy/assets/animals/wolf/5af702fd6cbf4115a3580d29b8bd128b.glb",
+  "prompt_full": "a tiger and a wolf tangled together",
+  "prompt_entity0": "a tiger",
+  "prompt_entity1": "a wolf",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "orbit",
+  "camera": "front_left",
+  "n_frames": 16
+}

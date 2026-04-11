@@ -1,0 +1,22 @@
+{
+  "keyword0": "lion",
+  "keyword1": "bear",
+  "mesh0_path": "toy/assets/animals/lion/ac43c76f818d461da0282822b1b49cb1.glb",
+  "mesh1_path": "toy/assets/animals/bear/210680414c9a45cca5ad95be80db07f1.glb",
+  "prompt_full": "a lion and a bear tangled together",
+  "prompt_entity0": "a lion",
+  "prompt_entity1": "a bear",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "squeeze",
+  "camera": "top",
+  "n_frames": 16
+}

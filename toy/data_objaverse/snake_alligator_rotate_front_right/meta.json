@@ -1,0 +1,22 @@
+{
+  "keyword0": "snake",
+  "keyword1": "alligator",
+  "mesh0_path": "toy/assets/animals/snake/eee419e0ab7d4499a33628f006db0934.glb",
+  "mesh1_path": "toy/assets/objects/alligator/605a2c7ebd1b4cd1b47bac9fbdb4c98a.glb",
+  "prompt_full": "a snake and a alligator tangled together",
+  "prompt_entity0": "a snake",
+  "prompt_entity1": "a alligator",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "rotate",
+  "camera": "front_right",
+  "n_frames": 16
+}

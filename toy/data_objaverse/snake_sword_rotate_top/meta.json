@@ -1,0 +1,22 @@
+{
+  "keyword0": "snake",
+  "keyword1": "sword",
+  "mesh0_path": "toy/assets/animals/snake/f0e3c872f1984cf7a467645d9e0d3abd.glb",
+  "mesh1_path": "toy/assets/objects/sword/038d27be06594c33ae187cf623be53ff.glb",
+  "prompt_full": "a snake and a sword tangled together",
+  "prompt_entity0": "a snake",
+  "prompt_entity1": "a sword",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "rotate",
+  "camera": "top",
+  "n_frames": 16
+}

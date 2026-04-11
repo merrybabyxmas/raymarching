@@ -1,0 +1,22 @@
+{
+  "keyword0": "cat",
+  "keyword1": "sword",
+  "mesh0_path": "toy/assets/animals/cat/05c4159854f14bf88fac70a50b8cbd98.glb",
+  "mesh1_path": "toy/assets/objects/sword/0417921898de4e74af175c65685b98fb.glb",
+  "prompt_full": "a cat and a sword tangled together",
+  "prompt_entity0": "a cat",
+  "prompt_entity1": "a sword",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "orbit",
+  "camera": "front_left",
+  "n_frames": 16
+}

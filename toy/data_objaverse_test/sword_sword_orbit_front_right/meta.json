@@ -1,0 +1,22 @@
+{
+  "keyword0": "sword",
+  "keyword1": "sword",
+  "mesh0_path": "toy/assets/objects/sword/b02f0340d5e54512a41ea4e93240ada6.glb",
+  "mesh1_path": "toy/assets/objects/sword/b02f0340d5e54512a41ea4e93240ada6.glb",
+  "prompt_full": "a red sword and a blue sword tangled together",
+  "prompt_entity0": "a red sword",
+  "prompt_entity1": "a blue sword",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "orbit",
+  "camera": "front_right",
+  "n_frames": 8
+}

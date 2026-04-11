@@ -2595,6 +2595,15 @@ def train(args):
                 t_val=100,
             )
 
+            # ⑥ 실제 생성 비교: Baseline / VCA(normal ctx) / VCA(swapped ctx)
+            #    normal vs swapped이 다르면 VCA가 실제로 depth ordering 제어 중
+            debug_generation(
+                pipe, vca_layer, orig_procs, train_procs,
+                probe_frames, probe_meta, probe_entity_ctx,
+                debug_dir, epoch,
+                height=args.height, width=args.width,
+            )
+
     # ─── 최종 평가 ────────────────────────────────────────────────────────────
     final_dra, fc, ft = measure_depth_rank_accuracy(
         pipe, vca_layer, dataset, device,
