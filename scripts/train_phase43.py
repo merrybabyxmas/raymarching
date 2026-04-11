@@ -267,10 +267,19 @@ def evaluate_rollout(
 
             x = noisy.clone()
             scheduler_state = copy.deepcopy(pipe.scheduler)
-            ts = scheduler_state.timesteps
 
-            for step_t in (ts[:n_steps] if ts is not None and len(ts) >= n_steps
-                           else [t_tensor[0]]):
+            # ── 버그 수정: set_timesteps 없이 timesteps를 쓰면 None이거나
+            #   이전 pipe() 호출 잔류 상태에 의존함. 명시적으로 설정.
+            # 50 step 전체 schedule에서 t_start에 가장 가까운 index부터 n_steps 실행.
+            _n_sched = 50
+            scheduler_state.set_timesteps(_n_sched, device=device)
+            ts_full = scheduler_state.timesteps  # 내림차순, e.g. [999, 979, ..., 19]
+
+            # t_start에 가장 가까운 index
+            start_idx = int((ts_full - t_start).abs().argmin().item())
+            rollout_ts = ts_full[start_idx: start_idx + n_steps]
+
+            for step_t in rollout_ts:
                 manager.reset_slot_store()
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     noise_pred = pipe.unet(
@@ -372,13 +381,16 @@ def evaluate_val_set_phase43(
                 wrong_leaks.append(compute_wrong_slot_leak(w0_f, w1_f, m_f))
 
                 # blend_map diagnostics (primary block)
-                if hasattr(manager.primary, 'last_blend_map') and \
-                        manager.primary.last_blend_map is not None:
-                    bm = manager.primary.last_blend_map
-                    if fi < bm.shape[0]:
-                        bm_f   = bm[fi:fi+1].float()
-                        b_stat = collect_blend_stats(bm_f, m_f)
-                        blend_stats_list.append(b_stat)
+                # last_blend: (T_frames, S) when blend_head is spatial,
+                #             scalar tensor when slot_blend scalar (secondary / no-sigma)
+                bm_raw = getattr(manager.primary, 'last_blend', None)
+                if (bm_raw is not None and
+                        isinstance(bm_raw, torch.Tensor) and
+                        bm_raw.dim() >= 2 and
+                        fi < bm_raw.shape[0]):
+                    bm_f   = bm_raw[fi:fi+1].float()
+                    b_stat = collect_blend_stats(bm_f, m_f)
+                    blend_stats_list.append(b_stat)
 
         except Exception as e:
             print(f"  [val warn] {vi}: {e}", flush=True)
@@ -688,14 +700,16 @@ def train_phase43(args):
                 l_w_res = l_w_residual(manager.last_w_delta)
 
             # L_blend_overlap (blend map diagnostics — primary block)
+            # last_blend: scalar when slot_blend scalar, (T_frames, S) when blend_head spatial
             l_blend_ov = torch.tensor(0.0, device=device)
             primary = manager.primary
-            if (hasattr(primary, 'last_blend_map') and
-                    primary.last_blend_map is not None and
+            bm_raw = getattr(primary, 'last_blend', None)
+            if (bm_raw is not None and
+                    isinstance(bm_raw, torch.Tensor) and
+                    bm_raw.dim() >= 2 and
                     T_use > 0):
-                bm = primary.last_blend_map  # (T_frames, S)
-                for fi in range(min(bm.shape[0], T_use)):
-                    bm_f = bm[fi:fi+1].float()
+                for fi in range(min(bm_raw.shape[0], T_use)):
+                    bm_f = bm_raw[fi:fi+1].float()
                     m_f  = masks_t[fi:fi+1]
                     l_blend_ov = l_blend_ov + l_blend_overlap(
                         bm_f, m_f, margin=0.05)
