@@ -76,9 +76,12 @@ def refine_mask(
 ) -> np.ndarray:
     """Refine a binary mask: dilate for inpainting boundary, remove small blobs.
 
+    Dilation is ADAPTIVE: large masks (>30% of image) get reduced dilation
+    to prevent the mask from covering too much of the scene.
+
     Args:
         mask: Binary mask (H, W) uint8, values 0 or 255.
-        dilate_px: Dilation kernel radius in pixels.
+        dilate_px: Base dilation kernel radius in pixels.
         min_area: Minimum connected component area to keep.
 
     Returns:
@@ -95,9 +98,17 @@ def refine_mask(
             if stats[i, cv2.CC_STAT_AREA] < min_area:
                 refined[labels == i] = 0
 
-    # Dilate for better inpainting boundary coverage
-    if dilate_px > 0:
-        kernel_size = dilate_px * 2 + 1
+    # Adaptive dilation: reduce for large masks to prevent over-expansion
+    area_ratio = float((refined > 128).sum()) / max(refined.size, 1)
+    if area_ratio > 0.30:
+        effective_dilate = max(3, dilate_px // 4)
+    elif area_ratio > 0.15:
+        effective_dilate = max(5, dilate_px // 2)
+    else:
+        effective_dilate = dilate_px
+
+    if effective_dilate > 0:
+        kernel_size = effective_dilate * 2 + 1
         kernel = np.ones((kernel_size, kernel_size), np.uint8)
         refined = cv2.dilate(refined, kernel, iterations=1)
 

@@ -44,13 +44,17 @@ def build_prompt(
     Returns:
         (prompt, negative_prompt) tuple.
     """
-    prompt = f"a realistic {animal_name}, detailed fur texture, photorealistic"
+    prompt = (
+        f"a realistic {animal_name}, detailed fur texture, photorealistic, "
+        f"same pose, same lighting, same scene, partially occluded"
+    )
     if scene_hint:
         prompt += f", {scene_hint}"
 
     negative = (
         "blurry, deformed, extra limbs, chimera, fused, cartoon, "
-        "anime, drawing, low quality, watermark"
+        "anime, drawing, low quality, watermark, different pose, "
+        "different angle, different scene"
     )
     return prompt, negative
 
@@ -60,24 +64,35 @@ def build_prompt(
 def compute_strength(
     mask_area_ratio: float,
     overlap_ratio: float,
+    is_front_pass: bool = False,
 ) -> float:
     """Compute adaptive inpainting strength based on mask and overlap ratios.
 
-    Larger masks or higher overlap need stronger inpainting to fully
-    replace the identity. Returns a value in [0.85, 0.99].
+    CRITICAL: Large masks need LOWER strength to preserve scene geometry.
+    Front pass is more conservative than back pass.
 
-    Args:
-        mask_area_ratio: Fraction of image covered by the inpaint mask.
-        overlap_ratio: Fraction of the mask that is overlap region.
-
-    Returns:
-        Inpainting strength float in [0.85, 0.99].
+    Rules:
+      mask < 15% → strength 0.90-0.99 (small region, can repaint aggressively)
+      mask 15-30% → strength 0.80-0.90 (moderate, preserve some structure)
+      mask > 30% → strength 0.65-0.80 (large, must preserve pose/scene)
+      front pass gets -0.05 additional reduction (more conservative)
     """
-    # Base strength scales with mask area
-    base = 0.85 + 0.10 * min(mask_area_ratio * 4, 1.0)
-    # Boost for overlap — these regions need heavier repainting
-    overlap_boost = 0.04 * min(overlap_ratio * 2, 1.0)
-    strength = min(base + overlap_boost, 0.99)
+    if mask_area_ratio < 0.15:
+        base = 0.90 + 0.09 * min(mask_area_ratio / 0.15, 1.0)
+    elif mask_area_ratio < 0.30:
+        t = (mask_area_ratio - 0.15) / 0.15
+        base = 0.90 - 0.10 * t  # 0.90 → 0.80
+    else:
+        t = min((mask_area_ratio - 0.30) / 0.20, 1.0)
+        base = 0.80 - 0.15 * t  # 0.80 → 0.65
+
+    # Small overlap boost (but capped)
+    overlap_boost = 0.03 * min(overlap_ratio * 2, 1.0)
+
+    # Front pass is more conservative (preserves what back pass already painted)
+    front_penalty = 0.05 if is_front_pass else 0.0
+
+    strength = max(0.60, min(base + overlap_boost - front_penalty, 0.99))
     return round(strength, 3)
 
 

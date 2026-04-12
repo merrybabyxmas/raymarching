@@ -128,9 +128,22 @@ def track_instance(
     if method in ("sam2", "auto"):
         result = track_with_sam2(frames, keyframe_mask, keyframe_idx, device)
         if result is not None:
-            # Apply dilation to tracked masks
-            kernel = np.ones((dilate_px * 2 + 1, dilate_px * 2 + 1), np.uint8)
-            result = [cv2.dilate(m, kernel, iterations=1) for m in result]
+            # Apply adaptive dilation: reduce for large masks
+            dilated = []
+            for m in result:
+                area_ratio = float((m > 128).sum()) / max(m.size, 1)
+                if area_ratio > 0.30:
+                    eff = max(3, dilate_px // 4)
+                elif area_ratio > 0.15:
+                    eff = max(5, dilate_px // 2)
+                else:
+                    eff = dilate_px
+                if eff > 0:
+                    k = np.ones((eff*2+1, eff*2+1), np.uint8)
+                    dilated.append(cv2.dilate(m, k, iterations=1))
+                else:
+                    dilated.append(m)
+            result = dilated
             print(f"  [track] SAM2 tracking OK: {len(result)} frames", flush=True)
             return result
         if method == "sam2":

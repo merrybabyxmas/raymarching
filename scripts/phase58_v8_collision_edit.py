@@ -329,13 +329,19 @@ def main():
         if args.s2_strength > 0:
             bs = fs = args.s2_strength
         else:
-            bs = compute_strength(fi_back_ratio, fi_ov_ratio)
-            fs = compute_strength(fi_front_ratio, fi_ov_ratio)
+            bs = compute_strength(fi_back_ratio, fi_ov_ratio, is_front_pass=False)
+            fs = compute_strength(fi_front_ratio, fi_ov_ratio, is_front_pass=True)
+
+        # Build per-frame inpaint plan to get the correct front repair mask
+        fi_plan = build_inpaint_plan(fi_regions, front_prompt, back_prompt, mode="collision")
+        # Extract masks from plan (pass 0 = back, pass 1 = front)
+        fi_back_mask = fi_plan[0][0] if len(fi_plan) > 0 else fi_regions["back_visible"]
+        fi_front_mask = fi_plan[1][0] if len(fi_plan) > 1 else fi_regions["front_exclusive"]
 
         result = run_two_pass(
             pipe2, frame,
-            back_region=fi_regions["back_visible"],
-            front_region=fi_regions["front_visible"],
+            back_region=fi_back_mask,
+            front_region=fi_front_mask,
             back_prompt=back_prompt,
             front_prompt=front_prompt,
             back_negative=back_neg,
