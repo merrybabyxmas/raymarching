@@ -128,6 +128,54 @@ def l_occ_contrastive(
 
 
 # =============================================================================
+# New loss: l_exclusive_suppress  (Phase 48 fix)
+# =============================================================================
+
+def l_exclusive_suppress(
+    o0_for_loss: torch.Tensor,   # (B, S) — no detach
+    o1_for_loss: torch.Tensor,   # (B, S)
+    masks_BNS:   torch.Tensor,   # (B, 2, S) GT mask
+    eps:         float = 1e-6,
+) -> torch.Tensor:
+    """
+    Direct L1 suppression of the *wrong* entity in exclusive regions.
+
+    Phase 47 failure root cause:
+      l_occupancy uses neg_weight=0.25 → the "push wrong entity toward 0" gradient
+      is only 0.25·la_occ per pixel in exclusive regions.  Dice has ZERO gradient
+      for o1 when GT_e1=0.  So the upward force (overlap BCE + Dice) wins.
+
+    Fix:
+      In e0-exclusive: minimize mean(o1)  → gradient = +1/n_e0 (always, unconditional)
+      In e1-exclusive: minimize mean(o0)  → gradient = +1/n_e1 (always, unconditional)
+
+    Unlike l_occ_contrastive (margin hinge, relative), this is absolute and never
+    "satisfied early" — the gradient keeps pushing until o_wrong → 0.
+
+    With la_ex_suppress=10.0 this contributes a downward gradient of 10/n_e0 on
+    the wrong entity, vs the upward 0.25·2/o1/n_neg from neg_weight=0.25 BCE.
+    Ratio: ~20× stronger → decisively breaks the all-high equilibrium.
+    """
+    m0 = masks_BNS[:, 0, :].float().to(o0_for_loss.device)
+    m1 = masks_BNS[:, 1, :].float().to(o0_for_loss.device)
+
+    e0_excl = m0 * (1.0 - m1)   # e0-exclusive: o1 should be 0
+    e1_excl = m1 * (1.0 - m0)   # e1-exclusive: o0 should be 0
+
+    n_e0 = e0_excl.sum() + eps
+    n_e1 = e1_excl.sum() + eps
+
+    o0 = o0_for_loss.float()
+    o1 = o1_for_loss.float()
+
+    # Minimize wrong-entity mean activation in exclusive region
+    l_e0 = (e0_excl * o1).sum() / n_e0    # push o1 → 0 in e0-exclusive
+    l_e1 = (e1_excl * o0).sum() / n_e1    # push o0 → 0 in e1-exclusive
+
+    return (l_e0 + l_e1) * 0.5
+
+
+# =============================================================================
 # New loss: l_blend_ordering
 # =============================================================================
 

@@ -75,6 +75,7 @@ from models.entity_slot_phase46 import (
     inject_multi_block_entity_slot_p46,
     restore_multiblock_state_p46,
     l_occ_contrastive,
+    l_exclusive_suppress,
     l_blend_ordering,
     val_score_phase46,
 )
@@ -119,6 +120,7 @@ DEFAULT_STEPS_PER_EPOCH  = 20
 DEFAULT_LA_OCC            = 2.0
 DEFAULT_LA_OCC_STRUCT     = 1.5
 DEFAULT_LA_OCC_CONTRAST   = 3.0   # NEW: directional exclusive suppression
+DEFAULT_LA_EX_SUPPRESS    = 10.0  # NEW Phase48: direct wrong-entity suppression
 DEFAULT_LA_BLEND_TARGET   = 2.0
 DEFAULT_LA_BLEND_RANK     = 1.5
 DEFAULT_LA_BLEND_ORDER    = 2.0   # NEW: direct ordering constraint
@@ -134,6 +136,7 @@ DEFAULT_LA_W_RES          = 0.01
 DEFAULT_LB_OCC            = 1.0
 DEFAULT_LB_OCC_STRUCT     = 0.8
 DEFAULT_LB_OCC_CONTRAST   = 1.5   # NEW
+DEFAULT_LB_EX_SUPPRESS    = 5.0   # NEW Phase48: direct wrong-entity suppression (Stage B)
 DEFAULT_LB_BLEND_ORDER    = 1.0   # NEW
 DEFAULT_LB_VIS            = 2.0
 DEFAULT_LB_VIS_IOU        = 0.0
@@ -1091,6 +1094,7 @@ def train_phase46(args):
             l_occ = torch.tensor(0.0, device=device)
             l_occ_struct = torch.tensor(0.0, device=device)
             l_occ_cont   = torch.tensor(0.0, device=device)
+            l_ex_sup     = torch.tensor(0.0, device=device)
             primary = manager.primary
             o0_fl = getattr(primary, 'last_o0_for_loss', None)
             o1_fl = getattr(primary, 'last_o1_for_loss', None)
@@ -1121,11 +1125,15 @@ def train_phase46(args):
                     l_occ_cont = l_occ_cont + l_occ_contrastive(
                         o0_fi, o1_fi, m_occ_fi,
                         margin=args.occ_contrastive_margin) * fw
+                    # NEW Phase 48: direct absolute suppression of wrong entity
+                    l_ex_sup = l_ex_sup + l_exclusive_suppress(
+                        o0_fi, o1_fi, m_occ_fi) * fw
                     occ_w_sum = occ_w_sum + fw
                 occ_w_sum = occ_w_sum.clamp(min=1e-6)
                 l_occ       = l_occ       / occ_w_sum
                 l_occ_struct = l_occ_struct / occ_w_sum
                 l_occ_cont   = l_occ_cont   / occ_w_sum
+                l_ex_sup     = l_ex_sup     / occ_w_sum
 
             # ── L_blend_ordering (primary block, NEW Phase 46) ────────────
             l_blend_ord = torch.tensor(0.0, device=device)
@@ -1278,10 +1286,11 @@ def train_phase46(args):
             if is_stage_a:
                 loss = (args.la_occ          * l_occ
                       + args.la_occ_struct   * l_occ_struct
-                      + args.la_occ_contrast * l_occ_cont      # NEW Phase 46
+                      + args.la_occ_contrast * l_occ_cont      # Phase 46
+                      + args.la_ex_suppress  * l_ex_sup        # Phase 48
                       + args.la_blend_target * l_bt
                       + args.la_blend_rank   * l_br
-                      + args.la_blend_order  * l_blend_ord      # NEW Phase 46
+                      + args.la_blend_order  * l_blend_ord      # Phase 46
                       + args.la_vis          * l_vis
                       + args.la_vis_iou      * l_vis_iou
                       + args.la_wrong        * l_wrong
@@ -1291,7 +1300,7 @@ def train_phase46(args):
                       + args.la_w_res        * l_w_res)
 
                 for k, v in [("total", loss), ("occ", l_occ), ("occ_struct", l_occ_struct),
-                              ("occ_cont", l_occ_cont),
+                              ("occ_cont", l_occ_cont), ("ex_sup", l_ex_sup),
                               ("blend_target", l_bt), ("blend_rank", l_br),
                               ("blend_order", l_blend_ord),
                               ("vis", l_vis), ("vis_iou", l_vis_iou),
@@ -1333,7 +1342,8 @@ def train_phase46(args):
 
                 loss = (args.lb_occ          * l_occ
                       + args.lb_occ_struct   * l_occ_struct
-                      + args.lb_occ_contrast * l_occ_cont       # NEW Phase 46
+                      + args.lb_occ_contrast * l_occ_cont       # Phase 46
+                      + args.lb_ex_suppress  * l_ex_sup         # Phase 48
                       + args.lb_vis          * l_vis
                       + args.lb_vis_iou      * l_vis_iou
                       + args.lb_wrong        * l_wrong
@@ -1349,7 +1359,7 @@ def train_phase46(args):
                       + args.lb_w_res        * l_w_res)
 
                 for k, v in [("total", loss), ("occ", l_occ), ("occ_struct", l_occ_struct),
-                              ("occ_cont", l_occ_cont),
+                              ("occ_cont", l_occ_cont), ("ex_sup", l_ex_sup),
                               ("vis", l_vis), ("vis_iou", l_vis_iou),
                               ("wrong", l_wrong), ("sigma", l_sigma), ("depth", l_depth),
                               ("ov", l_ov), ("excl", l_excl), ("slot_ref", l_slot_ref_all),
@@ -1610,6 +1620,7 @@ def main():
     p.add_argument("--la-occ",          type=float, default=DEFAULT_LA_OCC)
     p.add_argument("--la-occ-struct",   type=float, default=DEFAULT_LA_OCC_STRUCT)
     p.add_argument("--la-occ-contrast", type=float, default=DEFAULT_LA_OCC_CONTRAST)
+    p.add_argument("--la-ex-suppress",  type=float, default=DEFAULT_LA_EX_SUPPRESS)
     p.add_argument("--la-blend-target", type=float, default=DEFAULT_LA_BLEND_TARGET)
     p.add_argument("--la-blend-rank",   type=float, default=DEFAULT_LA_BLEND_RANK)
     p.add_argument("--la-blend-order",  type=float, default=DEFAULT_LA_BLEND_ORDER)
@@ -1625,6 +1636,7 @@ def main():
     p.add_argument("--lb-occ",          type=float, default=DEFAULT_LB_OCC)
     p.add_argument("--lb-occ-struct",   type=float, default=DEFAULT_LB_OCC_STRUCT)
     p.add_argument("--lb-occ-contrast", type=float, default=DEFAULT_LB_OCC_CONTRAST)
+    p.add_argument("--lb-ex-suppress",  type=float, default=DEFAULT_LB_EX_SUPPRESS)
     p.add_argument("--lb-blend-order",  type=float, default=DEFAULT_LB_BLEND_ORDER)
     p.add_argument("--lb-vis",          type=float, default=DEFAULT_LB_VIS)
     p.add_argument("--lb-vis-iou",      type=float, default=DEFAULT_LB_VIS_IOU)
