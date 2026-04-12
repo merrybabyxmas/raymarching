@@ -176,6 +176,51 @@ def l_exclusive_suppress(
 
 
 # =============================================================================
+# New loss: l_overlap_activate  (Phase 49 fix)
+# =============================================================================
+
+def l_overlap_activate(
+    o0_for_loss: torch.Tensor,   # (B, S) — no detach
+    o1_for_loss: torch.Tensor,   # (B, S)
+    masks_BNS:   torch.Tensor,   # (B, 2, S) GT mask
+    eps:         float = 1e-6,
+) -> torch.Tensor:
+    """
+    Focused BCE-positive in overlap region only.
+
+    Phase 48 failure analysis:
+      l_exclusive_suppress (la=10) flows gradients through shared occ_head weights,
+      globally suppressing activations including in OVERLAP regions.
+      Result: wrong entity in exclusive = 0.415 (progress!), but
+              correct entity in overlap = 0.40 (too low → prod_ov < prod_ex still).
+
+    Fix: dedicated positive BCE on overlap pixels, normalised by n_overlap only.
+    This gives per-pixel gradient ≈ la * 0.5 / n_ov per overlap pixel,
+    matching or exceeding the suppress gradient (la * 0.5 / n_ex per exclusive pixel).
+
+    Expected effect:
+      - Both o0, o1 pushed toward 1 in overlap → prod_ov rises
+      - Combined with suppress: prod_ex falls
+      - Net: prod_sep = prod_ov − prod_ex → positive
+    """
+    m0 = masks_BNS[:, 0, :].float().to(o0_for_loss.device)
+    m1 = masks_BNS[:, 1, :].float().to(o0_for_loss.device)
+
+    ov = m0 * m1   # overlap region: both entities present
+
+    n_ov = ov.sum() + eps
+
+    o0 = o0_for_loss.float().clamp(eps, 1.0 - eps)
+    o1 = o1_for_loss.float().clamp(eps, 1.0 - eps)
+
+    # Negative log-likelihood of both entities being present in overlap
+    l_o0 = -(ov * torch.log(o0)).sum() / n_ov   # push o0 → 1 in overlap
+    l_o1 = -(ov * torch.log(o1)).sum() / n_ov   # push o1 → 1 in overlap
+
+    return (l_o0 + l_o1) * 0.5
+
+
+# =============================================================================
 # New loss: l_blend_ordering
 # =============================================================================
 
