@@ -855,6 +855,23 @@ def train_phase46(args):
     print("[Phase 46] checkpoint 복원...", flush=True)
     restore_multiblock_state_p46(manager, ckpt, device=device)
 
+    # Phase 47 핵심 Fix: occ_heads zero-init 리셋
+    # Phase45 best.pt의 occ_head가 "전역 고점(o1≈0.69)" 상태로 수렴돼 있음.
+    # 20 epoch 관성을 Phase46 gradient로 극복 불가 → 마지막 레이어 zero-init으로 강제 리셋.
+    if args.reset_occ_heads:
+        print("[Phase 46] occ_head zero-init 리셋...", flush=True)
+        for i, proc in enumerate(procs):
+            for occ_name in ("occ_head_e0", "occ_head_e1"):
+                mod = getattr(proc, occ_name, None)
+                if mod is not None:
+                    torch.nn.init.zeros_(mod.net[2].weight)
+                    torch.nn.init.zeros_(mod.net[2].bias)
+                    # verify
+                    _v = float(torch.sigmoid(mod.net[2].bias).mean().item())
+                    print(f"  block[{i}] {occ_name}: last-layer zeroed "
+                          f"→ output≈{_v:.4f}", flush=True)
+        print("  occ_heads 리셋 완료: o0, o1 → 0.5 everywhere", flush=True)
+
     for p in pipe.unet.parameters():         p.requires_grad_(False)
     for p in pipe.text_encoder.parameters(): p.requires_grad_(False)
     for p in pipe.vae.parameters():          p.requires_grad_(False)
@@ -1627,6 +1644,11 @@ def main():
     p.add_argument("--blend-order-margin",     type=float, default=0.10)
     p.add_argument("--rollout-every",          type=int,   default=1,
                    help="Compute rollout every N eval epochs (1=every eval, 2=every other, etc.)")
+    # Phase 47 Fix: zero-init occ_heads after restore (escape Phase45 local minimum)
+    p.add_argument("--reset-occ-heads", dest="reset_occ_heads", action="store_true",
+                   help="Zero-init occ_head last layer after restore (Phase47 fix)")
+    p.add_argument("--no-reset-occ-heads", dest="reset_occ_heads", action="store_false")
+    p.set_defaults(reset_occ_heads=False)
 
     p.add_argument("--val-frac",          type=float, default=VAL_FRAC)
     p.add_argument("--eval-every",        type=int,   default=5)
