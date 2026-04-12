@@ -33,6 +33,7 @@ from phase58_detect import load_detector, detect_animals, select_two_instances, 
 from phase58_segment import load_sam, segment_instance, refine_mask
 from phase58_ownership import compute_overlap, estimate_front_back, decompose_regions, build_inpaint_plan
 from phase58_inpaint import load_inpaint_pipeline, build_prompt as build_inpaint_prompt, compute_strength, run_two_pass
+from phase58_track import track_instance, validate_tracked_masks
 from phase58_eval import (
     make_compare_image, make_detection_vis, make_mask_overlay,
     save_standard_outputs, build_summary,
@@ -235,12 +236,10 @@ def main():
     # (unless --keep-animal is specified)
     target_prompt, target_neg = build_inpaint_prompt(
         args.target_animal, scene_hint="natural lighting")
-    if args.keep_animal:
-        keep_prompt, keep_neg = build_inpaint_prompt(
-            args.keep_animal, scene_hint="natural lighting")
-    else:
-        keep_prompt = f"a realistic {args.source_animal}, detailed fur, photorealistic"
-        keep_neg = "blurry, deformed, chimera"
+    # In collision mode, keep_animal should also be explicitly repainted
+    keep_animal = args.keep_animal or args.source_animal
+    keep_prompt, keep_neg = build_inpaint_prompt(
+        keep_animal, scene_hint="natural lighting")
 
     # Assign prompts based on front/back
     if is_target_front:
@@ -250,8 +249,8 @@ def main():
         front_prompt, front_neg = keep_prompt, keep_neg
         back_prompt, back_neg = target_prompt, target_neg
 
-    # Build inpaint plan
-    plan = build_inpaint_plan(regions, front_prompt, back_prompt)
+    # Build inpaint plan — collision mode: both entities repainted
+    plan = build_inpaint_plan(regions, front_prompt, back_prompt, mode="collision")
     print(f"[Stage2] Inpaint plan: {len(plan)} passes")
     for mask_p, prompt_p, order_p in plan:
         px = int((mask_p > 0).sum())
@@ -260,7 +259,7 @@ def main():
     # Compute adaptive strengths
     img_area = args.height * args.width
     back_mask_ratio = int((regions["back_visible"] > 0).sum()) / img_area
-    front_mask_ratio = int((regions["front_exclusive"] > 0).sum()) / img_area
+    front_mask_ratio = int((regions["front_visible"] > 0).sum()) / img_area
 
     if args.s2_strength > 0:
         back_strength = front_strength = args.s2_strength
@@ -270,28 +269,90 @@ def main():
 
     print(f"[Stage2] Strengths: back={back_strength}, front={front_strength}")
 
-    # Load inpaint pipeline and run on all frames
+    # ── Track masks across all frames ─────────────────────────────────
+    print("[Track] Tracking target instance...", flush=True)
+    tracked_target = track_instance(
+        base_frames, mask_target, target_det["box"],
+        keyframe_idx=args.keyframe, dilate_px=args.dilate_px,
+        device=args.device, method="auto")
+    target_stats = validate_tracked_masks(tracked_target)
+    print(f"  Target: {target_stats['empty_frames']} empty, max_jump={target_stats['max_jump']:.0f}px")
+
+    print("[Track] Tracking keep instance...", flush=True)
+    tracked_keep = track_instance(
+        base_frames, mask_keep, keep_det["box"],
+        keyframe_idx=args.keyframe, dilate_px=args.dilate_px,
+        device=args.device, method="auto")
+    keep_stats = validate_tracked_masks(tracked_keep)
+    print(f"  Keep: {keep_stats['empty_frames']} empty, max_jump={keep_stats['max_jump']:.0f}px")
+
+    # Save tracked masks
+    mask_dir = out / "masks"
+    mask_dir.mkdir(exist_ok=True)
+    for fi in range(len(base_frames)):
+        Image.fromarray(tracked_target[fi]).save(str(mask_dir / f"target_f{fi:03d}.png"))
+        Image.fromarray(tracked_keep[fi]).save(str(mask_dir / f"keep_f{fi:03d}.png"))
+
+    # ── Per-frame ownership + two-pass inpainting ───────────────────
     pipe2 = load_inpaint_pipeline(args.device)
 
     stage2_frames = []
     for fi, frame in enumerate(base_frames):
         print(f"\n[Stage2] Frame {fi}/{len(base_frames)}", flush=True)
 
+        # Per-frame masks from tracking
+        mt = tracked_target[fi]
+        mk = tracked_keep[fi]
+
+        # Skip if either mask is empty
+        if (mt > 0).sum() < 100 and (mk > 0).sum() < 100:
+            print(f"  [SKIP] Both masks empty — using original frame", flush=True)
+            stage2_frames.append(frame)
+            continue
+
+        # Per-frame front/back determination
+        if is_target_front:
+            fm, bm = mt, mk
+        else:
+            fm, bm = mk, mt
+
+        # Per-frame region decomposition
+        fi_regions = decompose_regions(fm, bm)
+
+        # Per-frame adaptive strength
+        fi_back_ratio = int((fi_regions["back_visible"] > 0).sum()) / img_area
+        fi_front_ratio = int((fi_regions["front_visible"] > 0).sum()) / img_area
+        fi_overlap = int((fi_regions["overlap"] > 0).sum())
+        fi_union = int(((fm > 0) | (bm > 0)).sum())
+        fi_ov_ratio = fi_overlap / max(fi_union, 1)
+
+        if args.s2_strength > 0:
+            bs = fs = args.s2_strength
+        else:
+            bs = compute_strength(fi_back_ratio, fi_ov_ratio)
+            fs = compute_strength(fi_front_ratio, fi_ov_ratio)
+
         result = run_two_pass(
             pipe2, frame,
-            back_region=regions["back_visible"],
-            front_region=regions["front_exclusive"],
+            back_region=fi_regions["back_visible"],
+            front_region=fi_regions["front_visible"],
             back_prompt=back_prompt,
             front_prompt=front_prompt,
             back_negative=back_neg,
             front_negative=front_neg,
-            back_strength=back_strength,
-            front_strength=front_strength,
+            back_strength=bs,
+            front_strength=fs,
             guidance=args.s2_guidance,
             steps=args.s2_steps,
             seed=args.seed + fi,
         )
-        stage2_frames.append(np.array(result))
+
+        # Black frame guard: if result is too dark, use original
+        result_np = np.array(result)
+        if result_np.mean() < 10:
+            print(f"  [GUARD] Black frame detected — using original", flush=True)
+            result_np = frame
+        stage2_frames.append(result_np)
 
     del pipe2
     torch.cuda.empty_cache()

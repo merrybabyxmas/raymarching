@@ -134,39 +134,43 @@ def build_inpaint_plan(
     regions: Dict[str, np.ndarray],
     front_prompt: str,
     back_prompt: str,
+    mode: str = "collision",
 ) -> List[Tuple[np.ndarray, str, int]]:
     """Build ordered inpaint plan for two-pass collision-aware editing.
 
-    Pass 1 (order=0): Inpaint the BACK entity.
-        Mask = back_exclusive + overlap (i.e., back_visible).
-        This repaints the entire back region including where it was occluded.
+    COLLISION MODE (mode='collision'):
+      Pass 1 (order=0): Back entity on back_visible (exclusive + overlap).
+        Back gets painted first including the overlap zone.
+      Pass 2 (order=1): Front entity on front_visible (exclusive + overlap).
+        Front overwrites the overlap zone with front identity.
+        This ensures the final visible result shows the front species in overlap.
 
-    Pass 2 (order=1): Inpaint the FRONT entity.
-        Mask = front_exclusive only.
-        The overlap region was already repainted by Pass 1 and the front
-        entity's visible part just needs its exclusive pixels changed.
+    SWAP MODE (mode='swap'):
+      Only repaint the target entity (front_exclusive only).
+      Keep entity is untouched.
 
     Args:
-        regions: Dict from decompose_regions.
-        front_prompt: Inpainting prompt for the front entity.
-        back_prompt: Inpainting prompt for the back entity.
-
-    Returns:
-        List of (mask, prompt, order) tuples sorted by order.
-        Each mask is (H, W) uint8, 0/255.
+        mode: 'collision' for dual-entity repaint, 'swap' for single-entity.
     """
     plan = []
 
-    # Pass 1: Back entity — repaint back_exclusive + overlap
-    back_inpaint_mask = regions["back_visible"].copy()
-    if back_inpaint_mask.sum() > 0:
-        plan.append((back_inpaint_mask, back_prompt, 0))
+    if mode == "collision":
+        # Pass 1: Back entity — all pixels it occupies
+        back_mask = regions["back_visible"].copy()
+        if back_mask.sum() > 0:
+            plan.append((back_mask, back_prompt, 0))
 
-    # Pass 2: Front entity — repaint front_exclusive only
-    front_inpaint_mask = regions["front_exclusive"].copy()
-    if front_inpaint_mask.sum() > 0:
-        plan.append((front_inpaint_mask, front_prompt, 1))
+        # Pass 2: Front entity — all pixels it occupies INCLUDING OVERLAP
+        # This overwrites the overlap zone with front identity
+        front_mask = regions["front_visible"].copy()
+        if front_mask.sum() > 0:
+            plan.append((front_mask, front_prompt, 1))
 
-    # Sort by order
+    elif mode == "swap":
+        # Single-entity swap: only repaint target (front_exclusive)
+        front_mask = regions["front_exclusive"].copy()
+        if front_mask.sum() > 0:
+            plan.append((front_mask, front_prompt, 0))
+
     plan.sort(key=lambda x: x[2])
     return plan
