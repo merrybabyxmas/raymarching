@@ -969,12 +969,12 @@ def train_phase46(args):
         vca_layer.train(); manager.train()
 
         if is_stage_a:
-            loss_keys = ["total", "occ", "occ_struct", "occ_cont", "blend_target",
-                         "blend_rank", "blend_order",
+            loss_keys = ["total", "occ", "occ_struct", "occ_cont", "ex_sup",
+                         "blend_target", "blend_rank", "blend_order",
                          "vis", "vis_iou", "wrong", "excl", "slot_ref", "slot_cont", "w_res"]
         else:
-            loss_keys = ["total", "occ", "occ_struct", "occ_cont", "vis", "vis_iou",
-                         "wrong", "sigma", "depth", "ov",
+            loss_keys = ["total", "occ", "occ_struct", "occ_cont", "ex_sup",
+                         "vis", "vis_iou", "wrong", "sigma", "depth", "ov",
                          "excl", "slot_ref", "slot_cont", "blend_target",
                          "blend_rank", "blend_order", "w_res"]
         epoch_losses = {k: [] for k in loss_keys}
