@@ -353,12 +353,7 @@ def main():
             seed=args.seed + fi,
         )
 
-        # Black frame guard: if result is too dark, use original
-        result_np = np.array(result)
-        if result_np.mean() < 10:
-            print(f"  [GUARD] Black frame detected — using original", flush=True)
-            result_np = frame
-        stage2_frames.append(result_np)
+        stage2_frames.append(np.array(result))
 
     del pipe2
     torch.cuda.empty_cache()

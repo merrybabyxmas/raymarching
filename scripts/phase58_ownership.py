@@ -155,21 +155,17 @@ def build_inpaint_plan(
     plan = []
 
     if mode == "collision":
-        # Pass 1: Back entity — back_visible (exclusive + overlap)
+        # PROVEN STRATEGY: Only swap the SMALLER (back) entity.
+        # The larger (front) entity stays as-is from Stage 1.
+        # This preserves scene geometry while changing one identity.
+        #
+        # Pass 1 (only pass): Back entity visible region
         back_mask = regions["back_visible"].copy()
         if back_mask.sum() > 0:
             plan.append((back_mask, back_prompt, 0))
 
-        # Pass 2: Front entity — front_exclusive + overlap_band (NOT full front_visible)
-        # Only repaint the overlap boundary zone + front exclusive area.
-        # This avoids catastrophic rewrite of the entire front body.
-        import cv2
-        overlap = regions["overlap"]
-        overlap_band = cv2.dilate(
-            overlap, np.ones((21, 21), np.uint8), iterations=1)
-        front_repair = np.maximum(regions["front_exclusive"], overlap_band).clip(0, 255).astype(np.uint8)
-        if front_repair.sum() > 0:
-            plan.append((front_repair, front_prompt, 1))
+        # NO front pass — front entity keeps its Stage 1 appearance.
+        # If front identity also needs changing, use mode='dual_repaint'.
 
     elif mode == "swap":
         # Single-entity swap: only repaint target (front_exclusive)

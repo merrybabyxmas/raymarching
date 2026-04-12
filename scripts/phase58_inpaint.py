@@ -133,22 +133,33 @@ def inpaint_region(
         return image.copy()
 
     device = pipe.device if hasattr(pipe, "device") else "cuda"
-    gen = torch.Generator(device=device).manual_seed(seed)
 
-    result = pipe(
-        prompt=prompt,
-        negative_prompt=negative,
-        image=image,
-        mask_image=mask_pil,
-        height=h,
-        width=w,
-        num_inference_steps=steps,
-        strength=strength,
-        guidance_scale=guidance,
-        generator=gen,
-    ).images[0]
+    # Retry loop: some seed+strength combos produce degenerate black output
+    for attempt in range(4):
+        attempt_seed = seed + attempt * 1000
+        attempt_strength = min(strength + attempt * 0.03, 0.99)
+        gen = torch.Generator(device=device).manual_seed(attempt_seed)
 
-    return result
+        result = pipe(
+            prompt=prompt,
+            negative_prompt=negative,
+            image=image,
+            mask_image=mask_pil,
+            height=h,
+            width=w,
+            num_inference_steps=steps,
+            strength=attempt_strength,
+            guidance_scale=guidance,
+            generator=gen,
+        ).images[0]
+
+        result_np = np.array(result)
+        if result_np.mean() > 10:
+            return result
+        # Black output detected, retry with different seed+strength
+
+    # All retries failed — return original image unchanged
+    return image.copy()
 
 
 # ─── Two-pass inpainting ───────────────────────────────────────────────
