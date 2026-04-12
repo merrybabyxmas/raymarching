@@ -128,6 +128,104 @@ def l_occ_contrastive(
 
 
 # =============================================================================
+# Unified region-aware occupancy loss  (Phase 50 fix)
+# =============================================================================
+
+def l_occ_region_aware(
+    o0_for_loss: torch.Tensor,   # (B, S) — no detach
+    o1_for_loss: torch.Tensor,   # (B, S)
+    masks_BNS:   torch.Tensor,   # (B, 2, S) GT mask
+    la_ov:       float = 8.0,    # push BOTH entities HIGH in overlap
+    la_ex_pos:   float = 3.0,    # push CORRECT entity HIGH in exclusive
+    la_ex_neg:   float = 3.0,    # push WRONG entity LOW in exclusive (full neg weight)
+    la_bg:       float = 0.5,    # push BOTH entities LOW in background
+    eps:         float = 1e-6,
+) -> torch.Tensor:
+    """
+    Unified region-aware occupancy BCE — replaces l_occ + l_exclusive_suppress
+    + l_overlap_activate with one coherent gradient computation.
+
+    Phase 48/49 root cause:
+      Separate suppress (la=10) and activate (la=10) losses flow through shared
+      occ_head weights and fight each other:
+        Phase 48 (suppress only): overlap activation collapses to 0.59
+        Phase 49 (suppress+activate): activate dominates, exclusive stays at 0.93
+
+    This unified loss handles all regions in one backward pass:
+
+      Overlap (both entities present):
+        - la_ov × (-log o0) / n_ov  → push o0 UP   (per pixel: la_ov·0.5/n_ov)
+        - la_ov × (-log o1) / n_ov  → push o1 UP
+
+      e0-exclusive (only entity 0 present):
+        - la_ex_pos × (-log o0) / n_e0   → push o0 (correct) UP
+        - la_ex_neg × (-log(1-o1)) / n_e0 → push o1 (wrong)  DOWN  (full weight, not 0.25!)
+
+      e1-exclusive (only entity 1 present):
+        - la_ex_pos × (-log o1) / n_e1   → push o1 (correct) UP
+        - la_ex_neg × (-log(1-o0)) / n_e1 → push o0 (wrong)  DOWN
+
+      Background (neither entity present):
+        - la_bg × (-log(1-o0)) / n_bg   → push o0 DOWN (weak)
+        - la_bg × (-log(1-o1)) / n_bg   → push o1 DOWN
+
+    Key difference from l_occupancy (neg_weight=0.25):
+      Old neg gradient per exclusive pixel: 0.25 × la_occ / n_neg ≈ 0.25×2/0.75S = 0.67/S
+      New neg gradient per exclusive pixel: la_ex_neg × 0.5 / n_e0 ≈ 3×0.5/0.25S = 6/S
+      → 9× stronger push on wrong entity in exclusive regions.
+
+    Key difference from separate suppress+activate:
+      One backward pass → no competing gradient flows through shared weights.
+    """
+    m0 = masks_BNS[:, 0, :].float().to(o0_for_loss.device)
+    m1 = masks_BNS[:, 1, :].float().to(o0_for_loss.device)
+
+    ov    = m0 * m1                    # overlap
+    e0_ex = m0 * (1.0 - m1)           # e0-exclusive
+    e1_ex = m1 * (1.0 - m0)           # e1-exclusive
+    bg    = (1.0 - m0) * (1.0 - m1)   # background
+
+    n_ov  = ov.sum()    + eps
+    n_e0  = e0_ex.sum() + eps
+    n_e1  = e1_ex.sum() + eps
+    n_bg  = bg.sum()    + eps
+
+    o0 = o0_for_loss.float().clamp(eps, 1.0 - eps)
+    o1 = o1_for_loss.float().clamp(eps, 1.0 - eps)
+
+    log_o0     = torch.log(o0)
+    log_o1     = torch.log(o1)
+    log_1mo0   = torch.log(1.0 - o0)
+    log_1mo1   = torch.log(1.0 - o1)
+
+    # Overlap: push both toward 1
+    l_ov = la_ov * 0.5 * (
+        -(ov * log_o0).sum() / n_ov
+      + -(ov * log_o1).sum() / n_ov
+    )
+
+    # e0-exclusive: o0→1, o1→0
+    l_e0 = 0.5 * (
+        la_ex_pos * (-(e0_ex * log_o0  ).sum() / n_e0)
+      + la_ex_neg * (-(e0_ex * log_1mo1).sum() / n_e0)
+    )
+
+    # e1-exclusive: o1→1, o0→0
+    l_e1 = 0.5 * (
+        la_ex_pos * (-(e1_ex * log_o1  ).sum() / n_e1)
+      + la_ex_neg * (-(e1_ex * log_1mo0).sum() / n_e1)
+    )
+
+    # Background: both→0 (weak)
+    l_bg = la_bg * 0.5 * (
+        -(bg * log_1mo0).sum() / n_bg
+      + -(bg * log_1mo1).sum() / n_bg
+    )
+
+    return l_ov + l_e0 + l_e1 + l_bg
+
+
+# =============================================================================
 # New loss: l_exclusive_suppress  (Phase 48 fix)
 # =============================================================================
 

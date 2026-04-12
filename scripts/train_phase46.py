@@ -77,6 +77,7 @@ from models.entity_slot_phase46 import (
     l_occ_contrastive,
     l_exclusive_suppress,
     l_overlap_activate,
+    l_occ_region_aware,
     l_blend_ordering,
     val_score_phase46,
 )
@@ -123,6 +124,7 @@ DEFAULT_LA_OCC_STRUCT     = 1.5
 DEFAULT_LA_OCC_CONTRAST   = 3.0   # NEW: directional exclusive suppression
 DEFAULT_LA_EX_SUPPRESS    = 10.0  # NEW Phase48: direct wrong-entity suppression
 DEFAULT_LA_OV_ACTIVATE    = 10.0  # NEW Phase49: focused overlap activation
+DEFAULT_LA_OCC_REGION     = 1.0   # NEW Phase50: unified region-aware BCE (replaces la_occ)
 DEFAULT_LA_BLEND_TARGET   = 2.0
 DEFAULT_LA_BLEND_RANK     = 1.5
 DEFAULT_LA_BLEND_ORDER    = 2.0   # NEW: direct ordering constraint
@@ -140,6 +142,7 @@ DEFAULT_LB_OCC_STRUCT     = 0.8
 DEFAULT_LB_OCC_CONTRAST   = 1.5   # NEW
 DEFAULT_LB_EX_SUPPRESS    = 5.0   # NEW Phase48: direct wrong-entity suppression (Stage B)
 DEFAULT_LB_OV_ACTIVATE    = 5.0   # NEW Phase49: focused overlap activation (Stage B)
+DEFAULT_LB_OCC_REGION     = 1.0   # NEW Phase50: unified region-aware BCE (Stage B)
 DEFAULT_LB_BLEND_ORDER    = 1.0   # NEW
 DEFAULT_LB_VIS            = 2.0
 DEFAULT_LB_VIS_IOU        = 0.0
@@ -973,10 +976,12 @@ def train_phase46(args):
 
         if is_stage_a:
             loss_keys = ["total", "occ", "occ_struct", "occ_cont", "ex_sup", "ov_act",
+                         "occ_reg",
                          "blend_target", "blend_rank", "blend_order",
                          "vis", "vis_iou", "wrong", "excl", "slot_ref", "slot_cont", "w_res"]
         else:
             loss_keys = ["total", "occ", "occ_struct", "occ_cont", "ex_sup", "ov_act",
+                         "occ_reg",
                          "vis", "vis_iou", "wrong", "sigma", "depth", "ov",
                          "excl", "slot_ref", "slot_cont", "blend_target",
                          "blend_rank", "blend_order", "w_res"]
@@ -1099,6 +1104,7 @@ def train_phase46(args):
             l_occ_cont   = torch.tensor(0.0, device=device)
             l_ex_sup     = torch.tensor(0.0, device=device)
             l_ov_act     = torch.tensor(0.0, device=device)
+            l_occ_reg    = torch.tensor(0.0, device=device)
             primary = manager.primary
             o0_fl = getattr(primary, 'last_o0_for_loss', None)
             o1_fl = getattr(primary, 'last_o1_for_loss', None)
@@ -1135,6 +1141,9 @@ def train_phase46(args):
                     # NEW Phase 49: focused overlap activation (counteracts global suppression)
                     l_ov_act = l_ov_act + l_overlap_activate(
                         o0_fi, o1_fi, m_occ_fi) * fw
+                    # NEW Phase 50: unified region-aware BCE (replaces l_occ + l_ex_sup + l_ov_act)
+                    l_occ_reg = l_occ_reg + l_occ_region_aware(
+                        o0_fi, o1_fi, m_occ_fi) * fw
                     occ_w_sum = occ_w_sum + fw
                 occ_w_sum = occ_w_sum.clamp(min=1e-6)
                 l_occ       = l_occ       / occ_w_sum
@@ -1142,6 +1151,7 @@ def train_phase46(args):
                 l_occ_cont   = l_occ_cont   / occ_w_sum
                 l_ex_sup     = l_ex_sup     / occ_w_sum
                 l_ov_act     = l_ov_act     / occ_w_sum
+                l_occ_reg    = l_occ_reg    / occ_w_sum
 
             # ── L_blend_ordering (primary block, NEW Phase 46) ────────────
             l_blend_ord = torch.tensor(0.0, device=device)
@@ -1297,6 +1307,7 @@ def train_phase46(args):
                       + args.la_occ_contrast * l_occ_cont      # Phase 46
                       + args.la_ex_suppress  * l_ex_sup        # Phase 48
                       + args.la_ov_activate  * l_ov_act        # Phase 49
+                      + args.la_occ_region   * l_occ_reg       # Phase 50
                       + args.la_blend_target * l_bt
                       + args.la_blend_rank   * l_br
                       + args.la_blend_order  * l_blend_ord      # Phase 46
@@ -1310,6 +1321,7 @@ def train_phase46(args):
 
                 for k, v in [("total", loss), ("occ", l_occ), ("occ_struct", l_occ_struct),
                               ("occ_cont", l_occ_cont), ("ex_sup", l_ex_sup), ("ov_act", l_ov_act),
+                              ("occ_reg", l_occ_reg),
                               ("blend_target", l_bt), ("blend_rank", l_br),
                               ("blend_order", l_blend_ord),
                               ("vis", l_vis), ("vis_iou", l_vis_iou),
@@ -1354,6 +1366,7 @@ def train_phase46(args):
                       + args.lb_occ_contrast * l_occ_cont       # Phase 46
                       + args.lb_ex_suppress  * l_ex_sup         # Phase 48
                       + args.lb_ov_activate  * l_ov_act         # Phase 49
+                      + args.lb_occ_region   * l_occ_reg        # Phase 50
                       + args.lb_vis          * l_vis
                       + args.lb_vis_iou      * l_vis_iou
                       + args.lb_wrong        * l_wrong
@@ -1370,6 +1383,7 @@ def train_phase46(args):
 
                 for k, v in [("total", loss), ("occ", l_occ), ("occ_struct", l_occ_struct),
                               ("occ_cont", l_occ_cont), ("ex_sup", l_ex_sup), ("ov_act", l_ov_act),
+                              ("occ_reg", l_occ_reg),
                               ("vis", l_vis), ("vis_iou", l_vis_iou),
                               ("wrong", l_wrong), ("sigma", l_sigma), ("depth", l_depth),
                               ("ov", l_ov), ("excl", l_excl), ("slot_ref", l_slot_ref_all),
@@ -1632,6 +1646,7 @@ def main():
     p.add_argument("--la-occ-contrast", type=float, default=DEFAULT_LA_OCC_CONTRAST)
     p.add_argument("--la-ex-suppress",  type=float, default=DEFAULT_LA_EX_SUPPRESS)
     p.add_argument("--la-ov-activate",  type=float, default=DEFAULT_LA_OV_ACTIVATE)
+    p.add_argument("--la-occ-region",   type=float, default=DEFAULT_LA_OCC_REGION)
     p.add_argument("--la-blend-target", type=float, default=DEFAULT_LA_BLEND_TARGET)
     p.add_argument("--la-blend-rank",   type=float, default=DEFAULT_LA_BLEND_RANK)
     p.add_argument("--la-blend-order",  type=float, default=DEFAULT_LA_BLEND_ORDER)
@@ -1649,6 +1664,7 @@ def main():
     p.add_argument("--lb-occ-contrast", type=float, default=DEFAULT_LB_OCC_CONTRAST)
     p.add_argument("--lb-ex-suppress",  type=float, default=DEFAULT_LB_EX_SUPPRESS)
     p.add_argument("--lb-ov-activate",  type=float, default=DEFAULT_LB_OV_ACTIVATE)
+    p.add_argument("--lb-occ-region",   type=float, default=DEFAULT_LB_OCC_REGION)
     p.add_argument("--lb-blend-order",  type=float, default=DEFAULT_LB_BLEND_ORDER)
     p.add_argument("--lb-vis",          type=float, default=DEFAULT_LB_VIS)
     p.add_argument("--lb-vis-iou",      type=float, default=DEFAULT_LB_VIS_IOU)
