@@ -367,6 +367,57 @@ def l_blend_ordering(
     return l_ov_ex + l_ex_bg
 
 
+def l_blend_direct_gt(
+    blend_map: torch.Tensor,   # (B, S)
+    masks_BNS: torch.Tensor,   # (B, 2, S) — GT entity masks
+    la_ov:     float = 5.0,    # weight for overlap positive push
+    la_ex:     float = 3.0,    # weight for exclusive negative push
+    la_bg:     float = 1.0,    # weight for background negative push
+    eps:       float = 1e-6,
+) -> torch.Tensor:
+    """
+    Direct per-pixel BCE supervision on blend_map using GT overlap masks.
+
+    Phase 52: Bypasses the occ_head entirely. Trains OBH (blend_map) directly.
+
+    The OBH has discriminative features even for similar entities:
+      - w0, w1 from entity rendering softmax: w0*w1 is HIGH in overlap, LOW in exclusive
+      - e0_front: depth ordering signal
+
+    GT supervision:
+      overlap (m0=1, m1=1): target=1, push blend_map UP
+      exclusive (m0+m1=1, m0*m1=0): target=0, push blend_map DOWN
+      background (m0=0, m1=0): target=0, push blend_map DOWN (weakly)
+
+    Gradient directions:
+      d(l_ov)/d(blend) = -la_ov / (n_ov * blend)  < 0  → blend rises (correct)
+      d(l_ex)/d(blend) = +la_ex / (n_ex * (1-blend)) > 0 → blend falls (correct)
+    """
+    m0 = masks_BNS[:, 0, :].float().to(blend_map.device)
+    m1 = masks_BNS[:, 1, :].float().to(blend_map.device)
+
+    overlap   = m0 * m1
+    exclusive = (m0 + m1).clamp(0.0, 1.0) - overlap
+    bg        = 1.0 - (m0 + m1).clamp(0.0, 1.0)
+
+    n_ov = overlap.sum() + eps
+    n_ex = exclusive.sum() + eps
+    n_bg = bg.sum() + eps
+
+    b = blend_map.float().clamp(eps, 1.0 - eps)
+    log_b    = torch.log(b)
+    log_1mb  = torch.log(1.0 - b)
+
+    # Overlap: target=1 → minimize -log(b) per overlap pixel
+    l_ov = la_ov * (-(overlap * log_b).sum() / n_ov)
+    # Exclusive: target=0 → minimize -log(1-b) per exclusive pixel
+    l_ex = la_ex * (-(exclusive * log_1mb).sum() / n_ex)
+    # Background: target=0 → minimize -log(1-b) per bg pixel (weak)
+    l_bg = la_bg * (-(bg * log_1mb).sum() / n_bg)
+
+    return l_ov + l_ex + l_bg
+
+
 # =============================================================================
 # compute_base_blend_v3  —  soft-thresholded product
 # =============================================================================

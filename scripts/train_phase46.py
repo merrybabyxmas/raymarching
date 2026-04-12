@@ -79,6 +79,7 @@ from models.entity_slot_phase46 import (
     l_overlap_activate,
     l_occ_region_aware,
     l_blend_ordering,
+    l_blend_direct_gt,
     val_score_phase46,
 )
 from scripts.run_animatediff import load_pipeline
@@ -125,6 +126,7 @@ DEFAULT_LA_OCC_CONTRAST   = 3.0   # NEW: directional exclusive suppression
 DEFAULT_LA_EX_SUPPRESS    = 10.0  # NEW Phase48: direct wrong-entity suppression
 DEFAULT_LA_OV_ACTIVATE    = 10.0  # NEW Phase49: focused overlap activation
 DEFAULT_LA_OCC_REGION     = 1.0   # NEW Phase50: unified region-aware BCE (replaces la_occ)
+DEFAULT_LA_BLEND_DIRECT_GT = 0.0  # NEW Phase52: direct GT-supervised BCE on blend_map
 DEFAULT_LA_BLEND_TARGET   = 2.0
 DEFAULT_LA_BLEND_RANK     = 1.5
 DEFAULT_LA_BLEND_ORDER    = 2.0   # NEW: direct ordering constraint
@@ -143,6 +145,7 @@ DEFAULT_LB_OCC_CONTRAST   = 1.5   # NEW
 DEFAULT_LB_EX_SUPPRESS    = 5.0   # NEW Phase48: direct wrong-entity suppression (Stage B)
 DEFAULT_LB_OV_ACTIVATE    = 5.0   # NEW Phase49: focused overlap activation (Stage B)
 DEFAULT_LB_OCC_REGION     = 1.0   # NEW Phase50: unified region-aware BCE (Stage B)
+DEFAULT_LB_BLEND_DIRECT_GT = 0.0  # NEW Phase52: direct GT-supervised BCE on blend_map (Stage B)
 DEFAULT_LB_BLEND_ORDER    = 1.0   # NEW
 DEFAULT_LB_VIS            = 2.0
 DEFAULT_LB_VIS_IOU        = 0.0
@@ -977,14 +980,14 @@ def train_phase46(args):
         if is_stage_a:
             loss_keys = ["total", "occ", "occ_struct", "occ_cont", "ex_sup", "ov_act",
                          "occ_reg",
-                         "blend_target", "blend_rank", "blend_order",
+                         "blend_target", "blend_rank", "blend_order", "blend_gt",
                          "vis", "vis_iou", "wrong", "excl", "slot_ref", "slot_cont", "w_res"]
         else:
             loss_keys = ["total", "occ", "occ_struct", "occ_cont", "ex_sup", "ov_act",
                          "occ_reg",
                          "vis", "vis_iou", "wrong", "sigma", "depth", "ov",
                          "excl", "slot_ref", "slot_cont", "blend_target",
-                         "blend_rank", "blend_order", "w_res"]
+                         "blend_rank", "blend_order", "blend_gt", "w_res"]
         epoch_losses = {k: [] for k in loss_keys}
 
         chosen     = np.random.choice(len(train_idx), size=args.steps_per_epoch,
@@ -1153,8 +1156,9 @@ def train_phase46(args):
                 l_ov_act     = l_ov_act     / occ_w_sum
                 l_occ_reg    = l_occ_reg    / occ_w_sum
 
-            # ── L_blend_ordering (primary block, NEW Phase 46) ────────────
+            # ── L_blend_ordering + L_blend_direct_gt (primary block) ────────
             l_blend_ord = torch.tensor(0.0, device=device)
+            l_blend_gt  = torch.tensor(0.0, device=device)
             bm_for_loss = getattr(primary, 'last_blend_map_for_loss', None)
             if (bm_for_loss is not None and
                     isinstance(bm_for_loss, torch.Tensor) and
@@ -1168,8 +1172,13 @@ def train_phase46(args):
                     l_blend_ord = l_blend_ord + l_blend_ordering(
                         bm_f, m_occ_fi,
                         margin=args.blend_order_margin) * fw
+                    # NEW Phase52: direct GT overlap BCE on blend_map
+                    l_blend_gt = l_blend_gt + l_blend_direct_gt(
+                        bm_f, m_occ_fi) * fw
                     blend_ord_w_sum = blend_ord_w_sum + fw
-                l_blend_ord = l_blend_ord / blend_ord_w_sum.clamp(min=1e-6)
+                blend_ord_w_sum_c = blend_ord_w_sum.clamp(min=1e-6)
+                l_blend_ord = l_blend_ord / blend_ord_w_sum_c
+                l_blend_gt  = l_blend_gt  / blend_ord_w_sum_c
 
             # ── L_vis ─────────────────────────────────────────────────────
             l_vis = torch.tensor(0.0, device=device)
@@ -1311,6 +1320,7 @@ def train_phase46(args):
                       + args.la_blend_target * l_bt
                       + args.la_blend_rank   * l_br
                       + args.la_blend_order  * l_blend_ord      # Phase 46
+                      + args.la_blend_direct_gt * l_blend_gt    # Phase 52
                       + args.la_vis          * l_vis
                       + args.la_vis_iou      * l_vis_iou
                       + args.la_wrong        * l_wrong
@@ -1323,7 +1333,7 @@ def train_phase46(args):
                               ("occ_cont", l_occ_cont), ("ex_sup", l_ex_sup), ("ov_act", l_ov_act),
                               ("occ_reg", l_occ_reg),
                               ("blend_target", l_bt), ("blend_rank", l_br),
-                              ("blend_order", l_blend_ord),
+                              ("blend_order", l_blend_ord), ("blend_gt", l_blend_gt),
                               ("vis", l_vis), ("vis_iou", l_vis_iou),
                               ("wrong", l_wrong), ("excl", l_excl),
                               ("slot_ref", l_slot_ref_all), ("slot_cont", l_slot_cont_all),
@@ -1378,7 +1388,8 @@ def train_phase46(args):
                       + args.lb_slot_cont    * l_slot_cont_all
                       + args.lb_blend_target * l_bt
                       + args.lb_blend_rank   * l_br
-                      + args.lb_blend_order  * l_blend_ord       # NEW Phase 46
+                      + args.lb_blend_order  * l_blend_ord       # Phase 46
+                      + args.lb_blend_direct_gt * l_blend_gt     # Phase 52
                       + args.lb_w_res        * l_w_res)
 
                 for k, v in [("total", loss), ("occ", l_occ), ("occ_struct", l_occ_struct),
@@ -1389,7 +1400,7 @@ def train_phase46(args):
                               ("ov", l_ov), ("excl", l_excl), ("slot_ref", l_slot_ref_all),
                               ("slot_cont", l_slot_cont_all), ("blend_target", l_bt),
                               ("blend_rank", l_br), ("blend_order", l_blend_ord),
-                              ("w_res", l_w_res)]:
+                              ("blend_gt", l_blend_gt), ("w_res", l_w_res)]:
                     epoch_losses[k].append(float(v.item()) if isinstance(v, torch.Tensor) else float(v))
 
             if not torch.isfinite(loss):
@@ -1424,8 +1435,9 @@ def train_phase46(args):
         print(f"[Phase 46][Stage {stage_lbl}] epoch {epoch:03d}/{total_epochs-1}  "
               f"loss={avg['total']:.4f}  occ={avg['occ']:.4f}  "
               f"occ_struct={avg['occ_struct']:.4f}  occ_cont={avg['occ_cont']:.4f}  "
+              f"occ_reg={avg['occ_reg']:.4f}  "
               f"blend_target={avg['blend_target']:.4f}  blend_rank={avg['blend_rank']:.4f}  "
-              f"blend_order={avg['blend_order']:.4f}  "
+              f"blend_order={avg['blend_order']:.4f}  blend_gt={avg['blend_gt']:.4f}  "
               f"vis={avg['vis']:.4f}  vis_iou={avg['vis_iou']:.4f}  "
               f"wrong={avg['wrong']:.4f}  "
               f"excl={avg['excl']:.4f}  slot_ref={avg['slot_ref']:.4f}  "
@@ -1649,8 +1661,9 @@ def main():
     p.add_argument("--la-occ-region",   type=float, default=DEFAULT_LA_OCC_REGION)
     p.add_argument("--la-blend-target", type=float, default=DEFAULT_LA_BLEND_TARGET)
     p.add_argument("--la-blend-rank",   type=float, default=DEFAULT_LA_BLEND_RANK)
-    p.add_argument("--la-blend-order",  type=float, default=DEFAULT_LA_BLEND_ORDER)
-    p.add_argument("--la-vis",          type=float, default=DEFAULT_LA_VIS)
+    p.add_argument("--la-blend-order",     type=float, default=DEFAULT_LA_BLEND_ORDER)
+    p.add_argument("--la-blend-direct-gt", type=float, default=DEFAULT_LA_BLEND_DIRECT_GT)
+    p.add_argument("--la-vis",             type=float, default=DEFAULT_LA_VIS)
     p.add_argument("--la-vis-iou",      type=float, default=DEFAULT_LA_VIS_IOU)
     p.add_argument("--la-wrong",        type=float, default=DEFAULT_LA_WRONG)
     p.add_argument("--la-excl",         type=float, default=DEFAULT_LA_EXCL)
@@ -1665,8 +1678,9 @@ def main():
     p.add_argument("--lb-ex-suppress",  type=float, default=DEFAULT_LB_EX_SUPPRESS)
     p.add_argument("--lb-ov-activate",  type=float, default=DEFAULT_LB_OV_ACTIVATE)
     p.add_argument("--lb-occ-region",   type=float, default=DEFAULT_LB_OCC_REGION)
-    p.add_argument("--lb-blend-order",  type=float, default=DEFAULT_LB_BLEND_ORDER)
-    p.add_argument("--lb-vis",          type=float, default=DEFAULT_LB_VIS)
+    p.add_argument("--lb-blend-order",     type=float, default=DEFAULT_LB_BLEND_ORDER)
+    p.add_argument("--lb-blend-direct-gt", type=float, default=DEFAULT_LB_BLEND_DIRECT_GT)
+    p.add_argument("--lb-vis",             type=float, default=DEFAULT_LB_VIS)
     p.add_argument("--lb-vis-iou",      type=float, default=DEFAULT_LB_VIS_IOU)
     p.add_argument("--lb-wrong",        type=float, default=DEFAULT_LB_WRONG)
     p.add_argument("--lb-sigma",        type=float, default=DEFAULT_LB_SIGMA)
