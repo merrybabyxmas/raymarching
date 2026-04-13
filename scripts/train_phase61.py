@@ -327,9 +327,9 @@ def evaluate_val_set(
                 vis_feat = vis_feat.repeat(n_repeat, 1, 1)[:B_a]
 
             # Alpha volume loss
-            tgt0, tgt1 = build_depth_bin_targets(
+            tgt0, tgt1, v0, v1 = build_depth_bin_targets(
                 masks_feat, depth_orders[:T_frames], depth_bins)
-            l_alpha_vol = loss_alpha_volume(alpha0_bins, alpha1_bins, tgt0, tgt1)
+            l_alpha_vol = loss_alpha_volume(alpha0_bins, alpha1_bins, tgt0, tgt1, v0, v1)
             alpha_vol_losses.append(float(l_alpha_vol.item()))
 
             # Visible ownership loss
@@ -363,11 +363,12 @@ def evaluate_val_set(
     val_iou_e0 = _avg(iou_e0s) if iou_e0s else 0.0
     val_iou_e1 = _avg(iou_e1s) if iou_e1s else 0.0
 
+    # IoU-heavy scoring: actual visible separation matters most
     val_score = (
-        0.3 * (1.0 / (1.0 + val_comp_mse))
-        + 0.3 * (val_iou_e0 + val_iou_e1) / 2.0
-        + 0.2 * (1.0 / (1.0 + val_alpha_vol))
-        + 0.2 * (1.0 / (1.0 + val_own_loss))
+        0.25 * (1.0 / (1.0 + val_comp_mse))
+        + 0.45 * (val_iou_e0 + val_iou_e1) / 2.0
+        + 0.15 * (1.0 / (1.0 + val_alpha_vol))
+        + 0.15 * (1.0 / (1.0 + val_own_loss))
     )
 
     return {
@@ -615,6 +616,9 @@ def train_phase61(args):
                 noise_pred = pipe.unet(
                     noisy, t, encoder_hidden_states=enc_full).sample
 
+            # Propagate primary routing to non-primary blocks
+            manager.propagate_routing()
+
             # Get volume predictions
             preds = manager.volume_predictions
             if preds[0] is None:
@@ -641,7 +645,7 @@ def train_phase61(args):
                 vis_feat = vis_feat.repeat(n_repeat, 1, 1)[:B_a]
 
             # Build depth bin targets
-            tgt0, tgt1 = build_depth_bin_targets(
+            tgt0, tgt1, valid0, valid1 = build_depth_bin_targets(
                 masks_feat, depth_orders[:T_frames], args.depth_bins)
 
             # Compute losses
@@ -649,7 +653,7 @@ def train_phase61(args):
             noise_pred_t = noise_pred[:, :, :T_frames].float()
 
             l_comp = loss_composite(noise_pred_t, noise_t)
-            l_alpha_vol = loss_alpha_volume(alpha0_bins, alpha1_bins, tgt0, tgt1)
+            l_alpha_vol = loss_alpha_volume(alpha0_bins, alpha1_bins, tgt0, tgt1, valid0, valid1)
             l_own = loss_visible_ownership(w0_bins, w1_bins, vis_feat)
             l_depth = loss_depth_expected(
                 alpha0_bins, alpha1_bins, depth_orders[:T_frames], masks_feat,

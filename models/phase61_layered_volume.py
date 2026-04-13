@@ -98,7 +98,8 @@ class DepthVolumeHead(nn.Module):
         B, S, D = feat.shape
         K = self.depth_bins
 
-        alpha_bins = torch.sigmoid(self.alpha_head(feat))  # (B, S, K)
+        alpha_logits = self.alpha_head(feat)  # (B, S, K) raw logits
+        alpha_bins = alpha_logits  # return raw logits, compositor handles activation
 
         delta = self.feat_head(feat)  # (B, S, D*K)
         delta = delta.view(B, S, K, D)  # (B, S, K, D)
@@ -135,46 +136,53 @@ class VolumeCompositor(nn.Module):
         feat_bg:     torch.Tensor,  # (B, S, D) background/global features
         feat0_bins:  torch.Tensor,  # (B, S, K, D) entity 0 features per bin
         feat1_bins:  torch.Tensor,  # (B, S, K, D) entity 1 features per bin
-        alpha0_bins: torch.Tensor,  # (B, S, K) entity 0 alpha per bin
-        alpha1_bins: torch.Tensor,  # (B, S, K) entity 1 alpha per bin
+        alpha0_logits: torch.Tensor,  # (B, S, K) entity 0 RAW LOGITS per bin
+        alpha1_logits: torch.Tensor,  # (B, S, K) entity 1 RAW LOGITS per bin
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
+        Bin-level softmax competition + front-to-back rendering.
+
+        At each bin z, three candidates (e0, e1, bg) compete via softmax:
+          p0(z), p1(z), p_bg(z) = softmax(logit0(z), logit1(z), 0)
+        Then alpha_total(z) = 1 - p_bg(z) = p0(z) + p1(z)
+        Front-to-back transmittance: T(z) = prod_{k<z}(p_bg(k))
+        Rendering weights: w0(z) = T(z)*p0(z), w1(z) = T(z)*p1(z)
+        Background: w_bg = prod_all(p_bg(z))
+
         Returns:
             composed:  (B, S, D) composited features
             w0_bins:   (B, S, K) entity 0 rendering weights per bin
             w1_bins:   (B, S, K) entity 1 rendering weights per bin
             w_bg:      (B, S) background weight
         """
-        B, S, K = alpha0_bins.shape
+        B, S, K = alpha0_logits.shape
         dtype = feat_bg.dtype
 
-        # Compute in float for numerical stability
-        a0 = alpha0_bins.float()  # (B, S, K)
-        a1 = alpha1_bins.float()  # (B, S, K)
+        l0 = alpha0_logits.float()  # (B, S, K)
+        l1 = alpha1_logits.float()  # (B, S, K)
+        l_bg = torch.zeros_like(l0)  # bg logit = 0 (reference)
 
-        # alpha_total(z) = 1 - (1 - alpha0(z)) * (1 - alpha1(z))
-        alpha_total = 1.0 - (1.0 - a0) * (1.0 - a1)  # (B, S, K)
+        # Per-bin softmax competition: e0 vs e1 vs bg
+        logits = torch.stack([l0, l1, l_bg], dim=-1)  # (B, S, K, 3)
+        probs = torch.softmax(logits, dim=-1)  # (B, S, K, 3)
+        p0 = probs[..., 0]   # (B, S, K)
+        p1 = probs[..., 1]   # (B, S, K)
+        p_bg = probs[..., 2]  # (B, S, K)
 
-        # T(z) = prod_{k<z} (1 - alpha_total(k))
-        # T(0) = 1.0
-        # T(z) = T(z-1) * (1 - alpha_total(z-1))
-        one_minus_alpha = 1.0 - alpha_total  # (B, S, K)
-        # Cumulative product shifted by 1: [1, (1-a0), (1-a0)*(1-a1), ...]
-        # Use cumprod on (1 - alpha_total) then shift
-        cumprod = torch.cumprod(one_minus_alpha, dim=2)  # (B, S, K)
-        # T(z=0) = 1, T(z=1) = (1-alpha_total(0)), ...
-        T = torch.ones_like(cumprod)  # (B, S, K)
-        T[:, :, 1:] = cumprod[:, :, :-1]  # (B, S, K)
+        # Front-to-back transmittance
+        # T(z) = prod_{k<z} p_bg(k)
+        cumprod_bg = torch.cumprod(p_bg, dim=2)  # (B, S, K)
+        T = torch.ones_like(cumprod_bg)
+        T[:, :, 1:] = cumprod_bg[:, :, :-1]
 
-        # Per-bin rendering weights
-        w0_bins = T * a0  # (B, S, K)
-        w1_bins = T * a1  # (B, S, K)
+        # Rendering weights
+        w0_bins = T * p0  # (B, S, K)
+        w1_bins = T * p1  # (B, S, K)
 
-        # Background weight = transmittance after all bins
-        w_bg = cumprod[:, :, -1]  # (B, S)
+        # Background = transmittance after all bins
+        w_bg = cumprod_bg[:, :, -1]  # (B, S)
 
         # Compose features
-        # sum_z(w0(z)*feat0(z) + w1(z)*feat1(z)) + w_bg*feat_bg
         feat0_f = feat0_bins.float()  # (B, S, K, D)
         feat1_f = feat1_bins.float()  # (B, S, K, D)
         feat_bg_f = feat_bg.float()   # (B, S, D)
@@ -382,17 +390,34 @@ class Phase61Processor(nn.Module):
                 self._last_w1_bins     = w1_bins
                 self._last_w_bg        = w_bg
 
+                # Store visible routing for non-primary blocks to reuse
+                w0_vis = w0_bins.sum(dim=2).detach()  # (B, S)
+                w1_vis = w1_bins.sum(dim=2).detach()
+                w_bg_vis = w_bg.detach()
+                self._last_w0_vis = w0_vis
+                self._last_w1_vis = w1_vis
+                self._last_w_bg_vis = w_bg_vis
+
                 out = composed
             else:
-                # Non-primary: simple entity-presence gating
-                entity_presence = torch.maximum(
-                    F_0.float().abs().mean(dim=-1, keepdim=True),
-                    F_1.float().abs().mean(dim=-1, keepdim=True),
-                ).clamp(0.0, 1.0).to(dtype)  # (B, S, 1)
-
-                composed = 0.5 * F_0 + 0.5 * F_1  # (B, S, inner_dim)
-                blend = 0.3
-                out = (1.0 - blend) * F_g + blend * composed
+                # Non-primary: reuse primary block's visible routing
+                w0_r = getattr(self, '_shared_w0_vis', None)
+                if w0_r is not None and w0_r.shape[0] == B:
+                    # Interpolate routing to this block's spatial resolution
+                    H0 = int(w0_r.shape[1] ** 0.5)
+                    H1 = int(S ** 0.5)
+                    if H0 != H1 and H0 > 0 and H1 > 0:
+                        r0 = F.interpolate(w0_r.view(B, 1, H0, H0), size=(H1, H1), mode='nearest').view(B, S)
+                        r1 = F.interpolate(getattr(self, '_shared_w1_vis').view(B, 1, H0, H0), size=(H1, H1), mode='nearest').view(B, S)
+                        rbg = F.interpolate(getattr(self, '_shared_w_bg_vis').view(B, 1, H0, H0), size=(H1, H1), mode='nearest').view(B, S)
+                    else:
+                        r0, r1, rbg = w0_r, getattr(self, '_shared_w1_vis'), getattr(self, '_shared_w_bg_vis')
+                    out = (rbg.unsqueeze(-1).to(dtype) * F_g
+                         + r0.unsqueeze(-1).to(dtype) * F_0
+                         + r1.unsqueeze(-1).to(dtype) * F_1)
+                else:
+                    # Fallback: simple blend if primary hasn't run yet
+                    out = 0.7 * F_g + 0.15 * F_0 + 0.15 * F_1
         else:
             out = F_g
 
@@ -435,6 +460,19 @@ class Phase61Manager:
     def reset(self):
         for p in self.procs:
             p.reset()
+
+    def propagate_routing(self):
+        """Copy primary block's visible routing to non-primary blocks."""
+        p = self.primary
+        w0 = getattr(p, '_last_w0_vis', None)
+        w1 = getattr(p, '_last_w1_vis', None)
+        wbg = getattr(p, '_last_w_bg_vis', None)
+        if w0 is not None:
+            for i, proc in enumerate(self.procs):
+                if i != self.primary_idx:
+                    proc._shared_w0_vis = w0
+                    proc._shared_w1_vis = w1
+                    proc._shared_w_bg_vis = wbg
 
     @property
     def volume_predictions(
@@ -676,4 +714,23 @@ def build_depth_bin_targets(
             alpha1_tgt[b, :, 0][ov_b] = 1.0
             alpha0_tgt[b, :, 1][ov_b] = 1.0
 
-    return alpha0_tgt, alpha1_tgt
+    # Valid masks: where supervision is meaningful
+    # Exclusive: only front bin (bin 0) is supervised
+    # Overlap: both bins supervised for the entity
+    # Background: not supervised (all zeros → BCE already handles)
+    valid0 = torch.zeros(B, S, K, device=device)
+    valid1 = torch.zeros(B, S, K, device=device)
+
+    # Exclusive: supervise bin 0 only
+    valid0[:, :, 0][only0] = 1.0
+    valid1[:, :, 0][only1] = 1.0
+
+    # Overlap: supervise both bins
+    for b in range(B):
+        ov_b = overlap[b]
+        valid0[b, :, 0][ov_b] = 1.0
+        valid0[b, :, 1][ov_b] = 1.0
+        valid1[b, :, 0][ov_b] = 1.0
+        valid1[b, :, 1][ov_b] = 1.0
+
+    return alpha0_tgt, alpha1_tgt, valid0, valid1

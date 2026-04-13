@@ -24,25 +24,33 @@ def loss_composite(
 
 
 def loss_alpha_volume(
-    alpha0_bins: torch.Tensor,  # (B, S, K) predicted
-    alpha1_bins: torch.Tensor,  # (B, S, K) predicted
-    tgt0_bins:   torch.Tensor,  # (B, S, K) target
-    tgt1_bins:   torch.Tensor,  # (B, S, K) target
-    eps:         float = 1e-6,
+    alpha0_logits: torch.Tensor,  # (B, S, K) raw logits from DepthVolumeHead
+    alpha1_logits: torch.Tensor,  # (B, S, K) raw logits
+    tgt0_bins:     torch.Tensor,  # (B, S, K) target
+    tgt1_bins:     torch.Tensor,  # (B, S, K) target
+    valid0:        torch.Tensor = None,  # (B, S, K) optional mask for valid bins
+    valid1:        torch.Tensor = None,
+    eps:           float = 1e-6,
 ) -> torch.Tensor:
     """
-    BCE on per-bin alpha predictions vs depth-bin targets.
+    BCE with logits on per-bin alpha predictions vs depth-bin targets.
 
-    Each bin independently predicts occupancy; targets come from
-    build_depth_bin_targets() which assigns front/back layers.
+    Uses binary_cross_entropy_with_logits for numerical stability.
+    Optional valid masks allow ignoring bins where GT is ambiguous.
     """
-    a0 = alpha0_bins.float().clamp(eps, 1.0 - eps)  # (B, S, K)
-    a1 = alpha1_bins.float().clamp(eps, 1.0 - eps)  # (B, S, K)
-    t0 = tgt0_bins.float()  # (B, S, K)
-    t1 = tgt1_bins.float()  # (B, S, K)
+    l0 = alpha0_logits.float()
+    l1 = alpha1_logits.float()
+    t0 = tgt0_bins.float()
+    t1 = tgt1_bins.float()
 
-    bce0 = F.binary_cross_entropy(a0, t0, reduction="mean")
-    bce1 = F.binary_cross_entropy(a1, t1, reduction="mean")
+    if valid0 is not None and valid1 is not None:
+        v0 = valid0.float()
+        v1 = valid1.float()
+        bce0 = (F.binary_cross_entropy_with_logits(l0, t0, reduction="none") * v0).sum() / v0.sum().clamp(min=1.0)
+        bce1 = (F.binary_cross_entropy_with_logits(l1, t1, reduction="none") * v1).sum() / v1.sum().clamp(min=1.0)
+    else:
+        bce0 = F.binary_cross_entropy_with_logits(l0, t0, reduction="mean")
+        bce1 = F.binary_cross_entropy_with_logits(l1, t1, reduction="mean")
 
     return 0.5 * (bce0 + bce1)
 
@@ -92,8 +100,9 @@ def loss_depth_expected(
     B, S, K = alpha0_bins.shape
     device = alpha0_bins.device
 
-    a0 = alpha0_bins.float()  # (B, S, K)
-    a1 = alpha1_bins.float()  # (B, S, K)
+    # Apply sigmoid since inputs are now raw logits
+    a0 = torch.sigmoid(alpha0_bins.float())  # (B, S, K)
+    a1 = torch.sigmoid(alpha1_bins.float())  # (B, S, K)
 
     # Bin indices: [0, 1, ..., K-1]
     bin_idx = torch.arange(K, device=device, dtype=torch.float32)  # (K,)
