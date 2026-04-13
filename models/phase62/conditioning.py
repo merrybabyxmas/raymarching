@@ -199,28 +199,34 @@ class GuideFeatureAssembler(nn.Module):
 def inject_guide_into_unet_features(
     hidden_states: torch.Tensor,   # (B, C_block, T, H_block, W_block) for video
     guide: torch.Tensor,           # (B, C_block, H_block, W_block)
+    max_ratio: float = 0.1,        # guide magnitude cap relative to hidden_states
 ) -> torch.Tensor:
     """
     Add guide features to UNet hidden states via spatial addition.
 
+    Guide is scaled so its magnitude doesn't exceed max_ratio * hidden_states std.
+    This prevents guide from overwhelming the UNet and causing color artifacts.
+
     Handles both 4D (image) and 5D (video) hidden states.
     For video: broadcasts guide across time dimension.
     """
+    # Scale guide to prevent overwhelming UNet activations (causes pink artifacts)
+    hs_std = hidden_states.float().std().clamp(min=1e-6)
+    guide_std = guide.float().std().clamp(min=1e-8)
+    if guide_std > max_ratio * hs_std:
+        guide = guide * (max_ratio * hs_std / guide_std)
+
     if hidden_states.dim() == 5:
-        # Video: (B_hs, C, T, H, W)
         B_hs = hidden_states.shape[0]
         T = hidden_states.shape[2]
         H_block, W_block = hidden_states.shape[3], hidden_states.shape[4]
-        # Spatial resize if needed
         if guide.shape[2] != H_block or guide.shape[3] != W_block:
             guide = F.interpolate(guide, size=(H_block, W_block), mode='nearest')
-        # Batch broadcast: CFG doubles the batch (uncond + cond)
         if guide.shape[0] != B_hs:
             guide = guide.repeat(B_hs // max(guide.shape[0], 1), 1, 1, 1)
-        guide_5d = guide.unsqueeze(2).expand(-1, -1, T, -1, -1)  # (B, C, T, H, W)
+        guide_5d = guide.unsqueeze(2).expand(-1, -1, T, -1, -1)
         return hidden_states + guide_5d
     else:
-        # Image: (B_hs, C, H, W)
         B_hs = hidden_states.shape[0]
         H_block, W_block = hidden_states.shape[2], hidden_states.shape[3]
         if guide.shape[2] != H_block or guide.shape[3] != W_block:
