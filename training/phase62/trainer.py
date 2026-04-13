@@ -590,11 +590,23 @@ class Phase62Trainer:
                 + self.train_cfg.la_vol * self.stage3_la_vol_scale * l_vol
             )
 
-        if not torch.isfinite(loss):
+        # Clamp total loss to prevent extreme gradients
+        if not torch.isfinite(loss) or loss.item() > 500.0:
             self.system.clear_guides()
             return None
 
         loss.backward()
+
+        # Check for NaN in gradients — skip step if found
+        has_nan = False
+        for pg in self.param_groups.values():
+            for p in pg:
+                if p.grad is not None and not torch.isfinite(p.grad).all():
+                    has_nan = True
+                    p.grad.zero_()
+        if has_nan:
+            self.system.clear_guides()
+            return None
 
         # Gradient clipping — tight to prevent NaN after epoch 18
         torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=0.5)

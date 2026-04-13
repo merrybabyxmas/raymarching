@@ -114,12 +114,11 @@ def loss_projected_balance(
     union = pred.sum(dim=(2, 3)) + gt.sum(dim=(2, 3)) - inter
     iou = (inter + eps) / (union + eps)  # (B, 2)
 
-    # min-IoU: penalizes the weaker entity with LOG scale gradient
-    # When min_iou→0: loss → -log(eps) ≈ 14 (very strong gradient)
+    # min-IoU penalty: (1 - min_iou)^2 — quadratic, bounded, no NaN risk
+    # When min_iou→0: loss → 1 (strong but finite gradient)
     # When min_iou→1: loss → 0
-    # This provides much stronger gradient than 1-min_iou when one entity dies
     min_iou = iou.min(dim=1).values  # (B,)
-    return -torch.log(min_iou.clamp(min=eps)).mean()
+    return ((1.0 - min_iou) ** 2).mean()
 
 
 def compute_volume_accuracy(
