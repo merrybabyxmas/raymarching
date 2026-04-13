@@ -253,7 +253,7 @@ def loss_temporal(
         + (own1_seq[1:] - own1_seq[:-1]).abs().mean()
     ) * 0.5
 
-    return la * (l_alpha + l_own)
+    return l_alpha + l_own
 
 
 # =============================================================================

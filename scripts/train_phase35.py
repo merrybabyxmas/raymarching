@@ -60,7 +60,7 @@ from scripts.train_phase31 import (
     INJECT_KEY, INJECT_QUERY_DIM,
     DEPTH_PE_INIT_SCALE, VCA_ALPHA,
     ObjaverseDatasetWithMasks,
-    make_color_prompts, get_color_entity_context,
+    make_color_prompts, make_identity_prompts, get_color_entity_context,
     l_zorder_direct,
     restore_procs,
     measure_depth_rank_accuracy,
@@ -117,14 +117,53 @@ def inject_vca_p35(pipe, vca_layer: VCALayer, entity_ctx: torch.Tensor,
 # Entity token 위치 조회
 # =============================================================================
 
+def _entity_search_candidates(meta: dict, primary_text: str, keyword_key: str, prompt_key: str) -> list[str]:
+    """Build robust fallback candidates for entity token span search."""
+    candidates: list[str] = []
+
+    def _add(text: str):
+        text = str(text or "").strip()
+        if not text:
+            return
+        variants = [text]
+        lowered = text.lower()
+        for prefix in ("a ", "an ", "the "):
+            if lowered.startswith(prefix):
+                variants.append(text[len(prefix):].strip())
+                break
+        parts = text.replace(",", " ").split()
+        if len(parts) >= 2:
+            variants.append(parts[-1].strip())
+        for variant in variants:
+            variant = str(variant or "").strip()
+            if variant and variant not in candidates:
+                candidates.append(variant)
+
+    _add(primary_text)
+    _add(meta.get(keyword_key, ""))
+    _add(meta.get(prompt_key, ""))
+    return candidates
+
+
 def get_entity_token_positions(pipe, meta: dict) -> tuple[list[int], list[int], str]:
     """
     meta.json 의 entity text → full_prompt 내 token 위치 반환.
     Returns (e0_positions, e1_positions, full_prompt)
     """
-    e0_text, e1_text, full_prompt, _, _ = make_color_prompts(meta)
-    toks_e0 = find_entity_token_positions(pipe.tokenizer, full_prompt, e0_text)
-    toks_e1 = find_entity_token_positions(pipe.tokenizer, full_prompt, e1_text)
+    e0_text, e1_text, full_prompt, _, _ = make_identity_prompts(meta)
+
+    toks_e0: list[int] = []
+    for cand in _entity_search_candidates(meta, e0_text, "keyword0", "prompt_entity0"):
+        toks_e0 = find_entity_token_positions(pipe.tokenizer, full_prompt, cand)
+        if toks_e0:
+            break
+
+    toks_e1: list[int] = []
+    for cand in _entity_search_candidates(meta, e1_text, "keyword1", "prompt_entity1"):
+        toks_e1 = find_entity_token_positions(pipe.tokenizer, full_prompt, cand)
+        if toks_e1:
+            break
+
     return toks_e0, toks_e1, full_prompt
 
 
