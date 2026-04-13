@@ -33,6 +33,9 @@ from training.phase62.losses import (
     loss_diffusion,
     loss_projected_balance,
     loss_projected_global,
+    loss_amodal_dice,
+    loss_visible_dice,
+    loss_voxel_exclusive,
     loss_volume_ce,
     compute_volume_accuracy,
 )
@@ -496,7 +499,7 @@ class Phase62Trainer:
             return None
 
         # --- Volume prediction ---
-        V_logits = self.system.predict_volume(F_g, F_0, F_1)  # (B, 3, K, H, W)
+        vol_outputs = self.system.predict_volume(F_g, F_0, F_1)
 
         # --- Build V_gt ---
         depth_maps = depth_np[:T_frames] if depth_np is not None else None
@@ -510,19 +513,29 @@ class Phase62Trainer:
             )
             V_gt = torch.from_numpy(V_gt_np).to(self.device).long()  # (T, K, H, W)
         else:
-            # Fallback: all background (degenerate case for collision aug)
             V_gt = torch.zeros(
                 T_frames, self.config.depth_bins,
                 self.config.spatial_h, self.config.spatial_w,
                 dtype=torch.long, device=self.device)
 
         # Match batch dimension
-        B_feat = V_logits.shape[0]
+        B_feat = vol_outputs.entity_probs.shape[0]
         if V_gt.shape[0] < B_feat:
             n_rep = max(1, B_feat // V_gt.shape[0])
             V_gt = V_gt.repeat(n_rep, 1, 1, 1)[:B_feat]
 
-        # --- L_volume_ce ---
+        # --- L_volume_ce (backward compat: build 3-ch logits from entity_logits) ---
+        if vol_outputs.entity_logits is not None:
+            V_logits = torch.cat([
+                torch.zeros(B_feat, 1, *vol_outputs.entity_logits.shape[2:],
+                            device=self.device),
+                vol_outputs.entity_logits,
+            ], dim=1)
+        else:
+            V_logits = torch.zeros(B_feat, 3, self.config.depth_bins,
+                                   self.config.spatial_h, self.config.spatial_w,
+                                   device=self.device)
+
         if self.ignore_background_voxels:
             voxel_weights = torch.full_like(V_gt, float(self.volume_negative_weight), dtype=torch.float32)
             voxel_weights = torch.where(V_gt > 0, torch.ones_like(voxel_weights), voxel_weights)
@@ -547,14 +560,32 @@ class Phase62Trainer:
         stage = self._get_stage(epoch)
         use_diffusion = stage != "stage1"
 
-        # Always run projection for balance loss (even in stage1)
-        visible_class, front_probs, back_probs, guides = self.system.project_and_assemble(
-            V_logits, F_g, F_0, F_1)
+        # Always run projection (even in stage1) for amodal/visible/exclusive losses
+        vol_outputs, guides = self.system.project_and_assemble(vol_outputs, F_g, F_0, F_1)
+        visible_class = vol_outputs.visible_class
+        front_probs = vol_outputs.front_probs
+        back_probs = vol_outputs.back_probs
 
-        src_masks = visible_masks if visible_masks is not None else entity_masks
-        gt_visible = self._build_gt_visible_tensor(src_masks, B_feat)
+        # Build GT tensors for both amodal and visible
+        gt_amodal = self._build_gt_visible_tensor(entity_masks, B_feat)  # amodal = full entity mask
+        src_vis = visible_masks if visible_masks is not None else entity_masks
+        gt_visible = self._build_gt_visible_tensor(src_vis, B_feat)
+
+        # Proven working losses from v2 run (iou_e0=0.088, iou_e1=0.045)
         l_global = loss_projected_global(front_probs[:gt_visible.shape[0]], gt_visible)
-        l_balance = loss_projected_balance(front_probs[:gt_visible.shape[0]], gt_visible)
+
+        # min-IoU balance (quadratic, bounded) — the version that worked
+        pred_bal = front_probs[:gt_visible.shape[0], 1:3].float()
+        gt_bal = gt_visible.float()
+        inter_bal = (pred_bal * gt_bal).sum(dim=(2, 3))
+        union_bal = pred_bal.sum(dim=(2, 3)) + gt_bal.sum(dim=(2, 3)) - inter_bal
+        iou_bal = (inter_bal + 1e-6) / (union_bal + 1e-6)
+        min_iou_bal = iou_bal.min(dim=1).values
+        l_balance = ((1.0 - min_iou_bal) ** 2).mean()
+
+        # Voxel exclusive (light auxiliary — don't let it dominate)
+        l_excl = loss_voxel_exclusive(vol_outputs.entity_probs[:B_feat])
+        l_balance = l_balance + 0.1 * l_excl
 
         if use_diffusion:
             self.system.set_guides(guides)

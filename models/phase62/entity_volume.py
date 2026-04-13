@@ -2,25 +2,23 @@
 Phase 62 — Entity Volume Predictor
 ====================================
 
-Predicts a 3D entity volume V_logits (B, N+1, K, H, W) from UNet
-cross-attention features, where N+1 = 3 classes (bg=0, entity0=1, entity1=2).
+Supports multiple volume representations:
 
-This v2 predictor strengthens Rule-1-style topology bias by:
-  1. Building a deeper shared 3D trunk over (K, H, W)
-  2. Splitting bg / entity0 / entity1 into separate 3D branches
-  3. Letting each entity branch see both global context and its own slot feature
-
-The goal is to reduce one-entity winner collapse and encourage more coherent
-3D blobs before first-hit projection.
+1. 'independent': bg/e0/e1 as 3 independent heads (original)
+2. 'factorized_fg_id': fg_head + id_head (factorized foreground + identity)
+3. 'center_offset': fg_head + id_head + offset heads for center regression
 """
 from __future__ import annotations
+
+from typing import Optional
 
 import torch
 import torch.nn as nn
 
+from training.phase62.objectives.base import VolumeOutputs
+
 
 class Residual3DBlock(nn.Module):
-    """Simple residual 3D block for stronger spatial-depth continuity bias."""
 
     def __init__(self, channels: int):
         super().__init__()
@@ -49,13 +47,10 @@ class EntityVolumePredictor(nn.Module):
     """
     Predict 3D entity volume from UNet cross-attention features.
 
-    Input:
-        F_g  (B, S, D) — global attention features
-        F_0  (B, S, D) — entity-0 slot features
-        F_1  (B, S, D) — entity-1 slot features
-
-    Output:
-        V_logits (B, 3, K, H, W) — per-voxel class logits
+    Representation modes:
+      - 'independent': 3 class heads (bg, e0, e1) with independent sigmoid
+      - 'factorized_fg_id': fg_head (1ch) + id_head (2ch) — factorized
+      - 'center_offset': fg + id + per-entity 3D offset heads
     """
 
     def __init__(
@@ -66,6 +61,7 @@ class EntityVolumePredictor(nn.Module):
         spatial_h: int = 16,
         spatial_w: int = 16,
         hidden: int = 64,
+        representation: str = "independent",
     ):
         super().__init__()
         self.feat_dim = feat_dim
@@ -74,20 +70,15 @@ class EntityVolumePredictor(nn.Module):
         self.spatial_h = spatial_h
         self.spatial_w = spatial_w
         self.hidden = hidden
+        self.representation = representation
 
-        # Feature projectors.
         self.proj_g = nn.Linear(feat_dim, hidden)
         self.proj_e0 = nn.Linear(feat_dim, hidden)
         self.proj_e1 = nn.Linear(feat_dim, hidden)
 
-        # Entity identity embeddings — break symmetry between branches.
-        # Without these, e0_branch and e1_branch see similar F_0/F_1
-        # and one can dominate. The ID embeddings ensure each branch
-        # has a unique "identity signal" from the start.
         self.entity_id_e0 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
         self.entity_id_e1 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
 
-        # Shared 2D fusion before depth expansion.
         self.shared_2d = nn.Sequential(
             nn.Conv2d(hidden * 3, hidden * 2, kernel_size=3, padding=1, bias=True),
             nn.GELU(),
@@ -95,13 +86,11 @@ class EntityVolumePredictor(nn.Module):
             nn.GELU(),
         )
 
-        # Separate seeds for shared / bg / entity branches.
         self.expand_shared = nn.Conv2d(hidden, hidden * depth_bins, kernel_size=1, bias=True)
         self.expand_bg = nn.Conv2d(hidden, hidden * depth_bins, kernel_size=1, bias=True)
         self.expand_e0 = nn.Conv2d(hidden * 2, hidden * depth_bins, kernel_size=1, bias=True)
         self.expand_e1 = nn.Conv2d(hidden * 2, hidden * depth_bins, kernel_size=1, bias=True)
 
-        # Deeper shared 3D trunk to strengthen topology continuity bias.
         self.shared_3d_in = nn.Conv3d(hidden, hidden, kernel_size=3, padding=1, bias=True)
         self.shared_3d = nn.Sequential(
             Residual3DBlock(hidden),
@@ -110,40 +99,59 @@ class EntityVolumePredictor(nn.Module):
             Residual3DBlock(hidden),
         )
 
-        # Per-class branches. Each branch sees the shared trunk plus its own seed.
-        self.bg_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
-        self.e0_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
-        self.e1_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+        if representation == "independent":
+            self.bg_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+            self.e0_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+            self.e1_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+            self.bg_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
+            self.e0_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
+            self.e1_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
+        elif representation in ("factorized_fg_id", "center_offset"):
+            self.fg_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+            self.id_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+            self.fg_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
+            self.id_head = nn.Conv3d(hidden, 2, kernel_size=1, bias=True)
 
-        self.bg_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
-        self.e0_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
-        self.e1_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
+            if representation == "center_offset":
+                self.offset_e0_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+                self.offset_e1_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
+                self.offset_e0_head = nn.Conv3d(hidden, 3, kernel_size=1, bias=True)
+                self.offset_e1_head = nn.Conv3d(hidden, 3, kernel_size=1, bias=True)
+        else:
+            raise ValueError(f"Unknown representation: {representation}")
 
         self._init_weights()
 
     def _init_weights(self) -> None:
-        # All heads zero-init: no entity starts favored or disfavored
-        for head in (self.bg_head, self.e0_head, self.e1_head):
-            nn.init.zeros_(head.weight)
-            nn.init.zeros_(head.bias)
+        if self.representation == "independent":
+            for head in (self.bg_head, self.e0_head, self.e1_head):
+                nn.init.zeros_(head.weight)
+                nn.init.zeros_(head.bias)
+        elif self.representation in ("factorized_fg_id", "center_offset"):
+            nn.init.zeros_(self.fg_head.weight)
+            nn.init.zeros_(self.fg_head.bias)
+            nn.init.zeros_(self.id_head.weight)
+            nn.init.zeros_(self.id_head.bias)
+            if self.representation == "center_offset":
+                for head in (self.offset_e0_head, self.offset_e1_head):
+                    nn.init.zeros_(head.weight)
+                    nn.init.zeros_(head.bias)
 
     def _to_2d(self, feat: torch.Tensor) -> torch.Tensor:
         B = feat.shape[0]
-        H, W = self.spatial_h, self.spatial_w
-        return feat.permute(0, 2, 1).reshape(B, self.hidden, H, W)
+        return feat.permute(0, 2, 1).reshape(B, self.hidden, self.spatial_h, self.spatial_w)
 
     def _expand_3d(self, feat_2d: torch.Tensor, proj: nn.Conv2d) -> torch.Tensor:
         B = feat_2d.shape[0]
-        K = self.depth_bins
         h_3d = proj(feat_2d)
-        return h_3d.reshape(B, self.hidden, K, self.spatial_h, self.spatial_w)
+        return h_3d.reshape(B, self.hidden, self.depth_bins, self.spatial_h, self.spatial_w)
 
     def forward(
         self,
         F_g: torch.Tensor,
         F_0: torch.Tensor,
         F_1: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> VolumeOutputs:
         B = F_g.shape[0]
 
         h_g = self._to_2d(self.proj_g(F_g.float()))
@@ -160,19 +168,54 @@ class EntityVolumePredictor(nn.Module):
         e0_seed = self._expand_3d(torch.cat([h_shared_2d, h_e0], dim=1), self.expand_e0)
         e1_seed = self._expand_3d(torch.cat([h_shared_2d, h_e1], dim=1), self.expand_e1)
 
-        # BG branch: gets full gradient through shared_3d (scene understanding)
-        bg_feat = self.bg_branch(torch.cat([shared_3d, bg_seed], dim=1))
+        shared_3d_d = shared_3d.detach()
 
-        # Entity branches: DETACH shared_3d to prevent cross-entity interference.
-        # Without this, e0_loss gradient shifts shared_3d → hurts e1, causing oscillation.
-        # Entity branches learn purely from their own seeds (e0_seed, e1_seed).
-        # Shared_3d still gets gradient from bg_branch and composite loss.
-        shared_3d_detached = shared_3d.detach()
-        e0_feat = self.e0_branch(torch.cat([shared_3d_detached, e0_seed], dim=1))
-        e1_feat = self.e1_branch(torch.cat([shared_3d_detached, e1_seed], dim=1))
+        if self.representation == "independent":
+            bg_feat = self.bg_branch(torch.cat([shared_3d, bg_seed], dim=1))
+            e0_feat = self.e0_branch(torch.cat([shared_3d_d, e0_seed], dim=1))
+            e1_feat = self.e1_branch(torch.cat([shared_3d_d, e1_seed], dim=1))
 
-        bg_logit = self.bg_head(bg_feat)
-        e0_logit = self.e0_head(e0_feat)
-        e1_logit = self.e1_head(e1_feat)
+            bg_logit = self.bg_head(bg_feat)
+            e0_logit = self.e0_head(e0_feat)
+            e1_logit = self.e1_head(e1_feat)
 
-        return torch.cat([bg_logit, e0_logit, e1_logit], dim=1)
+            V_logits = torch.cat([bg_logit, e0_logit, e1_logit], dim=1)  # (B, 3, K, H, W)
+            entity_probs = torch.sigmoid(V_logits[:, 1:3].float())
+
+            return VolumeOutputs(
+                entity_logits=V_logits[:, 1:3],
+                entity_probs=entity_probs,
+            )
+
+        elif self.representation in ("factorized_fg_id", "center_offset"):
+            # fg branch uses shared_3d (gradient flows); id branch uses detached
+            fg_feat = self.fg_branch(torch.cat([shared_3d, bg_seed], dim=1))
+            id_feat = self.id_branch(torch.cat([shared_3d_d, e0_seed], dim=1))
+
+            fg_logit = self.fg_head(fg_feat)   # (B, 1, K, H, W)
+            id_logits = self.id_head(id_feat)  # (B, 2, K, H, W)
+
+            # p_fg = sigmoid(z_fg)
+            p_fg = torch.sigmoid(fg_logit[:, 0].float())  # (B, K, H, W)
+            # q_n = softmax(z_id)_n
+            q = torch.softmax(id_logits.float(), dim=1)   # (B, 2, K, H, W)
+            # p_n = p_fg * q_n
+            entity_probs = p_fg.unsqueeze(1) * q           # (B, 2, K, H, W)
+
+            outputs = VolumeOutputs(
+                fg_logit=fg_logit,
+                id_logits=id_logits,
+                entity_probs=entity_probs,
+            )
+
+            if self.representation == "center_offset":
+                off_e0_feat = self.offset_e0_branch(torch.cat([shared_3d_d, e0_seed], dim=1))
+                off_e1_feat = self.offset_e1_branch(torch.cat([shared_3d_d, e1_seed], dim=1))
+                offset_e0 = self.offset_e0_head(off_e0_feat)  # (B, 3, K, H, W)
+                offset_e1 = self.offset_e1_head(off_e1_feat)  # (B, 3, K, H, W)
+                outputs.amodal["offset_e0"] = offset_e0
+                outputs.amodal["offset_e1"] = offset_e1
+
+            return outputs
+
+        raise RuntimeError(f"Unknown representation: {self.representation}")

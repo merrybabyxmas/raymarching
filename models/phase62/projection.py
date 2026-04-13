@@ -5,10 +5,7 @@ Phase 62 — First-Hit Projection
 Scans the 3D volume front-to-back along the depth axis.
 The first non-background class encountered wins the pixel.
 
-No max pooling. No weighted average. No transparency.
-
-Training: straight-through estimator (hard argmax forward, soft backward).
-Inference: hard argmax.
+Accepts entity_probs from any representation (independent sigmoid or factorized).
 """
 from __future__ import annotations
 
@@ -16,46 +13,31 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from training.phase62.objectives.base import VolumeOutputs
+
 
 class FirstHitProjector(nn.Module):
-    """
-    First-hit projection from 3D volume to 2D class map.
-
-    For each pixel (b, h, w), scans depth bins k=0..K-1:
-      - Compute class = argmax(softmax(V_logits[:, :, k, h, w]))
-      - First k where class != bg_class wins
-
-    Returns:
-        visible_class: (B, H, W) int — hard class index per pixel
-        visible_probs: (B, C, H, W) — differentiable softmax probs at first-hit depth
-    """
 
     def __init__(self, n_classes: int = 3, bg_class: int = 0):
         super().__init__()
         self.n_classes = n_classes
         self.bg_class = bg_class
 
-    def forward(
-        self,
-        V_logits: torch.Tensor,  # (B, C, K, H, W)
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, vol_outputs: VolumeOutputs) -> VolumeOutputs:
         """
-        Args:
-            V_logits: (B, C, K, H, W) — per-voxel class logits
+        First-hit projection from entity_probs to 2D maps.
 
-        Returns:
-            visible_class: (B, H, W) int64 — visible class per pixel
-            front_probs: (B, C, H, W) float — differentiable first-hit projected probs
-            back_probs: (B, C, H, W) float — differentiable behind-front projected probs
+        Mutates vol_outputs in-place, adding:
+          visible_class, front_probs, back_probs, amodal, visible
         """
-        B, C, K, H, W = V_logits.shape
-        device = V_logits.device
+        entity_probs = vol_outputs.entity_probs  # (B, 2, K, H, W)
+        B, _, K, H, W = entity_probs.shape
+        C = self.n_classes
+        device = entity_probs.device
 
-        # Independent entity presences; no zero-sum competition at voxel level.
-        entity_probs = torch.sigmoid(V_logits[:, 1:3].float())  # (B, 2, K, H, W)
         occ = 1.0 - (1.0 - entity_probs[:, 0]) * (1.0 - entity_probs[:, 1])  # (B, K, H, W)
 
-        # Differentiable first-hit projection.
+        # Transmittance: T_k = prod_{j<k}(1 - occ_j)
         trans_before = []
         running = torch.ones(B, H, W, device=device, dtype=entity_probs.dtype)
         for k in range(K):
@@ -63,51 +45,51 @@ class FirstHitProjector(nn.Module):
             running = running * (1.0 - occ[:, k])
         trans_before = torch.stack(trans_before, dim=1)  # (B, K, H, W)
 
+        # Front entity projection: V_n = sum_k T_k * p_n(k)
         front_entity = (entity_probs * trans_before.unsqueeze(1)).sum(dim=2)  # (B, 2, H, W)
         front_bg = running.unsqueeze(1)
         front_probs = torch.cat([front_bg, front_entity], dim=1)
         front_probs = front_probs / front_probs.sum(dim=1, keepdim=True).clamp(min=1e-6)
 
-        # Hard class per voxel from independent entity presences.
-        entity_max, entity_idx = entity_probs.max(dim=1)  # (B, K, H, W)
+        # Hard class per voxel
+        entity_max, entity_idx = entity_probs.max(dim=1)
         class_per_voxel = torch.where(
             entity_max > 0.5,
             entity_idx + 1,
             torch.zeros_like(entity_idx),
         )
 
-        # First-hit scan: for each (b, h, w), find first k where class != bg
-        visible_class = torch.zeros(
-            B, H, W, dtype=torch.long, device=device)  # (B, H, W)
-        visible_depth = torch.full(
-            (B, H, W), K - 1, dtype=torch.long, device=device)  # default: last bin
-
+        # First-hit scan
+        visible_class = torch.zeros(B, H, W, dtype=torch.long, device=device)
         for k in range(K):
-            cls_k = class_per_voxel[:, k]  # (B, H, W)
-            # Update where: visible_class still bg AND cls_k is non-bg
+            cls_k = class_per_voxel[:, k]
             update_mask = (visible_class == self.bg_class) & (cls_k != self.bg_class)
             visible_class = torch.where(update_mask, cls_k, visible_class)
-            visible_depth = torch.where(
-                update_mask,
-                torch.full_like(visible_depth, k),
-                visible_depth,
-            )
 
-        # Straight-through front probabilities: hard in forward, soft in backward.
+        # Straight-through
         visible_hard = F.one_hot(visible_class, num_classes=C).permute(0, 3, 1, 2).float()
         front_probs_st = visible_hard - front_probs.detach() + front_probs
 
-        # Behind-front soft projection. Anything that has a non-background object
-        # somewhere in front contributes to the back stream.
-        has_front_before = 1.0 - trans_before  # (B, K, H, W)
-        back_entity = (entity_probs * has_front_before.unsqueeze(1)).sum(dim=2)  # (B, 2, H, W)
+        # Back projection
+        has_front_before = 1.0 - trans_before
+        back_entity = (entity_probs * has_front_before.unsqueeze(1)).sum(dim=2)
         back_bg = torch.zeros(B, 1, H, W, device=device, dtype=entity_probs.dtype)
         back_probs = torch.cat([back_bg, back_entity], dim=1)
         back_sum = back_probs.sum(dim=1, keepdim=True)
-        back_probs = torch.where(
-            back_sum > 1e-6,
-            back_probs / back_sum.clamp(min=1e-6),
-            back_probs,
-        )
+        back_probs = torch.where(back_sum > 1e-6, back_probs / back_sum.clamp(min=1e-6), back_probs)
 
-        return visible_class, front_probs_st, back_probs
+        # Amodal: A_n = 1 - prod_k(1 - p_n(k))
+        amodal_e0 = 1.0 - (1.0 - entity_probs[:, 0]).prod(dim=1)
+        amodal_e1 = 1.0 - (1.0 - entity_probs[:, 1]).prod(dim=1)
+
+        # Visible per entity: V_n = sum_k T_k * p_n(k)
+        visible_e0 = (trans_before * entity_probs[:, 0]).sum(dim=1)
+        visible_e1 = (trans_before * entity_probs[:, 1]).sum(dim=1)
+
+        vol_outputs.visible_class = visible_class
+        vol_outputs.front_probs = front_probs_st
+        vol_outputs.back_probs = back_probs
+        vol_outputs.amodal.update({"e0": amodal_e0, "e1": amodal_e1})
+        vol_outputs.visible.update({"e0": visible_e0, "e1": visible_e1})
+
+        return vol_outputs

@@ -1,0 +1,46 @@
+# A1: independent_bce + S1 (freeze_bind) + front_only guide
+objective: independent_bce
+schedule: S1
+representation: independent
+guide_family: front_only
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+
+training:
+  epochs: 50
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 3e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 2.0
+  entity_pos_weight: 50.0
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 42
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

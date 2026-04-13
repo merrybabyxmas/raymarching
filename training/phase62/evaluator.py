@@ -4,8 +4,8 @@ Phase 62 — Evaluator
 
 Validation evaluation: 3-pass process for each sample.
   1. UNet forward (no guide) -> extract F_g, F_0, F_1
-  2. Volume prediction -> V_logits
-  3. Compute L_volume_ce, L_diffusion, accuracy metrics
+  2. Volume prediction -> VolumeOutputs
+  3. Compute structural loss, accuracy, projected IoU
 """
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from scripts.train_phase35 import get_entity_token_positions
 
 
 def _encode_text(pipe, text: str, device: str) -> torch.Tensor:
-    """Encode text to CLIP hidden states: (1, 77, 768) fp16."""
     tok = pipe.tokenizer(
         text, return_tensors="pt", padding="max_length",
         max_length=pipe.tokenizer.model_max_length, truncation=True,
@@ -33,7 +32,6 @@ def _encode_text(pipe, text: str, device: str) -> torch.Tensor:
 
 
 def _get_entity_tokens_with_fallback(pipe, meta, device):
-    """Get entity token positions with keyword-based fallback."""
     toks_e0, toks_e1, full_prompt = get_entity_token_positions(pipe, meta)
 
     if not toks_e0 or not toks_e1:
@@ -63,24 +61,11 @@ def _get_entity_tokens_with_fallback(pipe, meta, device):
 
 
 class Phase62Evaluator:
-    """
-    Validation evaluation for Phase 62.
-
-    Runs 3-pass eval on each validation sample:
-      1. UNet forward (no guide) to extract features
-      2. Volume prediction + V_gt construction
-      3. Metrics computation
-
-    Usage:
-        evaluator = Phase62Evaluator()
-        results = evaluator.evaluate(pipe, system, backbone_mgr, dataset, val_idx, device, config)
-    """
 
     def __init__(self):
         self._gt_builder: VolumeGTBuilder | None = None
 
     def _get_gt_builder(self, config) -> VolumeGTBuilder:
-        """Lazily create GT builder from config."""
         if self._gt_builder is None:
             self._gt_builder = VolumeGTBuilder(
                 depth_bins=config.depth_bins,
@@ -94,21 +79,13 @@ class Phase62Evaluator:
     def evaluate(
         self,
         pipe,
-        system,        # Phase62System
-        backbone_mgr,  # BackboneManager
-        dataset,       # Phase62DatasetAdapter or ObjaverseDatasetPhase40
+        system,
+        backbone_mgr,
+        dataset,
         val_idx: List[int],
         device: str,
         config,
     ) -> Dict:
-        """
-        Run evaluation on validation set.
-
-        Returns dict with:
-            val_score, val_diff_mse, val_vol_ce,
-            val_acc_overall, val_acc_entity,
-            val_iou_e0, val_iou_e1, n_samples
-        """
         system.eval()
         backbone_mgr.eval()
 
@@ -128,7 +105,6 @@ class Phase62Evaluator:
             try:
                 sample = dataset[vi]
 
-                # Handle both dict-based and tuple-based samples
                 visible_masks = None
                 sample_dir = None
                 if isinstance(sample, dict):
@@ -147,13 +123,11 @@ class Phase62Evaluator:
                     else:
                         frames_np, depth_np, depth_orders, meta, entity_masks = sample[:5]
 
-                # Entity tokens
                 toks_e0_t, toks_e1_t, full_prompt = _get_entity_tokens_with_fallback(
                     pipe, meta, device)
                 backbone_mgr.set_entity_tokens(toks_e0_t, toks_e1_t)
                 backbone_mgr.reset_slot_store()
 
-                # Encode
                 latents = encode_frames_to_latents(pipe, frames_np, device)
                 noise = torch.randn_like(latents)
                 t_tensor = torch.tensor([t_fixed], device=device).long()
@@ -163,29 +137,25 @@ class Phase62Evaluator:
                 T_frames = min(frames_np.shape[0], entity_masks.shape[0],
                                len(depth_orders))
 
-                # UNet forward to extract features
                 system.clear_guides()
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     noise_pred = pipe.unet(
                         noisy, t_tensor, encoder_hidden_states=enc_full).sample
 
-                # Diffusion loss
                 noise_t = noise[:, :, :T_frames].float()
                 noise_pred_t = noise_pred[:, :, :T_frames].float()
                 l_diff = loss_diffusion(noise_pred_t, noise_t)
                 diff_losses.append(float(l_diff.item()))
 
-                # Extract features from primary backbone
                 F_g = backbone_mgr.primary.last_Fg
                 F_0 = backbone_mgr.primary.last_F0
                 F_1 = backbone_mgr.primary.last_F1
                 if F_g is None or F_0 is None or F_1 is None:
                     continue
 
-                # Volume prediction
-                V_logits = system.predict_volume(F_g, F_0, F_1)  # (B, 3, K, H, W)
+                # Volume prediction returns VolumeOutputs
+                vol_outputs = system.predict_volume(F_g, F_0, F_1)
 
-                # Build V_gt
                 depth_maps = depth_np[:T_frames]
                 V_gt_np = gt_builder.build_batch(
                     depth_maps, entity_masks[:T_frames],
@@ -194,23 +164,45 @@ class Phase62Evaluator:
                     meta=meta,
                     sample_dir=sample_dir,
                 )
-                V_gt = torch.from_numpy(V_gt_np).to(device).long()  # (T, K, H, W)
+                V_gt = torch.from_numpy(V_gt_np).to(device).long()
 
-                # Match batch dim
-                B_feat = V_logits.shape[0]
+                B_feat = vol_outputs.entity_probs.shape[0]
                 if V_gt.shape[0] < B_feat:
                     n_rep = max(1, B_feat // V_gt.shape[0])
                     V_gt = V_gt.repeat(n_rep, 1, 1, 1)[:B_feat]
 
-                l_vol = loss_volume_ce(V_logits, V_gt)
-                vol_ce_losses.append(float(l_vol.item()))
+                # Volume CE (backward compat — uses entity_logits if available)
+                if vol_outputs.entity_logits is not None:
+                    V_logits_3ch = torch.cat([
+                        torch.zeros(B_feat, 1, *vol_outputs.entity_logits.shape[2:],
+                                    device=device),
+                        vol_outputs.entity_logits,
+                    ], dim=1)
+                    l_vol = loss_volume_ce(V_logits_3ch, V_gt)
+                    vol_ce_losses.append(float(l_vol.item()))
 
-                acc = compute_volume_accuracy(V_logits, V_gt)
+                    acc = compute_volume_accuracy(V_logits_3ch, V_gt)
+                else:
+                    # Factorized: compute accuracy from entity_probs
+                    ep = vol_outputs.entity_probs
+                    p0, p1 = ep[:, 0], ep[:, 1]
+                    pred_class = torch.zeros_like(V_gt.long())
+                    has_ent = (p0 > 0.5) | (p1 > 0.5)
+                    pred_class = torch.where(has_ent & (p0 >= p1), torch.ones_like(pred_class), pred_class)
+                    pred_class = torch.where(has_ent & (p1 > p0), torch.full_like(pred_class, 2), pred_class)
+                    correct = (pred_class == V_gt.long())
+                    acc = {
+                        "overall_acc": correct.float().mean().item(),
+                        "entity_acc": correct[V_gt > 0].float().mean().item() if (V_gt > 0).any() else 0.0,
+                    }
+
                 vol_accs_overall.append(acc["overall_acc"])
                 vol_accs_entity.append(acc["entity_acc"])
 
-                # Projected class IoU across every aligned frame/batch element.
-                visible_class, front_probs, back_probs = system.projector(V_logits)
+                # Project for IoU
+                vol_outputs = system.projector(vol_outputs)
+                visible_class = vol_outputs.visible_class
+
                 if entity_masks.shape[0] > 0:
                     src_masks = visible_masks if visible_masks is not None else entity_masks
                     n_eval = min(int(visible_class.shape[0]), int(src_masks.shape[0]))
@@ -237,7 +229,7 @@ class Phase62Evaluator:
             return sum(lst) / max(len(lst), 1) if lst else 999.0
 
         val_diff = _avg(diff_losses)
-        val_vol_ce = _avg(vol_ce_losses)
+        val_vol_ce = _avg(vol_ce_losses) if vol_ce_losses else 0.0
         val_acc_all = _avg(vol_accs_overall) if vol_accs_overall else 0.0
         val_acc_ent = _avg(vol_accs_entity) if vol_accs_entity else 0.0
         val_iou_e0 = _avg(ious_e0) if ious_e0 else 0.0
@@ -245,7 +237,6 @@ class Phase62Evaluator:
 
         val_iou_min = min(val_iou_e0, val_iou_e1)
 
-        # Score should reward two-entity separation, not one-sided wins.
         val_score = (
             0.10 * (1.0 / (1.0 + val_diff))
             + 0.10 * (1.0 / (1.0 + val_vol_ce))
