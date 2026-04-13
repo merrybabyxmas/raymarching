@@ -93,7 +93,11 @@ class Phase62RolloutRunner:
 
         # Compute probe MSE if GT available
         if gt_frames is not None:
-            gt = np.stack(gt_frames[:n_frames], axis=0).astype(np.float32) / 255.0
+            gt_list = []
+            for gf in gt_frames[:n_frames]:
+                g = Image.fromarray(gf).resize((width, height), Image.BILINEAR)
+                gt_list.append(np.array(g))
+            gt = np.stack(gt_list, axis=0).astype(np.float32) / 255.0
             pred = np.stack(comp_frames[:n_frames], axis=0).astype(np.float32) / 255.0
             T_comp = min(gt.shape[0], pred.shape[0])
             probe_mse = float(((gt[:T_comp] - pred[:T_comp]) ** 2).mean())
