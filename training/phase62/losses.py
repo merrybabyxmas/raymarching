@@ -65,11 +65,11 @@ def loss_volume_ce(
     l_e0 = _entity_loss(logits_e0, tgt_e0)
     l_e1 = _entity_loss(logits_e1, tgt_e1)
 
-    # Soft dynamic balancing with EMA smoothing.
-    # Detached shared_3d prevents most oscillation, but slight rebalancing
-    # helps when one entity is structurally harder in the data.
+    # Aggressive dynamic balancing: wider clamp to strongly correct asymmetry.
+    # Previous [0.8, 1.25] was too narrow — one entity drifting away couldn't be
+    # pulled back fast enough. [0.5, 2.0] gives 4x range for correction.
     with torch.no_grad():
-        ratio = (l_e0 / (l_e1 + 1e-6)).clamp(0.8, 1.25)  # very narrow range
+        ratio = (l_e0 / (l_e1 + 1e-6)).clamp(0.5, 2.0)
         w0 = ratio / (ratio + 1.0)
         w1 = 1.0 - w0
     return w0 * l_e0 + w1 * l_e1
@@ -114,11 +114,19 @@ def loss_projected_balance(
     union = pred.sum(dim=(2, 3)) + gt.sum(dim=(2, 3)) - inter
     iou = (inter + eps) / (union + eps)  # (B, 2)
 
-    # min-IoU penalty: (1 - min_iou)^2 — quadratic, bounded, no NaN risk
-    # When min_iou→0: loss → 1 (strong but finite gradient)
-    # When min_iou→1: loss → 0
+    # min-IoU penalty + per-entity recall (coverage)
     min_iou = iou.min(dim=1).values  # (B,)
-    return ((1.0 - min_iou) ** 2).mean()
+    l_min = ((1.0 - min_iou) ** 2).mean()
+
+    # Per-entity RECALL: fraction of GT pixels covered by prediction.
+    # Penalizes "easy patch only" solutions — forces full-body coverage.
+    # recall = inter / gt_sum. If recall is low for either entity → penalty.
+    gt_sum = gt.sum(dim=(2, 3)).clamp(min=1.0)  # (B, 2)
+    recall = (inter + eps) / (gt_sum + eps)  # (B, 2)
+    min_recall = recall.min(dim=1).values  # (B,)
+    l_recall = ((1.0 - min_recall) ** 2).mean()
+
+    return l_min + 0.5 * l_recall
 
 
 def compute_volume_accuracy(
