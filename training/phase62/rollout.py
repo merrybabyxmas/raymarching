@@ -102,3 +102,32 @@ class Phase62RolloutRunner:
             result["probe_score"] = probe_score
 
         return result
+
+    def save_rollout(
+        self,
+        result: dict,
+        debug_dir,
+        prefix: str = "eval",
+    ) -> dict:
+        """Save rollout frames as GIF + overlay."""
+        debug_dir = Path(debug_dir)
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        paths = {}
+
+        frames = result.get("frames", [])
+        if frames:
+            gif_path = debug_dir / f"{prefix}_composite.gif"
+            iio2.mimwrite(str(gif_path), frames, fps=8, loop=0)
+            paths["composite_gif"] = str(gif_path)
+
+        overlay_frames = result.get("overlay_frames", [])
+        if overlay_frames:
+            overlay_gif = debug_dir / f"{prefix}_overlay.gif"
+            iio2.mimwrite(str(overlay_gif), overlay_frames, fps=8, loop=0)
+            paths["overlay_gif"] = str(overlay_gif)
+
+            overlay_png = debug_dir / f"{prefix}_overlay.png"
+            Image.fromarray(overlay_frames[0]).save(str(overlay_png))
+            paths["overlay_png"] = str(overlay_png)
+
+        return paths
