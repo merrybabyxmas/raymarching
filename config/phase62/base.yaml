@@ -1,0 +1,58 @@
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2  # mid_only | mid_up2 | multiscale
+update_schedule: hybrid  # fixed_once | hybrid | every_step
+
+training:
+  epochs: 25
+  steps_per_epoch: 20
+  eval_every: 3
+  lr_volume: 5e-4
+  lr_guide: 3e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 2.0
+  la_global: 1.0
+  la_balance: 0.5
+  volume_ce_warmup_epochs: 3
+  stage1_epochs: 3
+  stage2_epochs: 12
+  stage2_volume_lr_scale: 0.0
+  stage3_volume_lr_scale: 0.25
+  stage2_la_vol_scale: 0.25
+  stage3_la_vol_scale: 1.0
+  entity_voxel_boost: 4.0
+  entity_voxel_boost_warmup: 8.0
+  entity_density_sampling_weight: 1.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 42
+  collision_prob: 0.5
+  collision_ov_min: 0.005
+  collision_ov_max: 0.25
+  bg_class_weight: 0.02
+  entity_class_weight: 1.0
+  ignore_background_voxels: true
+  volume_negative_weight: 0.1
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

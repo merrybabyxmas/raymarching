@@ -1,0 +1,5 @@
+# Inherits from base.yaml — quick smoke test
+training:
+  epochs: 2
+  steps_per_epoch: 3
+  eval_every: 1
