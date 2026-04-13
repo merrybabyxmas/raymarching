@@ -1,0 +1,13 @@
+# 100-epoch training at 512x512 with gradient safety
+training:
+  epochs: 100
+  steps_per_epoch: 20
+  eval_every: 5
+  height: 512
+  width: 512
+  la_balance: 3.0
+  collision_prob: 0.6
+
+# up_blocks.2 spatial resolution is 16x16 regardless of generation resolution
+spatial_h: 16
+spatial_w: 16

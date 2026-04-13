@@ -596,11 +596,11 @@ class Phase62Trainer:
 
         loss.backward()
 
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=1.0)
-        torch.nn.utils.clip_grad_norm_(self.param_groups["assembler"], max_norm=1.0)
-        torch.nn.utils.clip_grad_norm_(self.param_groups["adapter"], max_norm=1.0)
-        torch.nn.utils.clip_grad_norm_(self.param_groups["lora"], max_norm=0.5)
+        # Gradient clipping — tight to prevent NaN after epoch 18
+        torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=0.5)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["assembler"], max_norm=0.5)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["adapter"], max_norm=0.5)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["lora"], max_norm=0.3)
 
         self.optimizer.step()
         self.system.clear_guides()

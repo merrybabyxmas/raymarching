@@ -52,6 +52,8 @@ def loss_volume_ce(
 
     def _entity_loss(logits, tgt):
         bce = F.binary_cross_entropy_with_logits(logits, tgt, reduction="none")
+        # Clamp individual BCE to prevent gradient explosion on extreme logits
+        bce = bce.clamp(max=20.0)
         pos_mask = (tgt > 0.5)
         neg_mask = ~pos_mask
         n_pos = pos_mask.float().sum().clamp(min=1.0)
