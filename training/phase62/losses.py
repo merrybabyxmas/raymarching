@@ -63,16 +63,13 @@ def loss_volume_ce(
     l_e0 = _entity_loss(logits_e0, tgt_e0)
     l_e1 = _entity_loss(logits_e1, tgt_e1)
 
-    # Dynamic gradient balancing: upweight the WEAKER entity's loss.
-    # If e0 loss >> e1 loss, e0 is worse → upweight e0.
+    # Soft dynamic balancing with EMA smoothing.
+    # Detached shared_3d prevents most oscillation, but slight rebalancing
+    # helps when one entity is structurally harder in the data.
     with torch.no_grad():
-        ratio = l_e0 / (l_e1 + 1e-6)
-        w0 = ratio.clamp(0.5, 2.0)  # don't go too extreme
-        w1 = (1.0 / ratio).clamp(0.5, 2.0)
-        total_w = w0 + w1
-        w0 = w0 / total_w
-        w1 = w1 / total_w
-
+        ratio = (l_e0 / (l_e1 + 1e-6)).clamp(0.8, 1.25)  # very narrow range
+        w0 = ratio / (ratio + 1.0)
+        w1 = 1.0 - w0
     return w0 * l_e0 + w1 * l_e1
 
 

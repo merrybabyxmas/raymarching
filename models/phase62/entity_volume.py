@@ -160,9 +160,16 @@ class EntityVolumePredictor(nn.Module):
         e0_seed = self._expand_3d(torch.cat([h_shared_2d, h_e0], dim=1), self.expand_e0)
         e1_seed = self._expand_3d(torch.cat([h_shared_2d, h_e1], dim=1), self.expand_e1)
 
+        # BG branch: gets full gradient through shared_3d (scene understanding)
         bg_feat = self.bg_branch(torch.cat([shared_3d, bg_seed], dim=1))
-        e0_feat = self.e0_branch(torch.cat([shared_3d, e0_seed], dim=1))
-        e1_feat = self.e1_branch(torch.cat([shared_3d, e1_seed], dim=1))
+
+        # Entity branches: DETACH shared_3d to prevent cross-entity interference.
+        # Without this, e0_loss gradient shifts shared_3d → hurts e1, causing oscillation.
+        # Entity branches learn purely from their own seeds (e0_seed, e1_seed).
+        # Shared_3d still gets gradient from bg_branch and composite loss.
+        shared_3d_detached = shared_3d.detach()
+        e0_feat = self.e0_branch(torch.cat([shared_3d_detached, e0_seed], dim=1))
+        e1_feat = self.e1_branch(torch.cat([shared_3d_detached, e1_seed], dim=1))
 
         bg_logit = self.bg_head(bg_feat)
         e0_logit = self.e0_head(e0_feat)
