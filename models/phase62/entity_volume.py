@@ -80,6 +80,13 @@ class EntityVolumePredictor(nn.Module):
         self.proj_e0 = nn.Linear(feat_dim, hidden)
         self.proj_e1 = nn.Linear(feat_dim, hidden)
 
+        # Entity identity embeddings — break symmetry between branches.
+        # Without these, e0_branch and e1_branch see similar F_0/F_1
+        # and one can dominate. The ID embeddings ensure each branch
+        # has a unique "identity signal" from the start.
+        self.entity_id_e0 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
+        self.entity_id_e1 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
+
         # Shared 2D fusion before depth expansion.
         self.shared_2d = nn.Sequential(
             nn.Conv2d(hidden * 3, hidden * 2, kernel_size=3, padding=1, bias=True),
@@ -140,8 +147,8 @@ class EntityVolumePredictor(nn.Module):
         B = F_g.shape[0]
 
         h_g = self._to_2d(self.proj_g(F_g.float()))
-        h_e0 = self._to_2d(self.proj_e0(F_0.float()))
-        h_e1 = self._to_2d(self.proj_e1(F_1.float()))
+        h_e0 = self._to_2d(self.proj_e0(F_0.float())) + self.entity_id_e0
+        h_e1 = self._to_2d(self.proj_e1(F_1.float())) + self.entity_id_e1
 
         h_cat = torch.cat([h_g, h_e0, h_e1], dim=1)
         h_shared_2d = self.shared_2d(h_cat)
