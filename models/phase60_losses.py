@@ -128,24 +128,28 @@ def loss_depth_order(
     if overlap.sum() < 1.0:
         return torch.tensor(0.0, device=depth0.device)
 
-    # Determine front entity (use first frame's depth order for the batch)
-    # In practice, batch_size=1 with multiple frames flattened
-    if len(depth_orders) > 0:
-        front = int(depth_orders[0][0])
-    else:
-        front = 0
+    # Per-frame depth ordering (B = n_frames in AnimateDiff)
+    B = depth0.shape[0]
+    total_violation = torch.tensor(0.0, device=depth0.device)
+    n_total = torch.tensor(0.0, device=depth0.device)
 
-    if front == 0:
-        # entity0 is front → depth0 should be smaller (closer)
-        violation = F.relu(depth0 - depth1 + margin)  # (B, S)
-    else:
-        # entity1 is front → depth1 should be smaller
-        violation = F.relu(depth1 - depth0 + margin)  # (B, S)
+    for b in range(B):
+        ov_b = overlap[b]
+        if ov_b.sum() < 1.0:
+            continue
+        # Use per-frame depth order (fallback to frame 0 if not enough)
+        fi = min(b, len(depth_orders) - 1) if depth_orders else 0
+        front = int(depth_orders[fi][0]) if fi < len(depth_orders) else 0
 
-    # Only penalize in overlap
-    masked_violation = violation * overlap
-    n_overlap = overlap.sum().clamp(min=1.0)
-    return masked_violation.sum() / n_overlap
+        if front == 0:
+            viol = F.relu(depth0[b] - depth1[b] + margin)
+        else:
+            viol = F.relu(depth1[b] - depth0[b] + margin)
+
+        total_violation = total_violation + (viol * ov_b).sum()
+        n_total = n_total + ov_b.sum()
+
+    return total_violation / n_total.clamp(min=1.0)
 
 
 # =============================================================================
@@ -178,15 +182,18 @@ def loss_entity_visible(
     delta0 = (F_0.float() - F_g.float()).pow(2).mean(dim=-1)  # (B, S)
     delta1 = (F_1.float() - F_g.float()).pow(2).mean(dim=-1)  # (B, S)
 
-    # We WANT divergence in visible regions → maximize delta in visible
-    # Use negative mean of delta in visible regions (to encourage divergence)
+    # Encourage moderate divergence (not too much, not too little)
+    # Target: delta ≈ 0.1 (moderate separation, not runaway)
     n_v0 = v0.sum().clamp(min=1.0)
     n_v1 = v1.sum().clamp(min=1.0)
 
-    vis_div = -((delta0 * v0).sum() / n_v0 + (delta1 * v1).sum() / n_v1) * 0.5
+    target_div = 0.1
+    div0 = (delta0 * v0).sum() / n_v0
+    div1 = (delta1 * v1).sum() / n_v1
 
-    # Clamp to prevent runaway divergence
-    return vis_div.clamp(min=-1.0)
+    # Pull toward target (not just maximize)
+    loss = 0.5 * ((div0 - target_div).pow(2) + (div1 - target_div).pow(2))
+    return loss
 
 
 # =============================================================================
@@ -199,14 +206,11 @@ def loss_leak(
     F_g:    torch.Tensor,  # (B, S, D) global features
     alpha0: torch.Tensor,  # (B, S) predicted entity 0 occupancy
     alpha1: torch.Tensor,  # (B, S) predicted entity 1 occupancy
-    la:     float = 0.3,
 ) -> torch.Tensor:
     """
     Entity features should be close to global features OUTSIDE own alpha region.
 
-    Prevents entity identity from leaking into background or other entity regions.
-
-    L = mean(||F_0 - F_g||^2 * (1 - alpha0)) + mean(||F_1 - F_g||^2 * (1 - alpha1))
+    NOTE: no internal la weighting — let training loop handle loss weights.
     """
     outside0 = (1.0 - alpha0.detach()).clamp(0, 1).unsqueeze(-1)  # (B, S, 1)
     outside1 = (1.0 - alpha1.detach()).clamp(0, 1).unsqueeze(-1)  # (B, S, 1)
@@ -217,7 +221,7 @@ def loss_leak(
     leak0 = (diff0 * outside0).mean()
     leak1 = (diff1 * outside1).mean()
 
-    return la * (leak0 + leak1)
+    return leak0 + leak1
 
 
 # =============================================================================
@@ -229,12 +233,11 @@ def loss_temporal(
     alpha1_seq: torch.Tensor,  # (T, S) alpha for entity 1 across frames
     own0_seq:   torch.Tensor,  # (T, S) ownership for entity 0 across frames
     own1_seq:   torch.Tensor,  # (T, S) ownership for entity 1 across frames
-    la:         float = 0.1,
 ) -> torch.Tensor:
     """
     Consecutive-frame alpha/ownership smoothness.
 
-    L = mean(|alpha_t - alpha_{t+1}|) + mean(|own_t - own_{t+1}|)
+    NOTE: no internal la weighting — let training loop handle loss weights.
     """
     T = alpha0_seq.shape[0]
     if T < 2:

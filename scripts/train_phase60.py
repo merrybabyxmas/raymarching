@@ -94,10 +94,10 @@ DEFAULT_LA_COMP           = 1.0
 DEFAULT_LA_ALPHA          = 1.0
 DEFAULT_LA_OWN            = 1.0
 DEFAULT_LA_DEPTH          = 0.5
-DEFAULT_LA_VIS            = 0.3
-DEFAULT_LA_SOLO           = 0.3
-DEFAULT_LA_LEAK           = 0.2
-DEFAULT_LA_TEMPORAL       = 0.1
+DEFAULT_LA_VIS            = 0.0   # disabled: saturates, re-enable after ablation
+DEFAULT_LA_SOLO           = 0.0   # disabled: needs solo-prompt token fix first
+DEFAULT_LA_LEAK           = 0.0   # disabled: double-weight fixed, re-enable after ablation
+DEFAULT_LA_TEMPORAL       = 0.0   # disabled: negligible effect, re-enable after ablation
 
 # Collision augmentation
 DEFAULT_COLLISION_PROB_A   = 0.5
@@ -698,6 +698,27 @@ def train_phase60(args):
             # ── Encode frames ────────────────────────────────────────────
             toks_e0, toks_e1, full_prompt = get_entity_token_positions(
                 pipe, meta)
+            # Fallback: if token search returns empty, use first/second noun tokens
+            if not toks_e0 or not toks_e1:
+                kw0 = str(meta.get("keyword0", "cat"))
+                kw1 = str(meta.get("keyword1", "dog"))
+                tok_ids = pipe.tokenizer.encode(full_prompt)
+                kw0_ids = pipe.tokenizer.encode(kw0, add_special_tokens=False)
+                kw1_ids = pipe.tokenizer.encode(kw1, add_special_tokens=False)
+                if not toks_e0 and kw0_ids:
+                    for i in range(len(tok_ids) - len(kw0_ids) + 1):
+                        if tok_ids[i:i+len(kw0_ids)] == kw0_ids:
+                            toks_e0 = list(range(i, i + len(kw0_ids)))
+                            break
+                if not toks_e1 and kw1_ids:
+                    for i in range(len(tok_ids) - len(kw1_ids) + 1):
+                        if tok_ids[i:i+len(kw1_ids)] == kw1_ids:
+                            toks_e1 = list(range(i, i + len(kw1_ids)))
+                            break
+                if not toks_e0:
+                    toks_e0 = [1, 2]
+                if not toks_e1:
+                    toks_e1 = [3, 4]
             toks_e0_t = torch.tensor(toks_e0, dtype=torch.long, device=device)
             toks_e1_t = torch.tensor(toks_e1, dtype=torch.long, device=device)
 
