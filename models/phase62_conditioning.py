@@ -159,17 +159,24 @@ def inject_guide_into_unet_features(
     For video: broadcasts guide across time dimension.
     """
     if hidden_states.dim() == 5:
-        # Video: (B, C, T, H, W) — broadcast guide across T
+        # Video: (B_hs, C, T, H, W)
+        B_hs = hidden_states.shape[0]
         T = hidden_states.shape[2]
         H_block, W_block = hidden_states.shape[3], hidden_states.shape[4]
-        # Resize guide to match block resolution if needed
+        # Spatial resize if needed
         if guide.shape[2] != H_block or guide.shape[3] != W_block:
             guide = F.interpolate(guide, size=(H_block, W_block), mode='nearest')
-        guide_5d = guide.unsqueeze(2).expand(-1, -1, T, -1, -1)  # (B, C, T, H, W)
+        # Batch broadcast: CFG doubles the batch (uncond + cond)
+        if guide.shape[0] != B_hs:
+            guide = guide.repeat(B_hs // max(guide.shape[0], 1), 1, 1, 1)
+        guide_5d = guide.unsqueeze(2).expand(-1, -1, T, -1, -1)
         return hidden_states + guide_5d
     else:
-        # Image: (B, C, H, W)
+        # Image: (B_hs, C, H, W)
+        B_hs = hidden_states.shape[0]
         H_block, W_block = hidden_states.shape[2], hidden_states.shape[3]
         if guide.shape[2] != H_block or guide.shape[3] != W_block:
             guide = F.interpolate(guide, size=(H_block, W_block), mode='nearest')
+        if guide.shape[0] != B_hs:
+            guide = guide.repeat(B_hs // max(guide.shape[0], 1), 1, 1, 1)
         return hidden_states + guide
