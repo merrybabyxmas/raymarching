@@ -204,7 +204,11 @@ class AblationTrainer:
                 group["lr"] = group["initial_lr"] if name == "volume_pred" else 0.0
 
         elif stage == "stage2":
-            freeze_vol = (self.schedule == "S1")
+            # S1 and S3 both freeze volume in stage2 (guide learns to bind to fixed vol).
+            # S3 comment says "stage2=freeze_bind" — volume frozen while adapter/LoRA train.
+            # Without freezing, diffusion gradients destroy the depth concentration built
+            # in stage1 (compact dropped 0.232→0.095 in v10 due to unfrozen volume).
+            freeze_vol = (self.schedule in ("S1", "S3"))
             low_lr_vol = (self.schedule == "S2")
             for p in self.param_groups["volume"]:
                 p.requires_grad_(not freeze_vol)

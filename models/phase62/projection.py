@@ -66,9 +66,17 @@ class FirstHitProjector(nn.Module):
         front_probs = front_probs / front_probs.sum(dim=1, keepdim=True).clamp(min=1e-6)
 
         # Hard class from sharpened probs
-        entity_max, entity_idx = entity_probs.max(dim=1)
+        # IMPORTANT: With depth-softmax architecture, entity_probs[:, n, k] is bounded
+        # by sigmoid(fg_max) × softmax_K[k] × q_n. When identity is balanced (q_n≈0.5),
+        # entity_max ≤ sigmoid(fg_max) × 0.5, which can NEVER exceed 0.5 threshold →
+        # all pixels classified as background, breaking visible_class and IoU metrics.
+        # Fix: use p_fg_k = entity_probs.sum(dim=1) as foreground detector.
+        # p_fg_k at front bin ≈ sigmoid(fg_max) which exceeds 0.5 whenever fg_max > 0.
+        # Entity selection uses argmax over entity dim (same as before).
+        p_fg_k = entity_probs.sum(dim=1)       # (B, K, H, W): fg prob per depth bin
+        entity_idx = entity_probs.argmax(dim=1)  # (B, K, H, W): dominant entity per bin
         class_per_voxel = torch.where(
-            entity_max > 0.5,
+            p_fg_k > 0.5,  # foreground if fg probability sum exceeds 0.5
             entity_idx + 1,
             torch.zeros_like(entity_idx),
         )
