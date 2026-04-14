@@ -1,0 +1,96 @@
+# B1 v32: lambda_id=7.0 — closer to entity-balance sweet spot (seed 7)
+#
+# Empirical lambda_id sweep findings (2026-04-14/15):
+#
+# winner vs lambda_id (stage2, mid-training):
+#   lambda_id=3  (v30): winner=0.70-0.74 → entity 0 collapses, vol_stage2_lr=0.01 too weak for L_balance
+#   lambda_id=5  (v31): winner=0.63-0.64 → entity 0 declining despite L_balance (same root cause)
+#   lambda_id=10 (v28/v29): winner=0.51-0.59 → entity balance maintained by strong id supervision alone
+#
+# overlay vs lambda_id (stage3, frozen fg_spatial):
+#   lambda_id=3  (v30): overlay=0.354-0.390 ✓ (broad fg_spatial, no boundary sharpening)
+#   lambda_id=10 (v28/v29): overlay=0.217-0.295 ✗ (aggressive boundary sharpening degrades IoU)
+#   lambda_id=5  (v31): unknown yet, but expected intermediate ~0.30-0.37
+#
+# Root cause of entity imbalance at lambda_id ≤ 5:
+#   vol_stage2_lr_factor=0.01 makes L_balance gradient too weak to correct entity imbalance.
+#   Lambda_id must be strong enough to maintain entity identity directly (without relying on L_balance).
+#   Empirically, lambda_id=10 achieves this; lambda_id=5 does not.
+#
+# Target: winner ≤ 0.55 AND overlay ≥ 0.35 in stage3.
+#   lambda_id=7 is 70% of the way to 10 on a log scale:
+#     Linear interpolation of winner: 0.73 + (7-3)/(10-3) × (0.55-0.73) = 0.73 - 0.10 = 0.63
+#     But the actual relationship is nonlinear (logit sharpening).
+#     Empirical lambda_id=5 → winner=0.64. lambda_id=7 → expected winner ~0.57-0.60.
+#     lambda_id=8 → expected winner ~0.54-0.57 (borderline).
+#   lambda_id=7 overlay prediction:
+#     Less boundary sharpening than lambda_id=10 → overlay ~0.30-0.35 in stage3 (hope: ≥ 0.35)
+#
+# v32 is the next search step toward the sweet spot.
+# If winner~0.57-0.60 (still above 0.55): v33 will try lambda_id=9.
+# If overlay < 0.35 in stage3: may need vol_stage2_lr_factor increase OR freeze_fg_spatial_stage3=False.
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 7.0              # v32: lambda_id sweep step; 5→7 to push winner toward ≤0.55
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
