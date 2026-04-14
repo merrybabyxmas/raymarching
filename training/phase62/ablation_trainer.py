@@ -158,18 +158,35 @@ class AblationTrainer:
         assembler_params = self.system.assembler_params()
         adapter_params = self.backbone_mgr.adapter_params()
         lora_params = self.backbone_mgr.lora_params()
+
+        # v15: Split fg_spatial_head into its own param group so it can be
+        # selectively unfrozen in stage2 while the deep volume stays frozen.
+        # fg_spatial_head is a tiny 2D head — safe to train incrementally.
+        fg_spatial_param_ids = set()
+        fg_spatial_params = []
+        deep_volume_params = []
+        if hasattr(self.system.volume_pred, 'fg_spatial_head'):
+            for p in self.system.volume_pred.fg_spatial_head.parameters():
+                fg_spatial_params.append(p)
+                fg_spatial_param_ids.add(id(p))
+        for p in volume_params:
+            if id(p) not in fg_spatial_param_ids:
+                deep_volume_params.append(p)
+
         for p in volume_params + assembler_params + adapter_params + lora_params:
             p.requires_grad_(True)
 
         self.param_groups = {
-            "volume": volume_params,
+            "volume": deep_volume_params,
+            "fg_spatial": fg_spatial_params,
             "assembler": assembler_params,
             "adapter": adapter_params,
             "lora": lora_params,
         }
 
         self.optimizer = optim.AdamW([
-            {"params": volume_params, "lr": self.train_cfg.lr_volume, "name": "volume_pred"},
+            {"params": deep_volume_params, "lr": self.train_cfg.lr_volume, "name": "volume_pred"},
+            {"params": fg_spatial_params, "lr": self.train_cfg.lr_volume, "name": "fg_spatial"},
             {"params": assembler_params, "lr": self.train_cfg.lr_guide, "name": "assembler"},
             {"params": adapter_params, "lr": self.train_cfg.lr_adapter, "name": "adapters"},
             {"params": lora_params, "lr": self.train_cfg.lr_lora, "name": "lora"},
@@ -184,59 +201,72 @@ class AblationTrainer:
         stage = self._get_stage(epoch)
 
         if self.schedule == "S0":
-            for p in self.param_groups["volume"]:
+            for p in self.param_groups["volume"] + self.param_groups["fg_spatial"]:
                 p.requires_grad_(True)
             for p in self.param_groups["assembler"] + self.param_groups["adapter"] + self.param_groups["lora"]:
                 p.requires_grad_(False)
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
-                if name == "volume_pred":
+                if name in ("volume_pred", "fg_spatial"):
                     group["lr"] = group["initial_lr"]
                 else:
                     group["lr"] = 0.0
             return
 
         if stage == "stage1":
-            for p in self.param_groups["volume"]:
+            for p in self.param_groups["volume"] + self.param_groups["fg_spatial"]:
                 p.requires_grad_(True)
             for p in self.param_groups["assembler"] + self.param_groups["adapter"] + self.param_groups["lora"]:
                 p.requires_grad_(False)
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
-                group["lr"] = group["initial_lr"] if name == "volume_pred" else 0.0
+                group["lr"] = group["initial_lr"] if name in ("volume_pred", "fg_spatial") else 0.0
 
         elif stage == "stage2":
-            # S1 and S3 both freeze volume in stage2 (guide learns to bind to fixed vol).
-            # v14: with depth prior, volume reaches compact ≥ 0.40 in stage1 already.
-            # Freezing in stage2 PROTECTS the good depth concentration while guide trains.
-            # v13 showed un-freezing causes feature distribution shift → compact collapses.
-            freeze_vol = (self.schedule in ("S1", "S3"))
+            # v15: Freeze deep volume (fg_logit_vol / depth_attn) to protect compact.
+            # ONLY unfreeze fg_spatial_head — lets fg_magnitude co-adapt as backbone
+            # features improve through adapter training. Avoids v13 collapse where
+            # full volume un-freeze destabilised depth_attn.
+            freeze_deep_vol = (self.schedule in ("S1", "S3"))
             low_lr_vol = (self.schedule == "S2")
             for p in self.param_groups["volume"]:
-                p.requires_grad_(not freeze_vol)
+                p.requires_grad_(not freeze_deep_vol)
+            # fg_spatial always trains in stage2 (it's a tiny 2D head, safe to update)
+            for p in self.param_groups["fg_spatial"]:
+                p.requires_grad_(True)
             for p in self.param_groups["assembler"] + self.param_groups["adapter"] + self.param_groups["lora"]:
                 p.requires_grad_(True)
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
                 if name == "volume_pred":
-                    if freeze_vol:
+                    if freeze_deep_vol:
                         group["lr"] = 0.0
                     elif low_lr_vol:
                         group["lr"] = group["initial_lr"] * 0.1
                     else:
                         group["lr"] = group["initial_lr"]
+                elif name == "fg_spatial":
+                    # fg_spatial trains at reduced lr during stage2 (adapts with backbone)
+                    group["lr"] = group["initial_lr"] * 0.3
                 else:
                     group["lr"] = group["initial_lr"]
 
         elif stage == "stage3":
-            for p in self.param_groups["volume"]:
-                p.requires_grad_(True)
+            # v18: freeze volume + fg_spatial entirely in stage3.
+            # v17 showed iou_min oscillation (0.141→0.089→0.109) when volume trains
+            # jointly with adapters in stage3. Freezing protects S1+S2 metrics while
+            # guide (assembler + adapters + lora) continues to learn.
+            freeze_vol_s3 = bool(getattr(self.config, "freeze_vol_stage3", False))
+            for p in self.param_groups["volume"] + self.param_groups["fg_spatial"]:
+                p.requires_grad_(not freeze_vol_s3)
             for p in self.param_groups["assembler"] + self.param_groups["adapter"] + self.param_groups["lora"]:
                 p.requires_grad_(True)
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
                 if name == "volume_pred":
-                    group["lr"] = group["initial_lr"] * 0.25
+                    group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.05
+                elif name == "fg_spatial":
+                    group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.10
                 else:
                     group["lr"] = group["initial_lr"]
 
@@ -420,6 +450,18 @@ class AblationTrainer:
             diff_weight = self.contract.adaptive_diff_weight(diff_weight, gate_open)
             loss = diff_weight * la_diff * l_diff + la_vol * 0.25 * l_struct
 
+        # v18: Gate push loss — directly maximises tanh(gate_param) to bypass the
+        # std-normalisation in inject_guide_into_unet_features which cancels the gate
+        # gradient: guide_std = gate × proj_std → norm rescales by 1/gate → dL/d_gate≈0.
+        # This auxiliary loss provides a clean gradient path independent of diffusion quality.
+        # Only active in stage2+ (guide is assembled); zero in stage1 / S0.
+        lambda_gate_push = float(getattr(self.train_cfg, "lambda_gate_push", 0.0))
+        if lambda_gate_push > 0 and use_diffusion and hasattr(self.system.assembler, "guide_gates"):
+            gate_vals = [torch.tanh(g) for g in self.system.assembler.guide_gates.values()]
+            if gate_vals:
+                l_gate_push = -lambda_gate_push * torch.stack(gate_vals).mean()
+                loss = loss + l_gate_push
+
         if not torch.isfinite(loss) or loss.item() > 100.0:
             self.system.clear_guides()
             return None
@@ -438,15 +480,34 @@ class AblationTrainer:
             return None
 
         # Solution 3: Gradient clipping — per-group then global safety net
-        torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=0.3)
+        # fg_spatial is clipped TOGETHER with volume so its tiny param group (65 params)
+        # does not get ~40× larger per-param updates than v14 (which had all volume
+        # params in one group). Separate lr control in stage2 still uses the split group.
+        torch.nn.utils.clip_grad_norm_(
+            self.param_groups["volume"] + self.param_groups["fg_spatial"], max_norm=0.3)
         torch.nn.utils.clip_grad_norm_(self.param_groups["assembler"], max_norm=0.3)
         torch.nn.utils.clip_grad_norm_(self.param_groups["adapter"], max_norm=0.3)
         torch.nn.utils.clip_grad_norm_(self.param_groups["lora"], max_norm=0.2)
-        all_params = (self.param_groups["volume"] + self.param_groups["assembler"]
+        all_params = (self.param_groups["volume"] + self.param_groups["fg_spatial"]
+                      + self.param_groups["assembler"]
                       + self.param_groups["adapter"] + self.param_groups["lora"])
         torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
 
         self.optimizer.step()
+
+        # v20: Gate clamp in stage3 — force gate_param ≥ atanh(min_gate_stage3).
+        # Rationale: diffusion gradient brings gate to equilibrium ≈0.042 (v17 pattern),
+        # which is below the S3 threshold of 0.05. gate_push (v18/v19) over-grows gate
+        # and hurts iou_min because diffusion gradient dominates regardless of lambda.
+        # Clamp bypasses both problems: gate is forced ≥ target without affecting
+        # stage2 gradient dynamics (iou_min grows freely as in v17).
+        min_gate = float(getattr(self.train_cfg, "min_gate_stage3", 0.0))
+        if min_gate > 0 and stage == "stage3" and hasattr(self.system.assembler, "guide_gates"):
+            import math
+            # atanh(x) = 0.5 * ln((1+x)/(1-x))
+            min_gate_param = 0.5 * math.log((1.0 + min_gate) / (1.0 - min_gate))
+            for gate_p in self.system.assembler.guide_gates.values():
+                gate_p.data.clamp_(min=min_gate_param)
         self.system.clear_guides()
 
         # Metrics

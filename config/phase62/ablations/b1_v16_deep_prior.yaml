@@ -1,0 +1,65 @@
+# B1 v16: depth_prior_scale 5.0→10.0
+# All other fixes from v15 retained:
+#   - projection.py threshold 0.3 (was 0.5)
+#   - fg_spatial_head own param group, unfrozen in stage2 (lr=0.3×lr_vol)
+#   - volume+fg_spatial combined clip at max_norm=0.3 (restored v14 stability)
+#   - stage3 vol lr×0.05, fg_spatial lr×0.10 (no collapse)
+#
+# New: depth_prior_scale=10.0 → compact≈0.50 from ep0
+#   depth_attn[front]≈0.73 → need fg_magnitude>0.41 (was 0.53 with scale=5.0)
+#   Expected: iou_min≥0.10 by ep14 (stage1 end)
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+
+training:
+  epochs: 60
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 3e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 1.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

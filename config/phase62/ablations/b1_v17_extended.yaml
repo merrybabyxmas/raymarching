@@ -1,0 +1,69 @@
+# B1 v17: extend epochs 60→80 + lr_guide 3e-4→6e-4
+# All v16 fixes retained:
+#   - depth_prior_scale=10.0
+#   - projection threshold=0.3
+#   - fg_spatial own param group, unfrozen stage2 (lr×0.3)
+#   - combined vol+fg_spatial clip max_norm=0.3
+#   - stage3 vol lr×0.05, fg_spatial lr×0.10
+#
+# New:
+#   - epochs: 80 (stage3 runs ep45→ep79 = 35 epochs vs 15)
+#   - lr_guide: 6e-4 (was 3e-4) — encourages gate to open faster
+#   v16 showed gate stuck at 0.0267 through stage2.
+#   S1+S2 passed at ep24. Need gate≥0.05 for S3.
+#   At v14 stage3 rate (+0.005/5ep from ep45), 80 epochs gets gate≈0.055 by ep75.
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+
+training:
+  epochs: 80
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 1.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

@@ -76,7 +76,10 @@ class FirstHitProjector(nn.Module):
         p_fg_k = entity_probs.sum(dim=1)       # (B, K, H, W): fg prob per depth bin
         entity_idx = entity_probs.argmax(dim=1)  # (B, K, H, W): dominant entity per bin
         class_per_voxel = torch.where(
-            p_fg_k > 0.5,  # foreground if fg probability sum exceeds 0.5
+            p_fg_k > 0.3,  # foreground threshold 0.3 (was 0.5).
+            # With factorized arch: p_fg_k = fg_magnitude × depth_attn.
+            # At compact=0.35 depth_attn[front]≈0.58 → need fg_magnitude>0.52
+            # (vs 0.86 with 0.5 threshold). Achievable with 15 epochs BCE training.
             entity_idx + 1,
             torch.zeros_like(entity_idx),
         )

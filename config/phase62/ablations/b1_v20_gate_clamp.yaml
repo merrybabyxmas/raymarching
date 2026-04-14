@@ -1,0 +1,78 @@
+# B1 v20: gate clamp in stage3 (no gate_push)
+#
+# Root cause chain (2026-04-14):
+#   v17: gate equilibrium at 0.042 (diffusion gradient zero at this level) → S3 FAIL
+#   v18: lambda_gate_push=0.1 → gate_push dominated by diffusion gradient anyway
+#         gate grows identically at lambda=0.1 vs 0.03 → iou_min suppressed at 0.085
+#   v19: lambda_gate_push=0.03 → same gate trajectory as v18, same iou_min plateau
+#
+# Key insight: gate growth is dominated by diffusion gradient regardless of lambda_gate_push.
+# Gate reaches equilibrium ~0.042 without push (v17), and grows to 0.23+ WITH push,
+# but this growth suppresses iou_min via adapter feature drift.
+#
+# Fix: gate clamp in stage3 ONLY.
+#   - Stage 1+2: NO gate_push → v17-level iou_min growth (0→0.133 by ep59)
+#   - Stage 3: clamp gate_param ≥ atanh(0.06) after each optimizer.step()
+#     → gate ≥ 0.06 guaranteed without changing stage2 dynamics
+#   - freeze_vol_stage3=true: protects iou_min from stage3 joint-training oscillation
+#
+# Expected: S1 passes ~ep39 (iou_min≥0.10), S2 passes simultaneously,
+#           S3 passes immediately at ep60 (gate clamped to 0.06, vol frozen → iou_min stable).
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+
+training:
+  epochs: 80
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 1.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.06
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

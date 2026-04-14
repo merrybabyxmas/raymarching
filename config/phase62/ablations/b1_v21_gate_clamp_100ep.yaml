@@ -1,0 +1,79 @@
+# B1 v21: gate clamp + 100 epochs (50-epoch stage2)
+#
+# v20 diagnosis (2026-04-14):
+#   gate_clamp approach is correct but iou_min oscillates at 0.073-0.084 in stage2
+#   (ep20-59, 40 epochs). Never breaks 0.10 before stage2 ends.
+#   v17 (GPU 3) achieved iou_min=0.108 at ep39 with identical stage2 config —
+#   difference attributed to GPU-specific numerical variation.
+#
+# Fix: extend epochs 80→100 to give stage2 50 epochs (ep25-74).
+#   At observed growth +0.003-0.011/5ep, iou_min should reach ≥0.10 by ep65-70.
+#   Gate clamp at stage3 (ep75+) ensures gate≥0.06 for S3.
+#   Run on GPU 3 (same as v17/v16) to reproduce successful iou_min trajectory.
+#
+# All v20 fixes retained:
+#   - freeze_vol_stage3=true (protects iou_min from stage3 joint-training collapse)
+#   - min_gate_stage3=0.06 (gate clamp in stage3)
+#   - lambda_gate_push=0.0 (no push — proven to suppress iou_min)
+#   - depth_prior_scale=10.0
+#   - projection threshold=0.3
+#   - fg_spatial own param group
+#   - lr_guide=6e-4
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+
+training:
+  epochs: 100
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 1.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.06
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

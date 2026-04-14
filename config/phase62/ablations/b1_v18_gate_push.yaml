@@ -1,0 +1,73 @@
+# B1 v18: gate push loss + freeze volume in stage3
+# Root cause identified in v17: inject_guide_into_unet_features std-normalisation
+# cancels gate gradient — guide_std = gate × proj_std → rescale by 1/gate → dL/d_gate≈0.
+# gate stuck at 0.0421 from ep64→ep79 (10 epochs) despite lr_guide=6e-4.
+#
+# Fix 1: lambda_gate_push=0.1 — direct auxiliary loss -λ×mean(tanh(gate_param))
+#         Bypasses normalisation entirely. Gradient path: loss → gate_param directly.
+# Fix 2: freeze_vol_stage3=true — prevents iou_min oscillation (0.141→0.089 in v17 stage3)
+#         Volume stays frozen in stage3; guide+lora+adapter train only.
+#
+# All v17 fixes retained:
+#   - depth_prior_scale=10.0
+#   - projection threshold=0.3
+#   - fg_spatial own param group, unfrozen stage2 (lr×0.3)
+#   - combined vol+fg_spatial clip max_norm=0.3
+#   - epochs=80, lr_guide=6e-4
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+
+training:
+  epochs: 80
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 1.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.1
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

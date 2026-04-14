@@ -351,7 +351,9 @@ class EntityVolumePredictor(nn.Module):
                 raw = torch.exp(-(depth_bin_cont - bin_idx) ** 2 / (2.0 * sigma ** 2))  # (B, K, H, W)
                 log_depth_prior = torch.log(
                     raw / raw.sum(dim=1, keepdim=True).clamp(min=1e-8))          # (B, K, H, W)
-                depth_prior_scale = 5.0
+                depth_prior_scale = 10.0  # v16: 5.0→10.0. Gives compact≈0.50 from ep0
+                # (was 5.0: compact≈0.34, fg_magnitude needed >0.53).
+                # With 10.0: depth_attn[front]≈0.73 → need fg_magnitude>0.41 (achievable).
                 fg_logit_vol = fg_logit_vol + depth_prior_scale * log_depth_prior
 
             depth_attn = torch.softmax(fg_logit_vol, dim=1)  # (B, K, H, W)
