@@ -5,13 +5,15 @@ p_fg(x) = sigmoid(z_fg(x))
 q_n(x)  = softmax(z_id(x))_n,  n in {0, 1}
 p_n(x)  = p_fg(x) * q_n(x)
 
-L_fg      = BCE(z_fg, Y_fg) + lambda_dice * Dice(p_fg, Y_fg)
-            where Y_fg = 1[V_gt > 0]
-            NOTE: Dice prevents the trivial BCE minimum at all-zero predictions.
-            Dice(pred=0, Y_fg) = 1.0 → non-zero gradient even at collapse.
-L_id      = CE(z_id, Y_id | Y_fg=1)  where Y_id = 0 if V_gt=1, 1 if V_gt=2
-L_vis     = Dice(visible_e_n, gt_visible_n)  rendered-space loss (Issue 1 fix)
-L_compact = H(depth_mass_e0) + H(depth_mass_e1)  depth entropy minimisation
+L_fg      = BCE(z_fg, Y_fg_front) + lambda_dice * Dice(p_fg, Y_fg_front)
+            where Y_fg_front = 1 ONLY at the front-most occupied depth bin per (h,w).
+            Using full-volume Y_fg pushed fg_logit HIGH across ALL occupied K bins
+            → entity_probs spread uniformly in depth → compact ≈ 0 always.
+            Front-surface supervision concentrates fg_logit at ONE K bin per pixel
+            → entity_probs peaks at front surface → compact >> 0.
+L_id      = CE(z_id, Y_id | Y_fg_full=1)  on ALL occupied bins (for better id learning)
+L_vis     = Dice(visible_e_n, gt_visible_n)  rendered-space loss
+L_compact = H(depth_mass_e0) + H(depth_mass_e1)  depth entropy minimisation (secondary)
 L         = L_fg + lambda_id * L_id + lambda_vis * L_vis + lambda_compact * L_compact
 """
 from __future__ import annotations
@@ -29,6 +31,36 @@ def _dice(pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.
     inter = (pred * target).sum(dim=(-2, -1))
     denom = pred.sum(dim=(-2, -1)) + target.sum(dim=(-2, -1))
     return (1.0 - (2.0 * inter + eps) / (denom + eps)).mean()
+
+
+def _front_surface_mask(V_gt: torch.Tensor) -> torch.Tensor:
+    """
+    Returns (B, K, H, W) float mask with 1.0 only at the FRONT-MOST occupied
+    depth bin per (b, h, w) column, 0.0 elsewhere.
+
+    "Front-most" = smallest K index where V_gt > 0 (closest to the camera).
+
+    Motivation: entity_probs should concentrate at the visible surface, not
+    spread across all occupied depth bins. Full-volume fg supervision makes
+    fg_logit uniformly high across all occupied K → compact ≈ 0 always.
+    Front-surface supervision → fg_logit peaks at ONE K per pixel → compact >> 0.
+    """
+    occupied = (V_gt > 0).float()  # (B, K, H, W)
+    B, K, H, W = occupied.shape
+    has_any = occupied.any(dim=1)               # (B, H, W)
+    if not has_any.any():
+        return occupied  # no entity → return zeros
+
+    # Front-most bin = argmin k s.t. occupied[b,k,h,w]=1
+    # = (K-1) - argmax(occupied.flip(dim=1), dim=1)
+    front_k = (K - 1) - occupied.flip(1).argmax(dim=1)  # (B, H, W)
+    # One-hot at front_k only where entity exists
+    front_k_idx = front_k.unsqueeze(1)  # (B, 1, H, W)
+    y_front = torch.zeros_like(occupied)
+    y_front.scatter_(1, front_k_idx, 1.0)
+    # Zero out pixels where no entity exists (front_k is undefined there)
+    y_front = y_front * has_any.float().unsqueeze(1)
+    return y_front
 
 
 class FactorizedFgIdObjective(VolumeObjective):
@@ -66,17 +98,17 @@ class FactorizedFgIdObjective(VolumeObjective):
         fg_logit = outputs.fg_logit[:, 0]   # (B, K, H, W)
         id_logits = outputs.id_logits        # (B, 2, K, H, W)
 
-        # L_fg: BCE + Dice + Hinge for sparse foreground
+        # L_fg: BCE + Dice + Hinge on the FRONT-SURFACE of each entity.
         #
-        # BCE alone has trivial min at all-zero (logit→-∞, loss→0).
-        # Dice is better but also uses sigmoid: gradient→0 as logit→-∞.
+        # Key insight: Y_fg = (V_gt > 0) labels ALL occupied depth bins positive.
+        # This pushes fg_logit HIGH across all K bins where entity exists →
+        # entity_probs spread uniformly in depth → compact ≈ 0 no matter what.
         #
-        # Hinge on fg voxels: relu(margin - logit[Y_fg=1])
-        #   gradient = -1 for logit < margin, regardless of how negative logit is.
-        #   No sigmoid saturation → non-zero gradient even at logit=-100.
-        #   Breaks the "uniform slab → collapse" cycle by forcing fg voxels
-        #   to maintain logit > margin before L_compact fires.
-        Y_fg = (V_gt > 0).float()
+        # Fix: Y_fg_front is 1 ONLY at the front-most occupied K bin per (h,w).
+        # fg_logit peaks at ONE depth bin per pixel → compact >> 0.
+        #
+        # Y_fg_full still used for L_id (id discrimination over all occupied bins).
+        Y_fg = _front_surface_mask(V_gt)        # (B, K, H, W)  front surface only (see docstring)
         pos_weight = torch.tensor([self.fg_pos_weight], device=fg_logit.device)
         L_bce = F.binary_cross_entropy_with_logits(
             fg_logit, Y_fg, pos_weight=pos_weight, reduction="mean")
@@ -108,7 +140,9 @@ class FactorizedFgIdObjective(VolumeObjective):
 
         L_fg = L_bce + self.lambda_dice * L_dice_fg + self.lambda_hinge * L_hinge
 
-        # L_id: CE only where foreground exists
+        # L_id: CE over ALL occupied depth bins (not just front surface).
+        # Identity discrimination (e0 vs e1) is useful wherever the entity
+        # exists in 3D, not just at the front surface.
         fg_mask = (V_gt > 0)
         if fg_mask.any():
             Y_id = (V_gt - 1).clamp(min=0).long()

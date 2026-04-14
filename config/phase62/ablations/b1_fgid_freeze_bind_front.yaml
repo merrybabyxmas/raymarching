@@ -25,8 +25,8 @@ training:
   la_diff: 1.0
   la_vol: 3.0
   lambda_id: 3.0
-  fg_pos_weight: 50.0
-  lambda_vis: 0.0
+  fg_pos_weight: 30.0
+  lambda_vis: 0.2
   t_max: 300
   n_frames: 8
   height: 256
@@ -36,13 +36,13 @@ training:
   temp_start: 1.0
   temp_end: 0.3
   diff_warmup_epochs: 5
-  lambda_compact: 1.0
+  lambda_compact: 0.5
   lambda_dice: 1.0
   lambda_hinge: 1.0
   hinge_margin: 1.0
   hinge_density_thresh: 0.20
-  compact_warmup_epoch: 8
-  lambda_depth_vis: 1.0
+  compact_warmup_epoch: 0
+  lambda_depth_vis: 0.5
 
 eval:
   n_steps: 20
