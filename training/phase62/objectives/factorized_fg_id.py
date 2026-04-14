@@ -51,9 +51,10 @@ def _front_surface_mask(V_gt: torch.Tensor) -> torch.Tensor:
     if not has_any.any():
         return occupied  # no entity → return zeros
 
-    # Front-most bin = argmin k s.t. occupied[b,k,h,w]=1
-    # = (K-1) - argmax(occupied.flip(dim=1), dim=1)
-    front_k = (K - 1) - occupied.flip(1).argmax(dim=1)  # (B, H, W)
+    # Front-most bin = smallest k s.t. occupied[b,k,h,w]=1
+    # argmax on a binary tensor returns the FIRST True = smallest k (nearest camera).
+    # Do NOT use (K-1)-argmax(flip): that gives the BACK surface (largest k).
+    front_k = occupied.argmax(dim=1)  # (B, H, W) — first True in K dim = front
     # One-hot at front_k only where entity exists
     front_k_idx = front_k.unsqueeze(1)  # (B, 1, H, W)
     y_front = torch.zeros_like(occupied)
@@ -218,10 +219,11 @@ class FactorizedFgIdObjective(VolumeObjective):
                 if not has_entity.any():
                     continue
 
-                # Front-most depth bin (minimum k) where entity is present at each pixel.
-                # (K - 1 - argmax_of_flipped) = argmin of original along K dim.
+                # Front-most depth bin = smallest k where entity is present (argmin).
+                # argmax on binary tensor returns the FIRST True = smallest k = front.
+                # Do NOT use (K-1)-argmax(flip): that gives back surface (largest k).
                 entity_float = entity_present.float()              # (B_vis, K, H, W)
-                front_depth = (K_v - 1) - entity_float.flip(1).argmax(dim=1)  # (B_vis, H, W)
+                front_depth = entity_float.argmax(dim=1)           # (B_vis, H, W)
                 front_depth = front_depth.clamp(0, K_ep - 1)
 
                 # Gather entity_probs at front depth bin for entity n
