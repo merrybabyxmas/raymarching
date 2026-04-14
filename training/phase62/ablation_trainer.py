@@ -206,11 +206,14 @@ class AblationTrainer:
                 group["lr"] = group["initial_lr"] if name == "volume_pred" else 0.0
 
         elif stage == "stage2":
-            # S1 and S3 both freeze volume in stage2 (guide learns to bind to fixed vol).
-            # S3 comment says "stage2=freeze_bind" — volume frozen while adapter/LoRA train.
-            # Without freezing, diffusion gradients destroy the depth concentration built
-            # in stage1 (compact dropped 0.232→0.095 in v10 due to unfrozen volume).
-            freeze_vol = (self.schedule in ("S1", "S3"))
+            # S1 freezes volume in stage2 (guide learns to bind to fixed vol).
+            # S3: UN-FROZEN in stage2 so volume co-adapts as backbone features improve.
+            # Rationale: v12 showed stage1 (frozen backbone) gives compact=0.05 only.
+            # compact=0.20 only reached in stage3 (ep49) after adapters improve features.
+            # Freezing in stage2 wastes 30 epochs and causes feature-distribution-shift
+            # when stage3 un-freezes: compact spikes (0.20 at ep49) then drops (0.14).
+            # Fix: Let volume co-train with adapters in stage2 → stable, gradual growth.
+            freeze_vol = (self.schedule == "S1")
             low_lr_vol = (self.schedule == "S2")
             for p in self.param_groups["volume"]:
                 p.requires_grad_(not freeze_vol)
@@ -405,7 +408,10 @@ class AblationTrainer:
         if stage == "stage1" or self.schedule == "S0":
             loss = la_vol * l_struct
         elif stage == "stage2":
-            vol_scale = 0.0 if self.schedule == "S1" else 0.25
+            # S1: no volume loss (frozen). S3: 50% volume loss (co-train with adapters).
+            # S3 uses 0.5 to give volume more signal than default 0.25 — needed because
+            # volume needs to grow compact from 0.05 to 0.40+ during the 30 stage2 epochs.
+            vol_scale = 0.0 if self.schedule == "S1" else (0.5 if self.schedule == "S3" else 0.25)
             current_stage_epoch = current_epoch - self.stage1_end
             diff_weight = min(1.0, (current_stage_epoch + 1) / max(1, diff_warmup_epochs))
             # Gate-adaptive: if guide gate hasn't opened, slow down diffusion ramp
