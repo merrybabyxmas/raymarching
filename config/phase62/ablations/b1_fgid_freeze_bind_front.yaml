@@ -36,7 +36,11 @@ training:
   temp_start: 1.0
   temp_end: 0.3
   diff_warmup_epochs: 5
-  lambda_compact: 0.5
+  lambda_compact: 0.2
+  lambda_dice: 1.0
+  lambda_hinge: 1.0
+  hinge_margin: 1.0
+  compact_warmup_epoch: 10
 
 eval:
   n_steps: 20

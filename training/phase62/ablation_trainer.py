@@ -75,6 +75,9 @@ class AblationTrainer:
             obj_kwargs["fg_pos_weight"] = float(getattr(self.train_cfg, "fg_pos_weight", 20.0))
             obj_kwargs["lambda_vis"] = float(getattr(self.train_cfg, "lambda_vis", 0.5))
             obj_kwargs["lambda_compact"] = float(getattr(self.train_cfg, "lambda_compact", 0.5))
+            obj_kwargs["lambda_dice"] = float(getattr(self.train_cfg, "lambda_dice", 1.0))
+            obj_kwargs["lambda_hinge"] = float(getattr(self.train_cfg, "lambda_hinge", 1.0))
+            obj_kwargs["hinge_margin"] = float(getattr(self.train_cfg, "hinge_margin", 1.0))
         elif self.objective_name == "independent_bce":
             obj_kwargs["entity_pos_weight"] = float(getattr(self.train_cfg, "entity_pos_weight", 50.0))
         elif self.objective_name == "center_offset":
@@ -323,8 +326,21 @@ class AblationTrainer:
         src_vis = visible_masks if visible_masks is not None else entity_masks
         gt_visible = self._build_gt_tensor(src_vis, B_feat)
 
+        # Compact warmup: don't apply L_compact until fg_logit has had time to develop
+        # spatial specificity. Firing L_compact from epoch 0 creates a destructive conflict:
+        #   epoch 0: entity_probs = 0.5*softmax(init_id) ≈ uniform slab → L_compact fires
+        #   L_compact concentrates slab before spatial fg locations are learned
+        #   → collapse before spatial learning can succeed
+        compact_warmup_epoch = int(getattr(self.train_cfg, "compact_warmup_epoch", 20))
+        saved_lambda_compact = self.objective.lambda_compact
+        if current_epoch < compact_warmup_epoch:
+            self.objective.lambda_compact = 0.0
+
         obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
         l_struct = obj_result["total"].clamp(max=50.0)
+
+        # Restore lambda_compact after forward pass
+        self.objective.lambda_compact = saved_lambda_compact
 
         # Feature separation loss (Issue 2 fix): push F_0 and F_1 apart
         la_sep = float(getattr(self.train_cfg, "la_feature_sep", 0.1))
@@ -458,6 +474,7 @@ class AblationTrainer:
     def _eval_epoch(self, epoch: int) -> Dict:
         self.system.eval()
         self.backbone_mgr.eval()
+        self._first_val_cached = False  # reset per-eval cache
 
         diff_losses, struct_losses = [], []
         accs_overall, accs_entity = [], []
@@ -519,9 +536,11 @@ class AblationTrainer:
                 # Project first (populates amodal/visible needed by some objectives)
                 vol_outputs = self.system.projector(vol_outputs)
 
-                # Cache for contract computation after loop
-                self._last_val_vol_outputs = vol_outputs
-                self._last_val_gt_visible  = gt_visible
+                # Cache FIRST val sample for contract (representative, not last)
+                if not hasattr(self, "_first_val_cached") or not self._first_val_cached:
+                    self._last_val_vol_outputs = vol_outputs
+                    self._last_val_gt_visible  = gt_visible
+                    self._first_val_cached = True
 
                 obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
                 struct_losses.append(float(obj_result["total"].item()))
@@ -723,6 +742,7 @@ class AblationTrainer:
             temp = temp_start + (temp_end - temp_start) * progress
             self.system.projector.set_temperature(temp)
 
+            torch.cuda.empty_cache()
             self.system.train()
             self.backbone_mgr.train()
             self._set_epoch_trainability(epoch)
