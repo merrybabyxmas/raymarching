@@ -30,6 +30,7 @@ from training.phase62.evaluator import Phase62Evaluator, _encode_text, _get_enti
 from training.phase62.rollout import Phase62RolloutRunner
 from training.phase62.metrics import compute_projected_class_iou
 from training.phase62.debug_viz import TrainingDebugViz
+from training.phase62.contract import DebugContract
 from data.phase62.volume_gt_builder import VolumeGTBuilder
 from scripts.train_animatediff_vca import encode_frames_to_latents
 from scripts.train_phase39 import (
@@ -96,6 +97,10 @@ class AblationTrainer:
 
         # Training debug visualizer (writes to debug_dir/training/)
         self.train_viz = TrainingDebugViz(self.debug_dir, config)
+
+        # Debug contract: formal pass/fail criteria per stage
+        self.contract = DebugContract()
+        self._last_contract_metrics = None  # updated on each eval
 
         # Eval outputs go to debug_dir/eval/
         (self.debug_dir / "eval").mkdir(parents=True, exist_ok=True)
@@ -354,11 +359,16 @@ class AblationTrainer:
             vol_scale = 0.0 if self.schedule == "S1" else 0.25
             current_stage_epoch = current_epoch - self.stage1_end
             diff_weight = min(1.0, (current_stage_epoch + 1) / max(1, diff_warmup_epochs))
+            # Gate-adaptive: if guide gate hasn't opened, slow down diffusion ramp
+            gate_open, _ = self.contract._gate_open(self.system.assembler)
+            diff_weight = self.contract.adaptive_diff_weight(diff_weight, gate_open)
             loss = diff_weight * la_diff * l_diff + la_vol * vol_scale * l_struct
         else:
             # stage3: full joint, brief warmup when entering from stage2
             current_stage_epoch = current_epoch - self.stage2_end
             diff_weight = min(1.0, (current_stage_epoch + 1) / max(1, diff_warmup_epochs // 2))
+            gate_open, _ = self.contract._gate_open(self.system.assembler)
+            diff_weight = self.contract.adaptive_diff_weight(diff_weight, gate_open)
             loss = diff_weight * la_diff * l_diff + la_vol * 0.25 * l_struct
 
         if not torch.isfinite(loss) or loss.item() > 100.0:
@@ -421,13 +431,16 @@ class AblationTrainer:
         # ── Training debug visualisation (once per epoch, step 0)
         if debug_step:
             try:
+                _cm = self._last_contract_metrics  # may be None early on
                 with torch.no_grad():
                     self.train_viz.save_volume_debug(
                         vol_outputs, V_gt, gt_visible, gt_amodal,
-                        epoch=epoch, step=step_idx, stage=stage)
+                        epoch=epoch, step=step_idx, stage=stage,
+                        contract_metrics=_cm)
                     if use_diffusion and guides:
                         self.train_viz.save_guide_debug(
-                            guides, self.system.assembler, epoch=epoch, stage=stage)
+                            guides, self.system.assembler, epoch=epoch, stage=stage,
+                            contract_metrics=_cm)
                     if use_diffusion and 'noise_pred' in locals():
                         noise_t_dbg = noise[:, :, :T_frames].float()
                         np_t_dbg = noise_pred[:, :, :T_frames].float()
@@ -505,6 +518,10 @@ class AblationTrainer:
                 # Project first (populates amodal/visible needed by some objectives)
                 vol_outputs = self.system.projector(vol_outputs)
 
+                # Cache for contract computation after loop
+                self._last_val_vol_outputs = vol_outputs
+                self._last_val_gt_visible  = gt_visible
+
                 obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
                 struct_losses.append(float(obj_result["total"].item()))
 
@@ -556,6 +573,25 @@ class AblationTrainer:
             + 0.15 * val_iou_e1
             + 0.30 * val_iou_min
         )
+
+        # ── Compute last vol_outputs for contract (reuse last val sample)
+        _contract_vol = getattr(self, "_last_val_vol_outputs", None)
+        _contract_gt_vis = getattr(self, "_last_val_gt_visible", None)
+        if _contract_vol is not None and _contract_gt_vis is not None:
+            _cstage = self._get_stage(epoch)
+            _contract_metrics = self.contract.compute(
+                vol_outputs=_contract_vol,
+                assembler=self.system.assembler,
+                gt_visible=_contract_gt_vis,
+                val_metrics={
+                    "val_iou_min":   val_iou_min,
+                    "val_diff_mse":  _avg(diff_losses),
+                },
+                epoch=epoch,
+                stage=_cstage,
+            )
+            self._last_contract_metrics = _contract_metrics
+            self.contract.log(_contract_metrics)
 
         result = {
             "val_score": val_score,
@@ -631,7 +667,12 @@ class AblationTrainer:
         print(f"[Ablation] Checkpoint loaded (epoch={ckpt.get('epoch', '?')})", flush=True)
 
     def _save_checkpoint(self, epoch: int, val_m: Dict):
-        sel = val_m.get("val_score", 0.0)
+        # Multi-objective checkpoint selection:
+        # 60% contract_score (compactness + gate + iou_min + two-color + stability)
+        # 40% legacy val_score
+        _cm = self._last_contract_metrics
+        contract_score = _cm.contract_score if _cm is not None else 0.0
+        sel = 0.60 * contract_score + 0.40 * val_m.get("val_score", 0.0)
         ckpt = {
             "epoch": epoch,
             "val_score": sel,
@@ -758,3 +799,4 @@ class AblationTrainer:
             json.dump(self.history, f, indent=2)
         print(f"[Ablation] Done. Best epoch={self.best_epoch} "
               f"val_score={self.best_val_score:.4f}", flush=True)
+        print(self.contract.summary(), flush=True)

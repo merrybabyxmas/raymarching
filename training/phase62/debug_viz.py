@@ -80,6 +80,9 @@ class TrainingDebugViz:
         for sub in ("stage1", "stage2", "stage3"):
             (self.debug_dir / "training" / sub).mkdir(parents=True, exist_ok=True)
 
+    def _draw_contract_badge(self, fig, contract_metrics) -> None:
+        _draw_contract_badge_fn(fig, contract_metrics)
+
     # ─── Volume debug ────────────────────────────────────────────────────────
 
     def save_volume_debug(
@@ -91,18 +94,19 @@ class TrainingDebugViz:
         epoch: int,
         step: int,
         stage: str,
+        contract_metrics=None,
     ) -> Optional[Path]:
         if not HAS_MPL:
             return None
         try:
             return self._volume_debug_impl(
-                vol_outputs, V_gt, gt_visible, gt_amodal, epoch, step, stage)
+                vol_outputs, V_gt, gt_visible, gt_amodal, epoch, step, stage, contract_metrics)
         except Exception as e:
             print(f"  [debug_viz] volume debug failed: {e}", flush=True)
             return None
 
     def _volume_debug_impl(self, vol_outputs, V_gt, gt_visible, gt_amodal,
-                            epoch, step, stage) -> Path:
+                            epoch, step, stage, contract_metrics=None) -> Path:
         b = 0  # always visualise first sample
 
         # ── 3D entity probs: (B, 2, K, H, W)
@@ -249,6 +253,7 @@ class TrainingDebugViz:
         fig.suptitle(
             f"[{stage.upper()}] ep={epoch:03d} step={step:04d} — 3D Volume Debug",
             color="white", fontsize=9, y=0.99)
+        self._draw_contract_badge(fig, contract_metrics)
 
         save_dir = self.debug_dir / "training" / stage
         save_path = save_dir / f"ep{epoch:03d}_s{step:04d}_volume.png"
@@ -265,16 +270,17 @@ class TrainingDebugViz:
         assembler,
         epoch: int,
         stage: str,
+        contract_metrics=None,
     ) -> Optional[Path]:
         if not HAS_MPL or not guides:
             return None
         try:
-            return self._guide_debug_impl(guides, assembler, epoch, stage)
+            return self._guide_debug_impl(guides, assembler, epoch, stage, contract_metrics)
         except Exception as e:
             print(f"  [debug_viz] guide debug failed: {e}", flush=True)
             return None
 
-    def _guide_debug_impl(self, guides, assembler, epoch, stage) -> Path:
+    def _guide_debug_impl(self, guides, assembler, epoch, stage, contract_metrics=None) -> Path:
         block_names = list(guides.keys())
         n_blocks = len(block_names)
 
@@ -342,6 +348,7 @@ class TrainingDebugViz:
         fig.suptitle(f"[{stage.upper()}] ep={epoch:03d} — Guide Feature Debug",
                      color="white", fontsize=9)
         fig.patch.set_facecolor("#1a1a2e")
+        self._draw_contract_badge(fig, contract_metrics)
 
         save_dir = self.debug_dir / "training" / stage
         save_path = save_dir / f"ep{epoch:03d}_guide.png"
@@ -552,3 +559,40 @@ def _rgb2hex(rgb):
     """(R,G,B) floats → '#rrggbb' string for matplotlib."""
     r, g, b = [int(x * 255) for x in rgb]
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+# ─── Contract badge helper ────────────────────────────────────────────────────
+# Attached to TrainingDebugViz as a method so subclasses can use it too.
+
+def _draw_contract_badge_fn(fig, contract_metrics) -> None:
+    """Overlay pass/fail contract badge onto a figure."""
+    if contract_metrics is None:
+        return
+    m = contract_metrics
+    lines = [
+        f"S1: {'✓ PASS' if m.stage1_pass else '✗ FAIL'}  "
+        f"compact={m.vol_compactness:.3f}  "
+        f"2color={'Y' if m.two_color_presence else 'N'}({m.two_color_e0_frac:.3f}/{m.two_color_e1_frac:.3f})  "
+        f"iou_min={m.val_iou_min:.3f}",
+
+        f"S2: {'✓ PASS' if m.stage2_pass else '✗ FAIL'}  "
+        f"gate={m.gate_open:.4f}  "
+        f"overlay={m.pred_overlay_match:.3f}  "
+        f"winner={m.one_winner_ratio:.2f}",
+
+        f"S3: {'✓ PASS' if m.stage3_pass else '✗ FAIL'}  "
+        f"diff_mse={m.diffusion_mse:.4f}  "
+        f"stable={'Y' if m.diffusion_stable else 'N'}  "
+        f"contract_score={m.contract_score:.4f}",
+    ]
+    colors = [
+        "#88ff88" if m.stage1_pass else "#ff6666",
+        "#88ff88" if m.stage2_pass else "#ff6666",
+        "#88ff88" if m.stage3_pass else "#ff6666",
+    ]
+    y_pos = 0.005
+    for line, color in zip(reversed(lines), reversed(colors)):
+        fig.text(0.50, y_pos, line, color=color, fontsize=7.5,
+                 ha="center", va="bottom",
+                 bbox=dict(facecolor="#111122", alpha=0.85, pad=2, boxstyle="round"))
+        y_pos += 0.028
