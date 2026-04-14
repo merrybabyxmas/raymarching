@@ -78,6 +78,7 @@ class AblationTrainer:
             obj_kwargs["lambda_dice"] = float(getattr(self.train_cfg, "lambda_dice", 1.0))
             obj_kwargs["lambda_hinge"] = float(getattr(self.train_cfg, "lambda_hinge", 1.0))
             obj_kwargs["hinge_margin"] = float(getattr(self.train_cfg, "hinge_margin", 1.0))
+            obj_kwargs["hinge_density_thresh"] = float(getattr(self.train_cfg, "hinge_density_thresh", 0.20))
         elif self.objective_name == "independent_bce":
             obj_kwargs["entity_pos_weight"] = float(getattr(self.train_cfg, "entity_pos_weight", 50.0))
         elif self.objective_name == "center_offset":
@@ -453,7 +454,8 @@ class AblationTrainer:
                     self.train_viz.save_volume_debug(
                         vol_outputs, V_gt, gt_visible, gt_amodal,
                         epoch=epoch, step=step_idx, stage=stage,
-                        contract_metrics=_cm)
+                        contract_metrics=_cm,
+                        frames_np=frames_np)
                     if use_diffusion and guides:
                         self.train_viz.save_guide_debug(
                             guides, self.system.assembler, epoch=epoch, stage=stage,

@@ -42,6 +42,7 @@ class FactorizedFgIdObjective(VolumeObjective):
         lambda_dice: float = 1.0,
         lambda_hinge: float = 1.0,
         hinge_margin: float = 1.0,
+        hinge_density_thresh: float = 0.20,
     ):
         super().__init__()
         self.lambda_id = lambda_id
@@ -51,6 +52,7 @@ class FactorizedFgIdObjective(VolumeObjective):
         self.lambda_dice = lambda_dice
         self.lambda_hinge = lambda_hinge
         self.hinge_margin = hinge_margin
+        self.hinge_density_thresh = hinge_density_thresh
 
     def forward(
         self,
@@ -84,11 +86,21 @@ class FactorizedFgIdObjective(VolumeObjective):
         fg_denom = p_fg.sum() + Y_fg.sum() + eps_d
         L_dice_fg = 1.0 - (2.0 * fg_inter + eps_d) / (fg_denom + eps_d)
 
-        # Hinge component: ensures fg_logit > margin at GT fg voxels
-        fg_mask_bool = Y_fg.bool()
-        if fg_mask_bool.any():
-            fg_logits_at_gt = fg_logit[fg_mask_bool]
-            L_hinge = F.relu(self.hinge_margin - fg_logits_at_gt).mean()
+        # Hinge component: ensures fg_logit > margin at DENSE GT fg voxels only.
+        # "Dense" = depth bin has >= hinge_density_thresh * max_per_bin fg voxels.
+        # Avoids applying hinge at depth bins with only 1-2 fg voxels (tails of 3D
+        # object), which would force entity_probs to stay high at many depth bins
+        # and prevent depth compactness (compact would stay near 0 permanently).
+        #
+        # With density gating: only the front/most-occupied bins trigger hinge,
+        # allowing the tail bins to have entity_probs → 0, enabling concentration.
+        Y_fg_density = Y_fg.sum(dim=(2, 3), keepdim=True)          # (B, K, 1, 1)
+        max_density = Y_fg_density.amax(dim=1, keepdim=True).clamp(min=1.0)  # (B, 1, 1, 1)
+        dense_mask = (Y_fg_density / max_density) > self.hinge_density_thresh   # (B, K, 1, 1)
+        hinge_active = Y_fg.bool() & dense_mask.expand_as(Y_fg)  # (B, K, H, W)
+        if hinge_active.any():
+            fg_logits_at_dense = fg_logit[hinge_active]
+            L_hinge = F.relu(self.hinge_margin - fg_logits_at_dense).mean()
         else:
             L_hinge = fg_logit.new_zeros(())
 

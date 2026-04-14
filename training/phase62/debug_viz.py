@@ -95,18 +95,21 @@ class TrainingDebugViz:
         step: int,
         stage: str,
         contract_metrics=None,
+        frames_np=None,             # (T, H, W, 3) uint8 or float — actual video frames
     ) -> Optional[Path]:
         if not HAS_MPL:
             return None
         try:
             return self._volume_debug_impl(
-                vol_outputs, V_gt, gt_visible, gt_amodal, epoch, step, stage, contract_metrics)
+                vol_outputs, V_gt, gt_visible, gt_amodal, epoch, step, stage,
+                contract_metrics, frames_np)
         except Exception as e:
             print(f"  [debug_viz] volume debug failed: {e}", flush=True)
             return None
 
     def _volume_debug_impl(self, vol_outputs, V_gt, gt_visible, gt_amodal,
-                            epoch, step, stage, contract_metrics=None) -> Path:
+                            epoch, step, stage, contract_metrics=None,
+                            frames_np=None) -> Path:
         b = 0  # always visualise first sample
 
         # ── 3D entity probs: (B, 2, K, H, W)
@@ -139,6 +142,7 @@ class TrainingDebugViz:
 
         # ────────────────────────────────────────────────────────────────────
         # Layout:
+        #   Row F: Actual video frames (top strip, shown if frames_np provided)
         #   Row 0: 3D depth slices — GT entity 0   (K columns)
         #   Row 1: 3D depth slices — Pred entity 0 (K columns)
         #   Row 2: 3D depth slices — GT entity 1
@@ -147,15 +151,57 @@ class TrainingDebugViz:
         #   Row 5: visible_class pred vs GT overlay
         # ────────────────────────────────────────────────────────────────────
         n_slice_cols = K
+
+        # Prepare frames strip if provided
+        frames_strip = None
+        n_frame_show = 0
+        if frames_np is not None:
+            try:
+                frms = np.array(frames_np)  # (T, H, W, 3) or (T, H, W)
+                if frms.ndim == 4 and frms.shape[-1] == 3:
+                    if frms.dtype != np.float32:
+                        frms = frms.astype(np.float32)
+                    if frms.max() > 1.5:
+                        frms = frms / 255.0
+                    frms = np.clip(frms, 0, 1)
+                    n_frame_show = min(frms.shape[0], n_slice_cols)
+                    frames_strip = frms
+            except Exception:
+                frames_strip = None
+
+        has_frames = frames_strip is not None and n_frame_show > 0
         fig_w = max(18, n_slice_cols * 1.4)
-        fig_h = 14
+        fig_h = 16 if has_frames else 14
 
         fig = plt.figure(figsize=(fig_w, fig_h), facecolor="#1a1a2e")
 
-        gs_top = gridspec.GridSpec(4, n_slice_cols, figure=fig,
-                                   top=0.96, bottom=0.38, hspace=0.05, wspace=0.03)
-        gs_bot = gridspec.GridSpec(2, 8, figure=fig,
-                                   top=0.34, bottom=0.02, hspace=0.08, wspace=0.04)
+        if has_frames:
+            # Frames strip occupies top ~12% of figure
+            gs_frames = gridspec.GridSpec(1, n_frame_show, figure=fig,
+                                          top=0.97, bottom=0.86,
+                                          hspace=0.02, wspace=0.03)
+            gs_top = gridspec.GridSpec(4, n_slice_cols, figure=fig,
+                                       top=0.84, bottom=0.32, hspace=0.05, wspace=0.03)
+            gs_bot = gridspec.GridSpec(2, 8, figure=fig,
+                                       top=0.28, bottom=0.02, hspace=0.08, wspace=0.04)
+            # Draw frames strip
+            T_total = frames_strip.shape[0]
+            for fi in range(n_frame_show):
+                # sample evenly from all T frames
+                t_idx = int(fi * T_total / n_frame_show)
+                ax_f = fig.add_subplot(gs_frames[0, fi])
+                ax_f.imshow(frames_strip[t_idx], interpolation="bilinear")
+                ax_f.axis("off")
+                ax_f.set_title(f"t={t_idx}", color="#aaaaaa", fontsize=6, pad=1)
+            # Label
+            fig.text(0.005, 0.915, "Frames", color="#aaaacc", fontsize=7,
+                     va="center", ha="left",
+                     bbox=dict(facecolor="#111133", alpha=0.7, pad=2))
+        else:
+            gs_top = gridspec.GridSpec(4, n_slice_cols, figure=fig,
+                                       top=0.96, bottom=0.38, hspace=0.05, wspace=0.03)
+            gs_bot = gridspec.GridSpec(2, 8, figure=fig,
+                                       top=0.34, bottom=0.02, hspace=0.08, wspace=0.04)
 
         row_labels = [
             ("GT  E0", gt_e0, _E0_COLOR),

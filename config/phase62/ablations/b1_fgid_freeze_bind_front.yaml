@@ -40,6 +40,7 @@ training:
   lambda_dice: 1.0
   lambda_hinge: 1.0
   hinge_margin: 1.0
+  hinge_density_thresh: 0.20
   compact_warmup_epoch: 10
 
 eval:
