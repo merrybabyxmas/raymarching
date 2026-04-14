@@ -1,8 +1,9 @@
-# B1: factorized_fg_id + S1 (freeze_bind) + front_only guide
+# B1: factorized_fg_id + S2 (low_lr_bind) + dual guide
+# Uses pretrained B0 checkpoint for volume, then adds diffusion
 objective: factorized_fg_id
-schedule: S1
+schedule: S2
 representation: factorized_fg_id
-guide_family: front_only
+guide_family: dual
 
 depth_bins: 8
 hidden_dim: 64
@@ -24,11 +25,15 @@ training:
   la_vol: 2.0
   lambda_id: 1.0
   fg_pos_weight: 20.0
+  lambda_vis: 0.0
   t_max: 300
   n_frames: 8
   height: 256
   width: 256
-  seed: 42
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 1.0
 
 eval:
   n_steps: 20

@@ -172,6 +172,7 @@ def inject_guide_into_unet_features(
     guide_std = guide.float().std().clamp(min=1e-8)
     if guide_std > max_ratio * hs_std:
         guide = guide * (max_ratio * hs_std / guide_std)
+    guide = guide.to(dtype=hidden_states.dtype)
 
     if hidden_states.dim() == 5:
         B_hs = hidden_states.shape[0]

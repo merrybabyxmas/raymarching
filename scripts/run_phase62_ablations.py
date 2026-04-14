@@ -54,7 +54,7 @@ ALL_ABLATIONS = PRIORITY_ORDER + [
 ]
 
 
-def run_ablation(config_path: str, pipe, dataset, device: str):
+def run_ablation(config_path: str, pipe, dataset, device: str, ckpt_path: str = None):
     """Run one ablation from config."""
     config = load_config(config_path)
     run_name = Path(config_path).stem
@@ -91,6 +91,9 @@ def run_ablation(config_path: str, pipe, dataset, device: str):
         device=device,
     )
 
+    if ckpt_path and Path(ckpt_path).exists():
+        trainer.load_checkpoint(ckpt_path)
+
     try:
         trainer.train()
     except Exception as e:
@@ -117,6 +120,7 @@ def run_ablation(config_path: str, pipe, dataset, device: str):
 def main():
     parser = argparse.ArgumentParser(description="Phase 62 Ablation Runner")
     parser.add_argument("--config", type=str, default=None, help="Single config to run")
+    parser.add_argument("--ckpt", type=str, default=None, help="Checkpoint to load before training")
     parser.add_argument("--priority", action="store_true", help="Run priority list (B0,B1,B2,A0,C0)")
     parser.add_argument("--all", action="store_true", help="Run all 9 ablations")
     args = parser.parse_args()
@@ -161,7 +165,7 @@ def main():
         if not Path(config_path).exists():
             print(f"[warn] Config not found: {config_path}", flush=True)
             continue
-        r = run_ablation(config_path, pipe, dataset, device)
+        r = run_ablation(config_path, pipe, dataset, device, ckpt_path=args.ckpt)
         results.append(r)
 
     # Summary

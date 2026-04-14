@@ -114,8 +114,8 @@ def loss_feature_separation(
     If F_0 and F_1 are already orthogonal (cos_sim=0), loss is 0.
     If identical (cos_sim=1), loss is 1.
     """
-    f0 = F.normalize(F_0.float(), dim=-1)
-    f1 = F.normalize(F_1.float(), dim=-1)
+    f0 = F.normalize(F_0.float(), dim=-1, eps=1e-6)
+    f1 = F.normalize(F_1.float(), dim=-1, eps=1e-6)
     cos_sim = (f0 * f1).sum(dim=-1)  # (B, S)
     return cos_sim.clamp(min=0.0).mean()
 

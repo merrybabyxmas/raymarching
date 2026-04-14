@@ -71,6 +71,7 @@ class AblationTrainer:
         if self.objective_name == "factorized_fg_id":
             obj_kwargs["lambda_id"] = float(getattr(self.train_cfg, "lambda_id", 1.0))
             obj_kwargs["fg_pos_weight"] = float(getattr(self.train_cfg, "fg_pos_weight", 20.0))
+            obj_kwargs["lambda_vis"] = float(getattr(self.train_cfg, "lambda_vis", 0.5))
         elif self.objective_name == "independent_bce":
             obj_kwargs["entity_pos_weight"] = float(getattr(self.train_cfg, "entity_pos_weight", 50.0))
         elif self.objective_name == "center_offset":
@@ -291,20 +292,23 @@ class AblationTrainer:
             n_rep = max(1, B_feat // V_gt.shape[0])
             V_gt = V_gt.repeat(n_rep, 1, 1, 1)[:B_feat]
 
-        # Projection (always needed for guides + eval metrics)
-        vol_outputs, guides = self.system.project_and_assemble(vol_outputs, F_g, F_0, F_1)
+        # Projection: only assemble guides when they'll actually be used
+        stage = self._get_stage(epoch)
+        use_diffusion = (stage != "stage1") and (self.schedule != "S0")
+
+        if use_diffusion:
+            vol_outputs, guides = self.system.project_and_assemble(vol_outputs, F_g, F_0, F_1)
+        else:
+            vol_outputs = self.system.projector(vol_outputs)
+            guides = {}
 
         # Build GT tensors
         gt_amodal = self._build_gt_tensor(entity_masks, B_feat)
         src_vis = visible_masks if visible_masks is not None else entity_masks
         gt_visible = self._build_gt_tensor(src_vis, B_feat)
 
-        # Objective
-        stage = self._get_stage(epoch)
-        use_diffusion = (stage != "stage1") and (self.schedule != "S0")
-
         obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
-        l_struct = obj_result["total"]
+        l_struct = obj_result["total"].clamp(max=50.0)
 
         # Feature separation loss (Issue 2 fix): push F_0 and F_1 apart
         la_sep = float(getattr(self.train_cfg, "la_feature_sep", 0.1))
@@ -337,7 +341,7 @@ class AblationTrainer:
         else:
             loss = la_diff * l_diff + la_vol * 0.25 * l_struct
 
-        if not torch.isfinite(loss) or loss.item() > 500.0:
+        if not torch.isfinite(loss) or loss.item() > 100.0:
             self.system.clear_guides()
             return None
 
@@ -350,13 +354,14 @@ class AblationTrainer:
                     has_nan = True
                     p.grad.zero_()
         if has_nan:
+            self.optimizer.zero_grad()
             self.system.clear_guides()
             return None
 
-        torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=0.5)
-        torch.nn.utils.clip_grad_norm_(self.param_groups["assembler"], max_norm=0.5)
-        torch.nn.utils.clip_grad_norm_(self.param_groups["adapter"], max_norm=0.5)
-        torch.nn.utils.clip_grad_norm_(self.param_groups["lora"], max_norm=0.3)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=0.3)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["assembler"], max_norm=0.3)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["adapter"], max_norm=0.3)
+        torch.nn.utils.clip_grad_norm_(self.param_groups["lora"], max_norm=0.2)
 
         self.optimizer.step()
         self.system.clear_guides()
@@ -554,6 +559,29 @@ class AblationTrainer:
 
         return result
 
+    def load_checkpoint(self, ckpt_path: str):
+        """Load checkpoint and restore model states."""
+        print(f"[Ablation] Loading checkpoint: {ckpt_path}", flush=True)
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        if "system_state" in ckpt:
+            if "volume_pred" in ckpt["system_state"]:
+                self.system.volume_pred.load_state_dict(
+                    ckpt["system_state"]["volume_pred"], strict=False)
+            if "assembler" in ckpt["system_state"]:
+                try:
+                    self.system.assembler.load_state_dict(
+                        ckpt["system_state"]["assembler"], strict=False)
+                except Exception:
+                    print("  [warn] assembler ckpt incompatible, skipping", flush=True)
+        if "extractors_state" in ckpt:
+            for i, es in enumerate(ckpt["extractors_state"]):
+                if i < len(self.backbone_mgr.extractors):
+                    ext = self.backbone_mgr.extractors[i]
+                    for key in ("lora_k", "lora_v", "lora_out", "slot0_adapter", "slot1_adapter"):
+                        if key in es:
+                            getattr(ext, key).load_state_dict(es[key])
+        print(f"[Ablation] Checkpoint loaded (epoch={ckpt.get('epoch', '?')})", flush=True)
+
     def _save_checkpoint(self, epoch: int, val_m: Dict):
         sel = val_m.get("val_score", 0.0)
         ckpt = {
@@ -586,6 +614,9 @@ class AblationTrainer:
         epochs = self.train_cfg.epochs
         steps_per_epoch = self.train_cfg.steps_per_epoch
         eval_every = self.train_cfg.eval_every
+        seed = int(getattr(self.train_cfg, 'seed', 42))
+        np.random.seed(seed)
+        torch.manual_seed(seed)
 
         print(f"[Ablation] {self.objective_name} / {self.schedule} / "
               f"guide={getattr(self.config, 'guide_family', 'dual')}", flush=True)

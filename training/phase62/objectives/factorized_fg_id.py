@@ -75,9 +75,14 @@ class FactorizedFgIdObjective(VolumeObjective):
             vis_e0 = outputs.visible["e0"]
             vis_e1 = outputs.visible["e1"]
             B_vis = min(vis_e0.shape[0], gt_visible.shape[0])
-            L_vis = _dice(vis_e0[:B_vis], gt_visible[:B_vis, 0]) + \
-                    _dice(vis_e1[:B_vis], gt_visible[:B_vis, 1])
-            total = total + self.lambda_vis * L_vis
+            # Only apply rendered dice when fg has learned something (prevents
+            # fighting foreground growth at init where visible ≈ 0.5 everywhere)
+            fg_mass = vis_e0[:B_vis].sum() + vis_e1[:B_vis].sum()
+            if fg_mass.item() > 1.0:
+                L_vis = _dice(vis_e0[:B_vis], gt_visible[:B_vis, 0]) + \
+                        _dice(vis_e1[:B_vis], gt_visible[:B_vis, 1])
+                L_vis = L_vis.clamp(max=10.0)
+                total = total + self.lambda_vis * L_vis
 
         return {
             "total": total,

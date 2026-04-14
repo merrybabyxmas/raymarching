@@ -42,10 +42,11 @@ class FirstHitProjector(nn.Module):
         #   p_sharp = sigmoid(logit / tau) where logit = log(p/(1-p))
         # This makes p closer to 0 or 1 as tau → 0.
         if self.temperature != 1.0:
-            eps = 1e-6
+            eps = 1e-4
             p_clamped = entity_probs_raw.clamp(eps, 1.0 - eps)
             logits = torch.log(p_clamped / (1.0 - p_clamped))
-            entity_probs = torch.sigmoid(logits / self.temperature)
+            logits = logits.clamp(-20.0, 20.0)
+            entity_probs = torch.sigmoid(logits / max(self.temperature, 0.05))
         else:
             entity_probs = entity_probs_raw
 
