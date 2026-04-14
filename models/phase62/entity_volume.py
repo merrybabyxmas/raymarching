@@ -328,6 +328,32 @@ class EntityVolumePredictor(nn.Module):
             fg_magnitude = torch.sigmoid(fg_spatial_logit)          # (B, 1, H, W)
 
             fg_logit_vol = fg_logit[:, 0].float()          # (B, K, H, W)
+
+            # Depth prior: concentrate depth_attn at the scene depth from epoch 0.
+            #
+            # Without this, gradient learning alone needs 50+ epochs to concentrate
+            # depth_attn (gradient clipping at 0.3 over 2M+ params means fg_logit_vol
+            # moves ~0.007 per 300 steps — far too slow for compact ≥ 0.20).
+            #
+            # Fix: add depth_hint Gaussian prior directly to fg_logit_vol in logit space.
+            # This gives depth_attn[k_front] ≈ 0.60 and compact ≈ 0.40 from epoch 0.
+            # The learned fg_logit_vol (from fg_head) refines the prior as training proceeds.
+            #
+            # Math: depth_prior = log(Gaussian(depth_hint, sigma=1.5 bins)) added to logit.
+            # After softmax: depth_attn ≈ Gaussian^scale / Z → concentrates at depth_hint.
+            # scale=5.0: depth_attn[k_front] ≈ 0.60 (center bin) to 0.74 (edge bins).
+            if depth_hint is not None:
+                K_d = self.depth_bins
+                depth_bin_cont = depth_hint.unsqueeze(1).float() * (K_d - 1)   # (B, 1, H, W)
+                bin_idx = torch.arange(K_d, device=depth_hint.device,
+                                       dtype=torch.float32).view(1, K_d, 1, 1)
+                sigma = 1.5  # ≈ 1.5 bin widths → smooth concentration
+                raw = torch.exp(-(depth_bin_cont - bin_idx) ** 2 / (2.0 * sigma ** 2))  # (B, K, H, W)
+                log_depth_prior = torch.log(
+                    raw / raw.sum(dim=1, keepdim=True).clamp(min=1e-8))          # (B, K, H, W)
+                depth_prior_scale = 5.0
+                fg_logit_vol = fg_logit_vol + depth_prior_scale * log_depth_prior
+
             depth_attn = torch.softmax(fg_logit_vol, dim=1)  # (B, K, H, W)
             p_fg = fg_magnitude * depth_attn               # (B, K, H, W)
 
