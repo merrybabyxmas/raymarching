@@ -101,10 +101,17 @@ class DebugContract:
     # ── Volume compactness ────────────────────────────────────────────────
 
     @staticmethod
-    def _depth_compactness(entity_probs_3d: torch.Tensor) -> float:
+    def _depth_compactness(
+        entity_probs_3d: torch.Tensor,
+        fg_spatial_mask: "Optional[torch.Tensor]" = None,
+    ) -> float:
         """
         How concentrated is the entity_probs along the depth axis?
         entity_probs_3d: (K, H, W) for one entity.
+
+        fg_spatial_mask: (H, W) bool — if provided, averages only over fg pixels.
+        Without masking, background leakage (~0.01 per bg pixel) spreads depth_mass
+        uniformly across all K bins, artificially killing compactness.
 
         Uses 1 - normalised_entropy of depth-wise mass distribution.
         0 = uniform slab, 1 = single perfect slice.
@@ -112,7 +119,13 @@ class DebugContract:
         K = entity_probs_3d.shape[0]
         if K <= 1:
             return 1.0
-        depth_mass = entity_probs_3d.float().mean(dim=(1, 2))   # (K,)
+        ep = entity_probs_3d.float()
+        if fg_spatial_mask is not None:
+            mask = fg_spatial_mask.float()  # (H, W)
+            n_fg = mask.sum().clamp(min=1.0)
+            depth_mass = (ep * mask.unsqueeze(0)).sum(dim=(1, 2)) / n_fg  # (K,)
+        else:
+            depth_mass = ep.mean(dim=(1, 2))                               # (K,)
         mass_sum = depth_mass.sum()
         if mass_sum < 1e-8:
             return 0.0
@@ -208,12 +221,17 @@ class DebugContract:
     ) -> ContractMetrics:
         m = ContractMetrics(epoch=epoch, stage=stage)
 
-        # ── Volume compactness
+        # ── Volume compactness (fg-masked to avoid bg leakage in depth_mass)
         if vol_outputs.entity_probs is not None:
             ep = vol_outputs.entity_probs  # (B, 2, K, H, W)
             b = 0
-            m.vol_compactness_e0 = self._depth_compactness(ep[b, 0])
-            m.vol_compactness_e1 = self._depth_compactness(ep[b, 1])
+            # Derive fg spatial mask from gt_visible: True where any entity is present
+            # (better than averaging over all 256 pixels including 254 bg pixels)
+            fg_spatial = None
+            if gt_visible is not None and gt_visible.shape[0] > b:
+                fg_spatial = (gt_visible[b] > 0.5).any(dim=0)  # (H, W)
+            m.vol_compactness_e0 = self._depth_compactness(ep[b, 0], fg_spatial)
+            m.vol_compactness_e1 = self._depth_compactness(ep[b, 1], fg_spatial)
             m.vol_compactness    = min(m.vol_compactness_e0, m.vol_compactness_e1)
 
         # ── Two-color presence

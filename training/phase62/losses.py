@@ -124,6 +124,7 @@ def loss_feature_separation(
 def loss_depth_compactness(
     entity_probs: torch.Tensor,  # (B, 2, K, H, W)
     eps: float = 1e-9,
+    fg_spatial_mask: "Optional[torch.Tensor]" = None,  # (B, H, W) bool or float
 ) -> torch.Tensor:
     """
     Encourage entity_probs to be localised in a few depth bins (compact blob).
@@ -132,12 +133,28 @@ def loss_depth_compactness(
     Entropy=0 → all mass in one slice (perfect blob).
     Entropy=log(K) → uniform slab (worst case).
 
+    fg_spatial_mask: if provided, depth_mass is averaged ONLY over fg spatial
+    locations (where any entity exists in the GT). This prevents background
+    leakage from ~0.01 entity_probs at 252 bg pixels dominating the depth
+    distribution and killing compactness (bg leakage otherwise spreads depth_mass
+    uniformly → entropy ≈ log(K) regardless of how well fg is concentrated).
+
     Contract stage1 pass requires compact ≥ 0.20
     (1 - normalised_entropy ≥ 0.20, i.e. normalised_entropy ≤ 0.80).
     """
     B, _, K, H, W = entity_probs.shape
-    # depth-wise mean activation mass per entity: (B, 2, K)
-    depth_mass = entity_probs.float().mean(dim=(3, 4))
+    ep = entity_probs.float()
+
+    if fg_spatial_mask is not None:
+        # Compute depth mass only at fg spatial locations
+        # fg_spatial_mask: (B, H, W) — 1 at locations where any entity is present
+        mask = fg_spatial_mask.float().unsqueeze(1).unsqueeze(2)  # (B, 1, 1, H, W)
+        n_fg = mask.sum(dim=(3, 4)).clamp(min=1.0)                # (B, 1, 1)
+        depth_mass = (ep * mask).sum(dim=(3, 4)) / n_fg           # (B, 2, K)
+    else:
+        # Original: average over all H×W (including bg — avoid when possible)
+        depth_mass = ep.mean(dim=(3, 4))
+
     # normalise to probability distribution
     depth_mass_sum = depth_mass.sum(dim=2, keepdim=True).clamp(min=eps)
     p = (depth_mass / depth_mass_sum).clamp(min=eps)

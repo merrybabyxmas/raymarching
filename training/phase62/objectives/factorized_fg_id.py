@@ -148,7 +148,13 @@ class FactorizedFgIdObjective(VolumeObjective):
             # Dice loss now prevents trivial all-zero escape so this guard is secondary.
             n_vox_per_entity = float(outputs.entity_probs[0, 0].numel())
             if ep_mass.item() > n_vox_per_entity * 0.02:
-                L_compact = loss_depth_compactness(outputs.entity_probs)
+                # Use fg_spatial_mask to avoid bg leakage: averaging entity_probs over
+                # ALL 256 spatial pixels (254 bg + 2 fg) spreads depth_mass uniformly
+                # even when fg is perfectly concentrated, keeping compact near 0.
+                # Masking to fg-only spatial locations gives accurate depth distribution.
+                fg_spatial = (V_gt > 0).any(dim=1)  # (B, H, W)
+                L_compact = loss_depth_compactness(outputs.entity_probs,
+                                                   fg_spatial_mask=fg_spatial)
                 total = total + self.lambda_compact * L_compact
 
         return {
