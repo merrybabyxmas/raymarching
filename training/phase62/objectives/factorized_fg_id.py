@@ -5,10 +5,11 @@ p_fg(x) = sigmoid(z_fg(x))
 q_n(x)  = softmax(z_id(x))_n,  n in {0, 1}
 p_n(x)  = p_fg(x) * q_n(x)
 
-L_fg  = BCE(z_fg, Y_fg)           where Y_fg = 1[V_gt > 0]
-L_id  = CE(z_id, Y_id | Y_fg=1)  where Y_id = 0 if V_gt=1, 1 if V_gt=2
-L_vis = Dice(visible_e_n, gt_visible_n)  rendered-space loss (Issue 1 fix)
-L     = L_fg + lambda_id * L_id + lambda_vis * L_vis
+L_fg      = BCE(z_fg, Y_fg)           where Y_fg = 1[V_gt > 0]
+L_id      = CE(z_id, Y_id | Y_fg=1)  where Y_id = 0 if V_gt=1, 1 if V_gt=2
+L_vis     = Dice(visible_e_n, gt_visible_n)  rendered-space loss (Issue 1 fix)
+L_compact = H(depth_mass_e0) + H(depth_mass_e1)  depth entropy minimisation
+L         = L_fg + lambda_id * L_id + lambda_vis * L_vis + lambda_compact * L_compact
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ import torch
 import torch.nn.functional as F
 
 from training.phase62.objectives.base import VolumeObjective, VolumeOutputs
+from training.phase62.losses import loss_depth_compactness
 
 
 def _dice(pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
@@ -33,11 +35,13 @@ class FactorizedFgIdObjective(VolumeObjective):
         lambda_id: float = 1.0,
         fg_pos_weight: float = 20.0,
         lambda_vis: float = 0.5,
+        lambda_compact: float = 0.5,
     ):
         super().__init__()
         self.lambda_id = lambda_id
         self.fg_pos_weight = fg_pos_weight
         self.lambda_vis = lambda_vis
+        self.lambda_compact = lambda_compact
 
     def forward(
         self,
@@ -84,9 +88,17 @@ class FactorizedFgIdObjective(VolumeObjective):
                 L_vis = L_vis.clamp(max=10.0)
                 total = total + self.lambda_vis * L_vis
 
+        # L_compact: encourage entity_probs to be localised in depth (compact blob)
+        # Minimises entropy of depth-wise mass distribution per entity.
+        L_compact = fg_logit.new_zeros(())
+        if self.lambda_compact > 0 and outputs.entity_probs is not None:
+            L_compact = loss_depth_compactness(outputs.entity_probs)
+            total = total + self.lambda_compact * L_compact
+
         return {
             "total": total,
             "L_fg": L_fg.detach(),
             "L_id": L_id.detach(),
             "L_vis": L_vis.detach(),
+            "L_compact": L_compact.detach(),
         }

@@ -36,6 +36,7 @@ training:
   temp_start: 1.0
   temp_end: 0.3
   diff_warmup_epochs: 5
+  lambda_compact: 0.5
 
 eval:
   n_steps: 20

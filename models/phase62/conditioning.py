@@ -96,15 +96,13 @@ class GuideFeatureAssembler(nn.Module):
                 nn.Conv2d(in_ch, block_dim, kernel_size=1, bias=True),
             )
 
-        # Solution 1: Zero-init final projection layer (ControlNet-style)
-        # Guarantees guide output = 0 at initialization, so base UNet is
-        # unperturbed at the start of Stage 2 diffusion binding.
-        for block_name in block_names:
-            proj = self.block_projectors[block_name]
-            nn.init.zeros_(proj[-1].weight)
-            nn.init.zeros_(proj[-1].bias)
-
-        # Learnable scale gates initialized to 0 → guide grows from 0 smoothly
+        # Solution 1 (fixed): Learnable scale gate initialized to 0.
+        # guide_output = proj(x) * tanh(gate)
+        # gate=0 → tanh(0)=0 → guide=0 at init, UNet unperturbed.
+        # NOTE: proj final layer must NOT be zero-init'd here —
+        # if both proj[-1] and gate are 0, gradients through gate are dead:
+        #   grad(gate) = grad(guide) * proj(x) * tanh'(0) = any * 0 * 1 = 0
+        # Only gate is zero-init'd; proj learns from gradient immediately.
         self.guide_gates = nn.ParameterDict({
             bn: nn.Parameter(torch.zeros(1)) for bn in block_names
         })

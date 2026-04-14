@@ -7,6 +7,7 @@ Experimental losses are in losses_ablation.py.
 """
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 import torch
@@ -118,6 +119,33 @@ def loss_feature_separation(
     f1 = F.normalize(F_1.float(), dim=-1, eps=1e-6)
     cos_sim = (f0 * f1).sum(dim=-1)  # (B, S)
     return cos_sim.clamp(min=0.0).mean()
+
+
+def loss_depth_compactness(
+    entity_probs: torch.Tensor,  # (B, 2, K, H, W)
+    eps: float = 1e-9,
+) -> torch.Tensor:
+    """
+    Encourage entity_probs to be localised in a few depth bins (compact blob).
+
+    Minimises the entropy of depth-wise activation mass per entity.
+    Entropy=0 → all mass in one slice (perfect blob).
+    Entropy=log(K) → uniform slab (worst case).
+
+    Contract stage1 pass requires compact ≥ 0.20
+    (1 - normalised_entropy ≥ 0.20, i.e. normalised_entropy ≤ 0.80).
+    """
+    B, _, K, H, W = entity_probs.shape
+    # depth-wise mean activation mass per entity: (B, 2, K)
+    depth_mass = entity_probs.float().mean(dim=(3, 4))
+    # normalise to probability distribution
+    depth_mass_sum = depth_mass.sum(dim=2, keepdim=True).clamp(min=eps)
+    p = (depth_mass / depth_mass_sum).clamp(min=eps)
+    # Shannon entropy, normalised by log(K)
+    entropy = -(p * p.log()).sum(dim=2)          # (B, 2)
+    normalised_entropy = entropy / (math.log(K) + eps)
+    # Penalise high entropy (diffuse slab)
+    return normalised_entropy.mean()
 
 
 def loss_rendered_dice(
