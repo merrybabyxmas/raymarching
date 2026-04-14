@@ -101,34 +101,40 @@ class FactorizedFgIdObjective(VolumeObjective):
 
         # L_fg: BCE + Dice + Hinge on the FRONT-SURFACE of each entity.
         #
-        # Key insight: Y_fg = (V_gt > 0) labels ALL occupied depth bins positive.
-        # This pushes fg_logit HIGH across all K bins where entity exists →
-        # entity_probs spread uniformly in depth → compact ≈ 0 no matter what.
+        # Architecture: entity_volume now uses depth-softmax:
+        #   p_fg = sigmoid(max_k(fg_logit)) × softmax_k(fg_logit)
+        # This ARCHITECTURALLY enforces compact entity_probs — softmax can't be
+        # uniform unless all K logits are equal (not a stable training fixed point).
         #
-        # Fix: Y_fg_front is 1 ONLY at the front-most occupied K bin per (h,w).
-        # fg_logit peaks at ONE depth bin per pixel → compact >> 0.
+        # BCE on raw fg_logit with front-surface target still works:
+        #   - Pushes fg_logit[k_front] HIGH, fg_logit[k_other] LOW
+        #   - Softmax then concentrates at k_front → compact >> 0
         #
         # Y_fg_full still used for L_id (id discrimination over all occupied bins).
         Y_fg = _front_surface_mask(V_gt)        # (B, K, H, W)  front surface only (see docstring)
+        Y_fg_any = (V_gt > 0).any(dim=1).float()  # (B, H, W)  "any entity at (h,w)"
         pos_weight = torch.tensor([self.fg_pos_weight], device=fg_logit.device)
+        # BCE on fg_logit with front-surface target: trains logit to peak at k_front
         L_bce = F.binary_cross_entropy_with_logits(
             fg_logit, Y_fg, pos_weight=pos_weight, reduction="mean")
 
-        # Dice component
-        p_fg = torch.sigmoid(fg_logit)
-        eps_d = 1e-6
-        fg_inter = (p_fg * Y_fg).sum()
-        fg_denom = p_fg.sum() + Y_fg.sum() + eps_d
-        L_dice_fg = 1.0 - (2.0 * fg_inter + eps_d) / (fg_denom + eps_d)
+        # Dice component: use entity_probs (depth-softmax output) to measure fg/bg
+        # matching. entity_probs.sum(dim=1) = p_fg (concentrated via softmax).
+        if outputs.entity_probs is not None:
+            p_fg_conc = outputs.entity_probs.sum(dim=1)  # (B, K, H, W) concentrated
+            eps_d = 1e-6
+            fg_inter = (p_fg_conc * Y_fg).sum()
+            fg_denom = p_fg_conc.sum() + Y_fg.sum() + eps_d
+            L_dice_fg = 1.0 - (2.0 * fg_inter + eps_d) / (fg_denom + eps_d)
+        else:
+            p_fg = torch.sigmoid(fg_logit)
+            eps_d = 1e-6
+            fg_inter = (p_fg * Y_fg).sum()
+            fg_denom = p_fg.sum() + Y_fg.sum() + eps_d
+            L_dice_fg = 1.0 - (2.0 * fg_inter + eps_d) / (fg_denom + eps_d)
 
-        # Hinge component: ensures fg_logit > margin at DENSE GT fg voxels only.
-        # "Dense" = depth bin has >= hinge_density_thresh * max_per_bin fg voxels.
-        # Avoids applying hinge at depth bins with only 1-2 fg voxels (tails of 3D
-        # object), which would force entity_probs to stay high at many depth bins
-        # and prevent depth compactness (compact would stay near 0 permanently).
-        #
-        # With density gating: only the front/most-occupied bins trigger hinge,
-        # allowing the tail bins to have entity_probs → 0, enabling concentration.
+        # Hinge on fg_logit at front-surface bins: ensures max logit at front surface.
+        # With density gating: only dense (many fg pixels per K) bins trigger hinge.
         Y_fg_density = Y_fg.sum(dim=(2, 3), keepdim=True)          # (B, K, 1, 1)
         max_density = Y_fg_density.amax(dim=1, keepdim=True).clamp(min=1.0)  # (B, 1, 1, 1)
         dense_mask = (Y_fg_density / max_density) > self.hinge_density_thresh   # (B, K, 1, 1)

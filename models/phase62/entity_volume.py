@@ -301,8 +301,25 @@ class EntityVolumePredictor(nn.Module):
             fg_logit = self.fg_head(fg_feat)   # (B, 1, K, H, W)
             id_logits = self.id_head(id_feat)  # (B, 2, K, H, W)
 
-            # p_fg = sigmoid(z_fg)
-            p_fg = torch.sigmoid(fg_logit[:, 0].float())  # (B, K, H, W)
+            # Depth-concentrated p_fg: sigmoid(fg_max) × softmax_over_K(fg_logit)
+            #
+            # Problem: sigmoid(fg_logit) can be high at ALL K bins simultaneously →
+            # entity_probs spread uniformly → compact ≈ 0 no matter what loss we use.
+            #
+            # Fix: factor fg into two components:
+            #   fg_magnitude = sigmoid(max_k(fg_logit)):  "Is fg present at (h,w)?"
+            #   depth_attn = softmax_k(fg_logit):          "WHERE in depth is fg?"
+            # p_fg = fg_magnitude × depth_attn  → ALWAYS concentrated in K
+            # (softmax is non-uniform unless all logits are identical, which isn't a
+            #  stable fixed point under front-surface BCE + depth CE supervision)
+            fg_logit_vol = fg_logit[:, 0].float()  # (B, K, H, W)
+            fg_max = fg_logit_vol.max(dim=1, keepdim=True).values  # (B, 1, H, W)
+            fg_magnitude = torch.sigmoid(fg_max)                   # (B, 1, H, W)
+            depth_attn = torch.softmax(fg_logit_vol, dim=1)        # (B, K, H, W)
+            p_fg = fg_magnitude.squeeze(1) * depth_attn            # (B, K, H, W)
+
+            # Store fg_magnitude back for objective access via fg_logit field:
+            # fg_logit[:, 0] is still available; objective uses fg_logit_vol internally.
             # q_n = softmax(z_id)_n
             q = torch.softmax(id_logits.float(), dim=1)   # (B, 2, K, H, W)
             # p_n = p_fg * q_n
