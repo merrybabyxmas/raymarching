@@ -1,0 +1,122 @@
+# B1 v26: Long stage1 (100ep) + freeze_vol_stage3=True (seed 7)
+#
+# v25 post-mortem (2026-04-14, ep149 final):
+#   compact=0.364 FINAL (started at 0.407 at ep109, DECLINED in stage3!)
+#   Stage3 joint training is catastrophic for compact:
+#     vol trains at 5e-5 with L_vis, L_id, L_balance, L_compact all active.
+#     Competing losses (L_vis, L_balance) push depth_attn to SPREAD → compact declines.
+#     Lambda_compact=3.0 at 5e-5 lr cannot overcome L_vis (0.5) + L_id (3.0) spreading.
+#   overlay=0.174 at ep149 (was 0.39 at ep79!) — stage3 vol training also kills overlay.
+#   diff_mse=0.0499 ✓ — C_diff finally passes (needed 124 epochs from stage2 start).
+#   winner=0.50-0.55 — mathematically can't be < 0.50, threshold was wrong (now fixed to 0.55).
+#
+# v26 design (mathematical root causes):
+#
+#   1. Core insight: compact MUST be built in stage1 (vol-only), then PROTECTED.
+#      Stage3 vol training is destructive regardless of lr magnitude because
+#      the competing losses have inherently opposing gradients.
+#      Solution: freeze_vol_stage3=True (like v21 — this worked).
+#
+#   2. Stage1 duration: 100 epochs (vs 40 in v25).
+#      Stage1 grows compact following ~1-exp(-0.0145*t):
+#        40 ep → 0.44
+#        60 ep → 0.58  ← just below target
+#        80 ep → 0.69  ← above target
+#       100 ep → 0.77  ← well above target, provides buffer against stage2 drift
+#      Need compact > 0.68 at stage1 end to have compact > 0.60 at stage3 start
+#      (accounting for ~0.08 drift during stage2 with vol_stage2_lr_factor=0.01).
+#
+#   3. Stage2/3 budget: 120 epochs (ep100-219).
+#      With stage2_end = max(101, 3*220//4) = 165:
+#        stage2: ep100-164 (65 epochs) — gate/overlay/diff_mse train
+#        stage3: ep165-219 (55 epochs, vol frozen) — diff_mse polishes, gate stable
+#      v25 reached diff_mse<0.05 at ep124 (84 epochs from stage2 start).
+#      With 65+55=120 non-stage1 epochs, diff_mse should pass by ep150-170.
+#
+#   4. freeze_vol_stage3: True (THE KEY FIX).
+#      Vol frozen in stage3 → compact stays at ~stage2-end level (~0.67).
+#      Adapters/LoRA/assembler continue training for diff quality.
+#      v21 used this approach and passed the 3-contract system.
+#
+#   5. CGUIDE_WINNER_MAX fixed in contract.py: 0.45 → 0.55.
+#      winner = max(vis_e0,vis_e1)/(vis_e0+vis_e1) ≥ 0.50 always.
+#      Threshold 0.45 was unreachable. 0.55 matches the comment "no entity > 55%".
+#
+#   6. LCC averaging: now computed across all eval batches (v26 code change).
+#      Single-batch LCC was oscillating 0.24-0.62. Averaged over ~36 samples
+#      should be much more stable and reflect true entity blob connectivity.
+#
+# Expected trajectories:
+#   compact: ~0 → 0.77 (ep99, stage1) → 0.67 (ep164, stage2 tracking) → 0.67 (frozen in stage3)
+#   D_amo: at compact=0.67, entity depth separation is strong → D_amo ~0.40-0.50 ✓
+#   LCC: at compact=0.67, entity blobs concentrated → LCC ~0.85+ ✓
+#   D_vis: better entity_probs → iou > 0.14 → D_vis > 0.25 ✓
+#   gate: reaches max_gate=0.35 by ~ep130 (30 epochs into stage2) ✓
+#   overlay: ≥0.35 by ~ep130 ✓
+#   diff_mse: ≤0.05 by ~ep180-190 (80 epochs from stage2 start) ✓
+#   winner: ~0.50-0.52 throughout → < 0.55 threshold ✓
+#   All contracts → PASS from ~ep190, 5 consecutive for C_robust
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true           # KEY: protect compact from stage3 interference
+freeze_fg_spatial_stage3: true    # protect overlay from stage3 interference
+stage1_epochs_override: 100       # v26: 40→100 (build compact to 0.77 before adapters)
+vol_stage2_lr_factor: 0.01        # v25: vol tracks backbone at 1% lr in stage2 (prevents drift)
+
+training:
+  epochs: 220                     # v26: 150→220 (100 stage1 + 120 stage2+3)
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

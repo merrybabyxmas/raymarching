@@ -610,6 +610,7 @@ class AblationTrainer:
         ious_e0, ious_e1 = [], []
         amo_dice_e0, amo_dice_e1 = [], []  # v25: amodal Dice per entity
         compacts_e0, compacts_e1 = [], []  # per-sample compact for averaged metric
+        lcc_e0_vals, lcc_e1_vals = [], []  # v26: LCC per sample for stable averaged metric
 
         for vi in self.val_idx:
             try:
@@ -698,7 +699,7 @@ class AblationTrainer:
                 obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
                 struct_losses.append(float(obj_result["total"].item()))
 
-                # Accumulate compact per sample for averaged metric
+                # Accumulate compact and LCC per sample for averaged metrics
                 if vol_outputs.entity_probs is not None:
                     fg_sp = (V_gt > 0).any(dim=1)  # (B, H, W)
                     for b in range(vol_outputs.entity_probs.shape[0]):
@@ -709,6 +710,9 @@ class AblationTrainer:
                         c_e1 = DebugContract._depth_compactness(ep_b[1], fg_b)
                         compacts_e0.append(c_e0)
                         compacts_e1.append(c_e1)
+                        # v26: LCC averaged over all eval samples (single-sample LCC is too noisy)
+                        lcc_e0_vals.append(DebugContract._compute_lcc(ep_b[0]))
+                        lcc_e1_vals.append(DebugContract._compute_lcc(ep_b[1]))
 
                 # Accuracy
                 ep = vol_outputs.entity_probs[:B_feat]
@@ -794,6 +798,9 @@ class AblationTrainer:
         # v25: store amodal dice for contract (getattr default=0.0)
         self._val_amo_dice_e0 = _avg(amo_dice_e0)
         self._val_amo_dice_e1 = _avg(amo_dice_e1)
+        # v26: store averaged LCC for contract (more stable than single-sample)
+        self._val_lcc_e0 = _avg(lcc_e0_vals)
+        self._val_lcc_e1 = _avg(lcc_e1_vals)
 
         # ── Compute last vol_outputs for contract (reuse last val sample)
         _contract_vol = getattr(self, "_last_val_vol_outputs", None)

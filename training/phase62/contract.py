@@ -60,7 +60,7 @@ CTOPO_LCC_MIN        = 0.85
 CGUIDE_GATE_LO       = 0.10
 CGUIDE_GATE_HI       = 0.35
 CGUIDE_OVERLAY_MIN   = 0.35
-CGUIDE_WINNER_MAX    = 0.45
+CGUIDE_WINNER_MAX    = 0.55  # was 0.45 — winner=max(vis_e0,vis_e1)/(vis_e0+vis_e1) ≥ 0.50 always, 0.45 unreachable
 CGUIDE_COS_MAX       = 0.10
 
 # C_diff
@@ -316,7 +316,13 @@ class DebugContract:
             m.vol_compactness    = min(m.vol_compactness_e0, m.vol_compactness_e1)
 
         # ── C_topo: LCC ───────────────────────────────────────────────────
-        if vol_outputs.entity_probs is not None:
+        # Prefer averaged val_lcc_* from trainer (more stable than single-batch).
+        if "val_lcc_e0" in val_metrics and float(val_metrics["val_lcc_e0"]) < 0.999:
+            # Averaged over all eval samples — use this as the ground truth.
+            m.LCC_e0 = float(val_metrics["val_lcc_e0"])
+            m.LCC_e1 = float(val_metrics["val_lcc_e1"])
+            m.LCC_min = min(m.LCC_e0, m.LCC_e1)
+        elif vol_outputs.entity_probs is not None:
             ep = vol_outputs.entity_probs
             b = 0
             m.LCC_e0 = self._compute_lcc(ep[b, 0])
