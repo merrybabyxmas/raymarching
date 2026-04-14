@@ -1,0 +1,92 @@
+# B1 v22: Gate gradient fix + new 5-contract targets (seed 7)
+#
+# v21 diagnosis (2026-04-14):
+#   v21 passed legacy S1+S2+S3 (5 consecutive) but fails new 5-contract:
+#   - gate=0.0600 (clamped floor, below new CGUIDE_GATE_LO=0.10) → C_guide FAIL
+#   - compact=0.425 (below CTOPO_COMPACT_MIN=0.60) → C_topo FAIL
+#   - winner=0.69 (above CGUIDE_WINNER_MAX=0.45) → C_guide FAIL
+#   - D_amo not measured (~0 estimated) → C_topo FAIL
+#   Root cause: gate gradient killed by inject_guide normalization dividing by gate*proj_std
+#
+# v22 fixes:
+#   1. Gate gradient fix (conditioning.py):
+#      - GuideFeatureAssembler.forward() outputs proj(x) WITHOUT gate
+#      - inject_guide normalises by proj_std (gate-independent), THEN applies gate
+#      - d(guide_eff)/d(gate_param) = proj_normalised * sech²(gate_param) ≠ 0
+#      - Expected natural gate equilibrium: 0.15-0.30 (vs old broken 0.042)
+#   2. Stronger compactness (lambda_compact: 1.0 → 4.0)
+#      - Needs entropy ~0.83 (compact=0.60) vs current 1.20 (compact=0.425)
+#      - 4× stronger signal pushes from 3.6 effective bins → 2.3 effective bins
+#   3. Balance loss (lambda_balance: 0.3)
+#      - L_balance = (vis_e0.mean() - vis_e1.mean())^2 → WinnerRatio → 0.50
+#   4. Raise min_gate_stage3: 0.06 → 0.10
+#      - Now that gradient flows, 0.10 is natural floor (not the only mechanism)
+#      - Gate will grow beyond 0.10 through diffusion gradient
+#   5. New 5-contract metric collection (D_amo, LCC, cos_F, etc.)
+#
+# Strategy: gate will now grow naturally from diffusion gradient during stage2.
+#   No need to rely solely on clamp. Expected trajectory:
+#   - ep25 (stage2): gate starts growing freely
+#   - ep50: gate ≈ 0.10-0.15 (natural growth)
+#   - ep75+: gate ≈ 0.15-0.30 (C_guide range)
+#   compact target: 0.60 by ep60 with lambda_compact=4.0
+#   winner target: ≤0.45 by ep40 with lambda_balance=0.3
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+
+training:
+  epochs: 120
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 42
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 4.0          # v22: 1.0 → 4.0 (compact 0.425 → 0.60 target)
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0        # no push — gradient now flows correctly
+  min_gate_stage3: 0.10        # safety floor only (gate will grow beyond this)
+  lambda_balance: 0.3          # v22: new balance loss for WinnerRatio ≤ 0.45
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

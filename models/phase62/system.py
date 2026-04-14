@@ -80,7 +80,11 @@ class Phase62System(nn.Module):
         return vol_outputs, guides
 
     def set_guides(self, guides: Dict[str, torch.Tensor]) -> None:
-        self.injection_mgr.set_guides(guides)
+        # v22: pass gate_fn so injection manager applies gate AFTER amplitude
+        # normalisation, preserving the gate gradient path.
+        def gate_fn(block_name: str) -> "Optional[torch.Tensor]":
+            return self.assembler.get_gate(block_name)
+        self.injection_mgr.set_guides(guides, gate_fn=gate_fn)
 
     def clear_guides(self) -> None:
         self.injection_mgr.clear_guides()

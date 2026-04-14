@@ -82,6 +82,7 @@ class FactorizedFgIdObjective(VolumeObjective):
         lambda_compact: float = 0.5,
         lambda_depth_ce: float = 3.0,
         lambda_depth_vis: float = 0.0,
+        lambda_balance: float = 0.0,   # v22: penalise vis_e0 ≠ vis_e1 imbalance
         # Legacy params (kept for config backwards-compat, not used in v12 objective):
         lambda_dice: float = 0.0,
         lambda_hinge: float = 0.0,
@@ -95,6 +96,7 @@ class FactorizedFgIdObjective(VolumeObjective):
         self.lambda_compact = lambda_compact
         self.lambda_depth_ce = lambda_depth_ce
         self.lambda_depth_vis = lambda_depth_vis
+        self.lambda_balance = lambda_balance
 
     def forward(
         self,
@@ -240,6 +242,20 @@ class FactorizedFgIdObjective(VolumeObjective):
                 L_depth_vis = torch.stack(depth_losses).mean().clamp(max=10.0)
                 total = total + self.lambda_depth_vis * L_depth_vis
 
+        # L_balance: penalise asymmetric entity visibility.
+        # WinnerRatio = max(vis_e0, vis_e1) / (vis_e0 + vis_e1) should be ≤ 0.45.
+        # Direct fix: minimise squared difference of mean visible projections.
+        # L_balance = (mean(vis_e0) - mean(vis_e1))^2
+        # Only activates when both projections are present.
+        L_balance = fg_logit.new_zeros(())
+        if (self.lambda_balance > 0
+                and "e0" in outputs.visible and "e1" in outputs.visible):
+            vis_e0 = outputs.visible["e0"]
+            vis_e1 = outputs.visible["e1"]
+            B_b = min(vis_e0.shape[0], vis_e1.shape[0])
+            L_balance = (vis_e0[:B_b].mean() - vis_e1[:B_b].mean()).pow(2)
+            total = total + self.lambda_balance * L_balance
+
         return {
             "total": total,
             "L_fg": L_fg.detach(),
@@ -249,4 +265,5 @@ class FactorizedFgIdObjective(VolumeObjective):
             "L_vis": L_vis.detach(),
             "L_compact": L_compact.detach(),
             "L_depth_vis": L_depth_vis.detach(),
+            "L_balance": L_balance.detach(),
         }

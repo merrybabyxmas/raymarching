@@ -77,6 +77,7 @@ class AblationTrainer:
             obj_kwargs["lambda_compact"] = float(getattr(self.train_cfg, "lambda_compact", 0.5))
             obj_kwargs["lambda_depth_ce"] = float(getattr(self.train_cfg, "lambda_depth_ce", 3.0))
             obj_kwargs["lambda_depth_vis"] = float(getattr(self.train_cfg, "lambda_depth_vis", 0.0))
+            obj_kwargs["lambda_balance"] = float(getattr(self.train_cfg, "lambda_balance", 0.0))
             # Legacy params (kept for backwards compat if config includes them):
             obj_kwargs["lambda_dice"] = float(getattr(self.train_cfg, "lambda_dice", 0.0))
             obj_kwargs["lambda_hinge"] = float(getattr(self.train_cfg, "lambda_hinge", 0.0))
