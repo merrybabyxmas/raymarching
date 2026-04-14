@@ -231,8 +231,15 @@ class AblationTrainer:
             # ONLY unfreeze fg_spatial_head — lets fg_magnitude co-adapt as backbone
             # features improve through adapter training. Avoids v13 collapse where
             # full volume un-freeze destabilised depth_attn.
+            # v25: vol_stage2_lr_factor > 0 allows vol to track backbone drift at ultra-low lr
+            #      instead of being fully frozen (prevents compact decline from backbone drift).
             freeze_deep_vol = (self.schedule in ("S1", "S3"))
             low_lr_vol = (self.schedule == "S2")
+            vol_s2_lr_factor = float(getattr(self.config, "vol_stage2_lr_factor", 0.0))
+            # If vol_stage2_lr_factor > 0, vol trains at that fraction of lr_volume instead
+            # of being fully frozen (only applies when freeze_deep_vol would be True)
+            if freeze_deep_vol and vol_s2_lr_factor > 0:
+                freeze_deep_vol = False   # override: allow vol to train at ultra-low lr
             for p in self.param_groups["volume"]:
                 p.requires_grad_(not freeze_deep_vol)
             # fg_spatial always trains in stage2 (it's a tiny 2D head, safe to update)
@@ -243,7 +250,10 @@ class AblationTrainer:
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
                 if name == "volume_pred":
-                    if freeze_deep_vol:
+                    if vol_s2_lr_factor > 0:
+                        # ultra-low lr: track backbone drift without overfitting
+                        group["lr"] = group["initial_lr"] * vol_s2_lr_factor
+                    elif freeze_deep_vol:
                         group["lr"] = 0.0
                     elif low_lr_vol:
                         group["lr"] = group["initial_lr"] * 0.1
@@ -275,7 +285,8 @@ class AblationTrainer:
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
                 if name == "volume_pred":
-                    group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.05
+                    # v25: 0.10× lr (was 0.05×) for faster compact recovery in stage3
+                    group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.10
                 elif name == "fg_spatial":
                     group["lr"] = 0.0 if freeze_fg_s3 else group["initial_lr"] * 0.10
                 else:
@@ -597,6 +608,7 @@ class AblationTrainer:
         diff_losses, struct_losses = [], []
         accs_overall, accs_entity = [], []
         ious_e0, ious_e1 = [], []
+        amo_dice_e0, amo_dice_e1 = [], []  # v25: amodal Dice per entity
         compacts_e0, compacts_e1 = [], []  # per-sample compact for averaged metric
 
         for vi in self.val_idx:
@@ -725,6 +737,35 @@ class AblationTrainer:
                         vc[:n_eval], m1_gt, entity_idx=2,
                         spatial_h=self.config.spatial_h, spatial_w=self.config.spatial_w))
 
+                    # v25: amodal Dice — compare vol amodal projection to entity GT mask.
+                    # entity_masks are at spatial_h×spatial_w (downsampled), shape (T, 2, S).
+                    # amodal["e0"] = 1 - prod(1 - entity_probs[:, 0]) over depth bins.
+                    if "e0" in vol_outputs.amodal and "e1" in vol_outputs.amodal:
+                        n_amo = min(n_eval, int(entity_masks.shape[0]))
+                        if n_amo > 0:
+                            amo_e0 = vol_outputs.amodal["e0"][:n_amo]  # (B, H, W)
+                            amo_e1 = vol_outputs.amodal["e1"][:n_amo]
+                            amo_gt0 = torch.from_numpy(
+                                entity_masks[:n_amo, 0].astype(np.float32)).to(self.device)
+                            amo_gt1 = torch.from_numpy(
+                                entity_masks[:n_amo, 1].astype(np.float32)).to(self.device)
+                            # Reshape GT to (B, H, W): entity_masks stored as (T, 2, S=HW)
+                            S_amo = amo_gt0.shape[-1]
+                            hw_amo = int(round(S_amo ** 0.5))
+                            if hw_amo * hw_amo == S_amo:
+                                amo_gt0 = amo_gt0.reshape(n_amo, hw_amo, hw_amo)
+                                amo_gt1 = amo_gt1.reshape(n_amo, hw_amo, hw_amo)
+                                # Dice: 2*inter / (pred_sum + gt_sum)
+                                eps = 1e-6
+                                inter0 = (amo_e0.float() * amo_gt0).sum(dim=(1, 2))
+                                denom0 = amo_e0.float().sum(dim=(1, 2)) + amo_gt0.sum(dim=(1, 2))
+                                d0 = float(((2.0 * inter0 + eps) / (denom0 + eps)).mean().item())
+                                inter1 = (amo_e1.float() * amo_gt1).sum(dim=(1, 2))
+                                denom1 = amo_e1.float().sum(dim=(1, 2)) + amo_gt1.sum(dim=(1, 2))
+                                d1 = float(((2.0 * inter1 + eps) / (denom1 + eps)).mean().item())
+                                amo_dice_e0.append(d0)
+                                amo_dice_e1.append(d1)
+
             except Exception as e:
                 print(f"  [val warn] idx={vi}: {e}", flush=True)
                 continue
@@ -749,6 +790,10 @@ class AblationTrainer:
 
         # Average compact over all val samples (more reliable than single-sample measurement)
         val_compact = min(_avg(compacts_e0), _avg(compacts_e1))
+
+        # v25: store amodal dice for contract (getattr default=0.0)
+        self._val_amo_dice_e0 = _avg(amo_dice_e0)
+        self._val_amo_dice_e1 = _avg(amo_dice_e1)
 
         # ── Compute last vol_outputs for contract (reuse last val sample)
         _contract_vol = getattr(self, "_last_val_vol_outputs", None)

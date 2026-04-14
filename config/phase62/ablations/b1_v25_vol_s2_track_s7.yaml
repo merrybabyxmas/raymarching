@@ -1,0 +1,118 @@
+# B1 v25: Vol tracks backbone in stage2 + longer run + balanced lambdas (seed 7)
+#
+# v24 diagnosis (2026-04-14, ep119 final):
+#   compact=0.405 (target 0.60) — far below target. Root cause:
+#     1. Stage2 vol frozen → backbone drift from adapter training changes backbone features
+#        → entity_probs shift → compact DECLINES (0.44→0.39 during stage2)
+#     2. Stage3 only 30ep at 0.05×lr → only +0.018 recovery (0.39→0.41)
+#   overlay=0.238 (target 0.35) — declining in stage3. Root cause:
+#     lambda_compact=6.0 >> lambda_vis=0.2 (ratio 30:1). Compact training shifts
+#     depth distribution → changes visible projection footprint → overlay degrades.
+#   winner=0.616 (target ≤0.45) — improving but insufficient.
+#     Vol frozen in stage2 → balance loss ineffective. Need more stage3 time.
+#   D_amo=0.000 — measurement bug: _val_amo_dice_e0 never set in trainer.
+#     FIX: added amodal dice computation directly to validation loop in ablation_trainer.py.
+#   diff_mse=0.0496 ✓ — C_diff passes!
+#   LCC=0.500 (target 0.85) — needs compact to grow for connected entity blobs.
+#
+# v25 fixes (targeted, mathematical):
+#
+#   1. vol_stage2_lr_factor: 0.01 (NEW param)
+#      Vol trains at 0.01×lr_volume = 5e-6 in stage2 instead of frozen.
+#      Prevents compact decline from backbone drift while keeping vol stable.
+#      At 5e-6 lr, vol makes very small updates: follows backbone drift without overfitting.
+#      Result: compact enters stage3 from ~0.44 baseline (vs 0.39 in v24) → better final value.
+#
+#   2. epochs: 150 (extended from 120)
+#      With stage1=40, stage2=70, stage3=40 epochs:
+#      - stage1 (ep0-39): vol trains at full lr → compact base ~0.44
+#      - stage2 (ep40-109): vol tracks backbone at 5e-6 → compact stays ~0.44
+#      - stage3 (ep110-149): vol unfrozen at 0.10×lr (5e-5) → compact grows to 0.60+
+#      Stage3 is 40ep (vs 30ep in v24), with 2× higher vol lr → much more compact growth.
+#
+#   3. lambda_compact: 3.0 (reduced from 6.0)
+#      6.0 was causing compact to oscillate in stage1 AND overlay to decline in stage3.
+#      3.0 provides steady growth without spatial footprint disruption.
+#
+#   4. lambda_vis: 0.5 (increased from 0.2)
+#      Counteracts compact-driven overlay shift. Ratio now 6:1 (compact:vis) vs 30:1 in v24.
+#      Keeps visible projection aligned with GT visible mask as depth distribution concentrates.
+#
+#   5. lambda_balance: 3.0 (increased from 2.0)
+#      Vol trains in stage2 (at low lr) → balance loss can act on vol → faster winner fix.
+#      Also more stage3 time for balance to converge.
+#
+#   6. D_amo fix (code-level): amodal dice now computed inline in ablation_trainer validation
+#      loop and stored as self._val_amo_dice_e0/e1. No separate evaluator call needed.
+#
+# Expected trajectories:
+#   compact: ~0.44 (stage1 end) → ~0.44 (stage2 end, stable!) → ~0.60+ (stage3 end)
+#   overlay: stable in stage3 (lambda_vis=0.5 counteracts compact drift)
+#   winner: improving in stage2 (vol trainable) + more stage3 → ≤0.45 by ep130
+#   D_amo: ~0.1-0.3 (measurement now working)
+#   diff_mse: continues passing (≤0.05)
+#   LCC: improves as compact grows → entity blobs become more connected
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: false          # vol unfrozen in stage3 for compact recovery
+freeze_fg_spatial_stage3: true    # fg_spatial frozen in stage3 for overlay stability
+stage1_epochs_override: 40        # 40ep stage1 (same as v24)
+vol_stage2_lr_factor: 0.01        # v25 NEW: vol tracks backbone at 1% lr in stage2
+
+training:
+  epochs: 150                     # v25: 120→150 (more stage3 time for compact)
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5                # same as v24 (slower adapter for overlay stability)
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5                 # v25: 0.2→0.5 (counteract compact-driven overlay shift)
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0             # v25: 6.0→3.0 (stable growth, no oscillation)
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35                  # ceiling clamp from v23
+  lambda_balance: 3.0             # v25: 2.0→3.0 (vol trainable in stage2 helps balance)
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
