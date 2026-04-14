@@ -29,6 +29,7 @@ from training.phase62.losses import loss_diffusion, loss_feature_separation, com
 from training.phase62.evaluator import Phase62Evaluator, _encode_text, _get_entity_tokens_with_fallback
 from training.phase62.rollout import Phase62RolloutRunner
 from training.phase62.metrics import compute_projected_class_iou
+from training.phase62.debug_viz import TrainingDebugViz
 from data.phase62.volume_gt_builder import VolumeGTBuilder
 from scripts.train_animatediff_vca import encode_frames_to_latents
 from scripts.train_phase39 import (
@@ -93,6 +94,12 @@ class AblationTrainer:
         self.debug_dir.mkdir(parents=True, exist_ok=True)
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
+        # Training debug visualizer (writes to debug_dir/training/)
+        self.train_viz = TrainingDebugViz(self.debug_dir, config)
+
+        # Eval outputs go to debug_dir/eval/
+        (self.debug_dir / "eval").mkdir(parents=True, exist_ok=True)
+
         raw_ds = dataset.raw_dataset() if hasattr(dataset, 'raw_dataset') else dataset
         overlap_scores = compute_dataset_overlap_scores(raw_ds)
         val_frac = getattr(self.data_cfg, 'val_frac', 0.2)
@@ -104,6 +111,8 @@ class AblationTrainer:
         self._setup_optimizer()
 
         self.history: List[Dict] = []
+        self.train_step_history: List[Dict] = []  # per-step metrics for loss curve
+        self.val_history: List[Dict] = []
         self.best_val_score = -1.0
         self.best_epoch = -1
 
@@ -238,7 +247,8 @@ class AblationTrainer:
         else:
             return sample[0], sample[1], sample[2], sample[3], None, sample[4], None
 
-    def _train_step(self, sample, data_idx: int, epoch: int, current_epoch: int = 0) -> Optional[Dict]:
+    def _train_step(self, sample, data_idx: int, epoch: int, current_epoch: int = 0,
+                    debug_step: bool = False, step_idx: int = 0) -> Optional[Dict]:
         frames_np, depth_np, depth_orders, meta, sample_dir, entity_masks, visible_masks = \
             self._unpack_sample(sample)
 
@@ -407,6 +417,27 @@ class AblationTrainer:
         for k, v in obj_result.items():
             if k != "total" and isinstance(v, torch.Tensor):
                 result[k] = float(v.item())
+
+        # ── Training debug visualisation (once per epoch, step 0)
+        if debug_step:
+            try:
+                with torch.no_grad():
+                    self.train_viz.save_volume_debug(
+                        vol_outputs, V_gt, gt_visible, gt_amodal,
+                        epoch=epoch, step=step_idx, stage=stage)
+                    if use_diffusion and guides:
+                        self.train_viz.save_guide_debug(
+                            guides, self.system.assembler, epoch=epoch, stage=stage)
+                    if use_diffusion and 'noise_pred' in locals():
+                        noise_t_dbg = noise[:, :, :T_frames].float()
+                        np_t_dbg = noise_pred[:, :, :T_frames].float()
+                        self.train_viz.save_diffusion_debug(
+                            np_t_dbg, noise_t_dbg,
+                            epoch=epoch, step=step_idx, stage=stage,
+                            diff_weight=float(diff_weight))
+            except Exception as _e:
+                pass  # never crash training for debug viz
+
         return result
 
     @torch.no_grad()
@@ -565,8 +596,10 @@ class AblationTrainer:
                 toks_e0=toks_e0_pt, toks_e1=toks_e1_pt,
                 entity_masks=probe_masks, gt_frames=probe_frames)
 
+            eval_out_dir = self.debug_dir / "eval"
+            eval_out_dir.mkdir(parents=True, exist_ok=True)
             paths = self.rollout_runner.save_rollout(
-                rollout_result, self.debug_dir, prefix=f"eval_epoch{epoch:03d}")
+                rollout_result, eval_out_dir, prefix=f"eval_epoch{epoch:03d}")
             for name, path in paths.items():
                 print(f"  [gif] {name}: {path}", flush=True)
         except Exception as e:
@@ -659,11 +692,14 @@ class AblationTrainer:
 
             for batch_idx, data_idx in enumerate(step_indices):
                 sample = self.dataset[data_idx]
-                r = self._train_step(sample, data_idx, epoch, current_epoch=epoch)
+                is_debug = (batch_idx == 0)  # save debug viz on first step of each epoch
+                r = self._train_step(sample, data_idx, epoch, current_epoch=epoch,
+                                     debug_step=is_debug, step_idx=batch_idx)
                 if r is None:
                     continue
                 losses.append(r["loss"])
                 accs_ent.append(r["acc_entity"])
+                self.train_step_history.append({"epoch": epoch, **r})
 
             stage = self._get_stage(epoch)
             avg_loss = sum(losses) / max(len(losses), 1) if losses else float("nan")
@@ -682,10 +718,39 @@ class AblationTrainer:
 
             self.lr_scheduler.step()
 
+            # Epoch-level loss curve update (using per-step history)
+            epoch_summary = {
+                "epoch": epoch,
+                "loss": avg_loss if np.isfinite(avg_loss) else float("nan"),
+                "acc_entity": avg_acc,
+                "stage": stage,
+                "diff_weight": _dw,
+            }
+            # Pull component losses from last step in this epoch
+            last_steps = [r for r in self.train_step_history if r["epoch"] == epoch]
+            if last_steps:
+                for key in ("l_diff", "l_struct"):
+                    vals = [r[key] for r in last_steps if key in r and np.isfinite(r[key])]
+                    epoch_summary[key] = sum(vals) / max(len(vals), 1) if vals else float("nan")
+            self.train_step_history_epoch = getattr(self, "train_step_history_epoch", [])
+            self.train_step_history_epoch.append(epoch_summary)
+
             if (epoch + 1) % eval_every == 0 or epoch == epochs - 1:
                 val_m = self._eval_epoch(epoch)
                 self._save_checkpoint(epoch, val_m)
                 self.history.append({"epoch": epoch, **val_m})
+                self.val_history.append({"epoch": epoch, **val_m})
+
+                # Update loss curve with latest val data
+                stage_bounds = {
+                    "s1→s2": self.stage1_end,
+                    "s2→s3": self.stage2_end,
+                }
+                self.train_viz.update_loss_curve(
+                    self.train_step_history_epoch,
+                    self.val_history,
+                    stage_bounds,
+                )
 
         # Save history
         hist_path = self.save_dir / "history.json"
