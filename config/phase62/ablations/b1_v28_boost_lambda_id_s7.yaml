@@ -1,0 +1,111 @@
+# B1 v28: lambda_id=10.0 to drive compact through q sharpening (seed 7)
+#
+# v26/v27 post-mortem:
+#   compact = 0.40 across ALL runs regardless of stage1 duration or L_balance removal.
+#   Root cause traced to q = softmax(id_logits, dim=1) — per-voxel entity softmax.
+#
+# Mathematical analysis of compact = f(q):
+#   entity_probs_e0[k,h,w] = p_fg[k,h,w] × q[0,k,h,w]
+#   compact_e0 = 1 - entropy(depth_mass_e0) / log(K)
+#   where depth_mass_e0[k] = mean over fg pixels of entity_probs_e0[k,h,w]
+#
+#   With depth_prior_scale=10.0 (hardcoded): depth_attn[front_bin] ≈ 0.82
+#   L_id trains q via CE loss. After 800 steps (40ep) with lambda_id=3.0:
+#     logit_diff(e0_at_entity0) = λ_id × lr × steps × (1-q) ≈ 3.0 × 5e-4 × 800 × 0.3 ≈ 0.84
+#     → q_e0 at entity 0 voxels ≈ 0.70, q_e0 at entity 1 voxels ≈ 0.30
+#   Plugging in:
+#     depth_mass_e0 bimodal: k=entity0_depth has 0.287, k=entity1_depth has 0.123
+#     entropy = 1.245 → compact = 1 - 1.245/2.079 = 0.401 ✓ (matches observed!)
+#
+#   To reach compact = 0.60 need:
+#     p_e0[k=entity0] / p_e0[k=entity1] ≈ 5
+#     → q_e0 at entity 0 ≈ 0.83, q_e0 at entity 1 ≈ 0.17
+#     → logit_diff ≈ 1.61 (vs current 0.84)
+#
+#   With lambda_id=10.0 (3.33× increase) in 800 steps:
+#     logit_diff ≈ 0.84 × 3.33 = 2.81 → q_e0_at_entity0 = 0.94, q_e0_at_entity1 = 0.06
+#     depth_mass ratio ≈ 16.5 → compact ≈ 0.83 (in 40 stage1 epochs!)
+#
+#   With lambda_id=10.0 in 2000 steps (100ep, ~50% efficiency through 3D conv stack):
+#     logit_diff ≈ 0.84 × 3.33 × 2.5 × 0.5 ≈ 3.5 → q ≈ 0.97/0.03 → compact ≈ 0.90+
+#
+# v28 fix: lambda_id: 3.0 → 10.0 (ONE config line change)
+#   No architectural changes needed. Just stronger entity identity supervision.
+#
+# All v27 structural fixes retained:
+#   - balance_warmup_epoch=100: still removes L_balance during stage1 (minor help)
+#   - freeze_vol_stage3=True: still protects compact in stage3 (critical)
+#   - stage1_epochs_override=100: still builds compact fully before adapters
+#   - vol_stage2_lr_factor=0.01: prevents compact decline in stage2
+#
+# Expected:
+#   compact(ep39) ≈ 0.80 (vs 0.42 in v26/v27 at same epoch)
+#   compact(ep99) ≈ 0.90+ (high q sharpness from many supervised voxels)
+#   D_amo: at compact=0.85+, entities well-separated → D_amo ~0.50+ ✓
+#   LCC: concentrated blobs → LCC ~0.90+ ✓
+#   All 5 contracts expected from ~ep190
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0             # v28 KEY: 3.0→10.0 drives q sharpening → compact=0.80+
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
