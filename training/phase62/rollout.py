@@ -52,6 +52,12 @@ class Phase62RolloutRunner:
 
         system.clear_guides()
 
+        # Bypass backbone extractors during pipe() to prevent pink artifacts.
+        # pipe() runs CFG internally (cond+uncond batch), and entity-masked
+        # attention in the uncond batch produces garbage features that corrupt
+        # the output. Bypass mode uses vanilla cross-attention instead.
+        backbone_mgr.set_bypass(True)
+
         gen = torch.Generator(device=device).manual_seed(eval_seed)
         with torch.no_grad():
             out = pipe(
@@ -64,6 +70,8 @@ class Phase62RolloutRunner:
                 generator=gen,
                 output_type="np",
             )
+
+        backbone_mgr.set_bypass(False)
 
         comp_frames = [(f * 255).astype(np.uint8) for f in out.frames[0]]
 

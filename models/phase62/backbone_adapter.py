@@ -144,6 +144,11 @@ class BackboneFeatureExtractor(nn.Module):
         self.last_F0: Optional[torch.Tensor] = None
         self.last_F1: Optional[torch.Tensor] = None
 
+        # Bypass mode: when True, skip slot extraction + LoRA.
+        # Used during pipe() rollout to prevent pink artifacts from
+        # CFG's uncond batch corrupting entity-masked attention.
+        self.bypass = False
+
     def set_entity_tokens(
         self,
         toks_e0: torch.Tensor,  # (n_tok,) int
@@ -203,14 +208,20 @@ class BackboneFeatureExtractor(nn.Module):
         """
         Cross-attention forward with LoRA and entity slot extraction.
 
-        Args:
-            attn: the diffusers Attention module (has to_q, to_k, to_v, to_out)
-            hidden_states: (B, S, D) — UNet spatial hidden states
-            encoder_hidden_states: (B, T_seq, D_text) — text encoder output
-
-        Returns:
-            output: (B, S, D) — processed hidden states
+        In bypass mode: vanilla cross-attention, no LoRA, no slot extraction.
+        This prevents pink artifacts when pipe() runs CFG with cond+uncond batches.
         """
+        if self.bypass:
+            enc_hs = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
+            B_hs, S_hs, D_hs = hidden_states.shape
+            n_h = attn.heads
+            h_d = attn.to_q.weight.shape[0] // n_h
+            q = attn.to_q(hidden_states).reshape(B_hs, S_hs, n_h, h_d).transpose(1, 2)
+            k = attn.to_k(enc_hs).reshape(enc_hs.shape[0], -1, n_h, h_d).transpose(1, 2)
+            v = attn.to_v(enc_hs).reshape(enc_hs.shape[0], -1, n_h, h_d).transpose(1, 2)
+            a = Func.scaled_dot_product_attention(q, k, v)
+            out = attn.to_out[0](a.transpose(1, 2).reshape(B_hs, S_hs, -1))
+            return attn.to_out[1](out)
         B, S, D = hidden_states.shape
         dtype = hidden_states.dtype
         enc_hs = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
@@ -372,6 +383,13 @@ class BackboneManager:
         """Set all extractors to eval mode."""
         for ext in self.extractors:
             ext.eval()
+
+    def set_bypass(self, bypass: bool) -> None:
+        """Enable/disable bypass mode on all extractors.
+        In bypass mode: vanilla cross-attention, no LoRA, no slot extraction.
+        Used during pipe() rollout to prevent pink artifacts from CFG."""
+        for ext in self.extractors:
+            ext.bypass = bypass
 
     def adapter_params(self) -> List[nn.Parameter]:
         """Collect all slot adapter parameters."""

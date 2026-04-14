@@ -25,7 +25,7 @@ from PIL import Image
 
 from training.phase62.objectives import build_objective
 from training.phase62.objectives.base import VolumeOutputs
-from training.phase62.losses import loss_diffusion, compute_volume_accuracy
+from training.phase62.losses import loss_diffusion, loss_feature_separation, compute_volume_accuracy
 from training.phase62.evaluator import Phase62Evaluator, _encode_text, _get_entity_tokens_with_fallback
 from training.phase62.rollout import Phase62RolloutRunner
 from training.phase62.metrics import compute_projected_class_iou
@@ -305,6 +305,12 @@ class AblationTrainer:
 
         obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
         l_struct = obj_result["total"]
+
+        # Feature separation loss (Issue 2 fix): push F_0 and F_1 apart
+        la_sep = float(getattr(self.train_cfg, "la_feature_sep", 0.1))
+        if la_sep > 0:
+            l_sep = loss_feature_separation(F_0, F_1)
+            l_struct = l_struct + la_sep * l_sep
 
         if use_diffusion:
             self.system.set_guides(guides)
@@ -586,7 +592,16 @@ class AblationTrainer:
         print(f"  epochs={epochs} steps/ep={steps_per_epoch} "
               f"train={len(self.train_idx)} val={len(self.val_idx)}", flush=True)
 
+        # Temperature annealing: start soft (1.0), anneal to hard (0.1)
+        temp_start = float(getattr(self.train_cfg, "temp_start", 1.0))
+        temp_end = float(getattr(self.train_cfg, "temp_end", 0.1))
+
         for epoch in range(epochs):
+            # Anneal temperature: linear from temp_start to temp_end
+            progress = epoch / max(1, epochs - 1)
+            temp = temp_start + (temp_end - temp_start) * progress
+            self.system.projector.set_temperature(temp)
+
             self.system.train()
             self.backbone_mgr.train()
             self._set_epoch_trainability(epoch)

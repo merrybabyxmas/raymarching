@@ -103,6 +103,43 @@ def loss_projected_balance(
     return front_probs.new_zeros(())
 
 
+def loss_feature_separation(
+    F_0: torch.Tensor,  # (B, S, D)
+    F_1: torch.Tensor,  # (B, S, D)
+) -> torch.Tensor:
+    """
+    Push F_0 and F_1 feature representations apart.
+
+    Minimizes cosine similarity between per-pixel feature vectors.
+    If F_0 and F_1 are already orthogonal (cos_sim=0), loss is 0.
+    If identical (cos_sim=1), loss is 1.
+    """
+    f0 = F.normalize(F_0.float(), dim=-1)
+    f1 = F.normalize(F_1.float(), dim=-1)
+    cos_sim = (f0 * f1).sum(dim=-1)  # (B, S)
+    return cos_sim.clamp(min=0.0).mean()
+
+
+def loss_rendered_dice(
+    visible_e0: torch.Tensor,  # (B, H, W)
+    visible_e1: torch.Tensor,  # (B, H, W)
+    gt_visible: torch.Tensor,  # (B, 2, H, W)
+    eps: float = 1e-6,
+) -> torch.Tensor:
+    """
+    Rendering-consistent loss: Dice on the RENDERED 2D visible output.
+
+    Unlike per-voxel BCE, this loss matches the actual rendering math
+    (transmittance compositing), so gradients align with what we see.
+    """
+    def _dice(pred, target):
+        inter = (pred * target).sum(dim=(-2, -1))
+        denom = pred.sum(dim=(-2, -1)) + target.sum(dim=(-2, -1))
+        return (1.0 - (2.0 * inter + eps) / (denom + eps)).mean()
+
+    return _dice(visible_e0, gt_visible[:, 0]) + _dice(visible_e1, gt_visible[:, 1])
+
+
 def compute_volume_accuracy(
     V_logits: torch.Tensor,  # (B, C, K, H, W)
     V_gt: torch.Tensor,      # (B, K, H, W)
