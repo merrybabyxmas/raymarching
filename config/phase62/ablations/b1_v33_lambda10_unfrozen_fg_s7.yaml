@@ -1,0 +1,97 @@
+# B1 v33: lambda_id=10 + freeze_fg_spatial_stage3=False (seed 7)
+#
+# KEY INSIGHT (2026-04-15): Why stage3 overlay drops even with frozen fg_spatial:
+#   fg_spatial is frozen but its INPUT (diffusion latents) changes as LoRA/adapters train.
+#   As diff_mse decreases in stage3, latent representations shift.
+#   Frozen fg_spatial, trained on stage2 latents, becomes misaligned with stage3 latents.
+#   → overlay drops: 0.34 (freeze point) → 0.217-0.295 (stage3 final), even though fg_spatial frozen!
+#
+# The fix: freeze_fg_spatial_stage3=False
+#   fg_spatial continues adapting to evolving diffusion latents in stage3.
+#   L_id (lambda_id=10) and L_vis keep entity alignment strong.
+#   As diffusion improves (diff_mse → 0.05), fg_spatial tracks the better latents.
+#   Expected: overlay stays ≥ 0.35 or INCREASES in stage3 (instead of dropping).
+#
+# lambda_id=10 retained:
+#   Provides entity identity supervision strong enough to maintain entity balance
+#   without relying on vol_stage2_lr_factor=0.01-weakened L_balance.
+#   lambda_id=3,5 both fail on winner (0.66-0.73) because entity 0 collapses in stage2.
+#   lambda_id=10 keeps winner ~0.51-0.58 (sometimes passing ≤0.55 threshold).
+#
+# v28/v29 failure was:
+#   compact OK ✓ (0.40-0.42)
+#   winner borderline (0.51-0.58, sometimes ✓)
+#   overlay ✗ (0.217-0.295) ← ONLY because of frozen-fg_spatial + evolving-latents mismatch
+#   diff_mse close (0.050 ± 0.002) ✓/✗
+#
+# v33 fix: unfreeze fg_spatial in stage3 → overlay expected to track/improve.
+#   If overlay reaches and holds 0.35+ in stage3, AND winner ≤ 0.55, AND diff_mse ≤ 0.05:
+#   All 5 contracts should pass simultaneously.
+#
+# vol remains frozen in stage3 (freeze_vol_stage3=True): compact protected.
+# Only fg_spatial, LoRA, adapters continue in stage3.
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false   # v33 KEY: unfreeze to track evolving diffusion latents
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0             # restored: maintains entity balance (winner~0.51-0.58)
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
