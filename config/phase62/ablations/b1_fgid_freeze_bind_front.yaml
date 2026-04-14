@@ -23,7 +23,7 @@ training:
   lr_lora: 5e-5
   lr_adapter: 1e-4
   la_diff: 1.0
-  la_vol: 5.0
+  la_vol: 3.0
   lambda_id: 3.0
   fg_pos_weight: 30.0
   lambda_vis: 0.2

@@ -298,8 +298,12 @@ class AblationTrainer:
         if depth_np is not None:
             B_feat = F_g.shape[0]
             dmap = depth_np[:B_feat].astype(np.float32)        # (T', H_scene, W_scene)
-            dmax = float(dmap.max()) + 1e-6
-            dmap_norm = torch.from_numpy(dmap / dmax).to(self.device)  # (T', H, W)
+            # MUST match VolumeGTBuilder's normalization: (depth - d_min) / (d_max - d_min)
+            # Using just dmap/dmax misaligns depth_hint K-bins with GT V_gt K-bins → corrupt signal.
+            dmin = float(dmap.min())
+            dmax = float(dmap.max())
+            drange = max(dmax - dmin, 1e-6)
+            dmap_norm = torch.from_numpy((dmap - dmin) / drange).to(self.device)  # (T', H, W)
             H_vol, W_vol = self.config.spatial_h, self.config.spatial_w
             if dmap_norm.shape[-2:] != (H_vol, W_vol):
                 dmap_norm = F.interpolate(
@@ -544,8 +548,11 @@ class AblationTrainer:
                 if depth_np is not None:
                     B_feat_hint = F_g.shape[0]
                     dmap_v = depth_np[:B_feat_hint].astype(np.float32)
-                    dmax_v = float(dmap_v.max()) + 1e-6
-                    dmap_v_norm = torch.from_numpy(dmap_v / dmax_v).to(self.device)
+                    # Match VolumeGTBuilder: min-max normalization
+                    dmin_v = float(dmap_v.min())
+                    dmax_v = float(dmap_v.max())
+                    drange_v = max(dmax_v - dmin_v, 1e-6)
+                    dmap_v_norm = torch.from_numpy((dmap_v - dmin_v) / drange_v).to(self.device)
                     H_vol, W_vol = self.config.spatial_h, self.config.spatial_w
                     if dmap_v_norm.shape[-2:] != (H_vol, W_vol):
                         dmap_v_norm = F.interpolate(
