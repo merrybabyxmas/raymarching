@@ -11,10 +11,9 @@ One pixel = one entity. Period.
 
 | Phase 60/61 (REMOVED) | Phase 62 (NEW) |
 |------------------------|----------------|
-| Scalar alpha per entity | 3D volume logits (B, N+1, K, H, W) |
+| Scalar alpha per entity | 3D volume logits / factorized fg-id volume |
 | Porter-Duff / transmittance | First-hit projection (argmax scan) |
-| Soft ownership BCE | Volume cross-entropy (one loss) |
-| 8+ auxiliary losses | 2 losses only: L_diffusion + L_volume_ce |
+| Soft ownership BCE | Mainline volume BCE + ablation-only structural losses |
 | Primary-block-only control | Multi-scale injection (mid/up2/multiscale) |
 | Heuristic depth ordering | Learned 3D topology |
 
@@ -23,14 +22,16 @@ One pixel = one entity. Period.
 ## File Map
 
 ```
-models/phase62_entity_volume.py    # EntityVolumePredictor: 3D conv volume head
-models/phase62_projection.py       # FirstHitProjector: argmax scan over depth
-models/phase62_conditioning.py     # VolumeGuidedProcessor: UNet injection
-models/phase62_losses.py           # 2 losses: diffusion MSE + volume CE
-scripts/train_phase62.py           # Training loop
-scripts/build_volume_gt.py         # V_gt from 3D rendered data
-harness/test_phase62_volume.py     # Volume shape/softmax tests
-harness/test_phase62_projection.py # First-hit tests
+models/phase62_entity_volume.py    # EntityVolumePredictor: independent / factorized / center-offset heads
+models/phase62_projection.py       # FirstHitProjector: depth scan + amodal/visible projections
+models/phase62_conditioning.py     # GuideFeatureAssembler + UNet injection hooks
+training/phase62/objectives/       # Objective families: independent_bce, factorized_fg_id, projected_* , center_offset
+training/phase62/ablation_trainer.py# Config-driven stage schedule + ablation runner
+scripts/train_phase62.py           # Main entry (delegates to v2 path)
+scripts/run_phase62_ablations.py   # Ablation matrix runner
+scripts/build_volume_gt.py         # V_gt from rendered depth / masks
+harness/test_phase62_volume.py     # Volume shape / projection smoke tests
+harness/test_phase62_projection.py  # First-hit tests
 harness/test_phase62_forward.py    # End-to-end smoke test
 ```
 
@@ -39,30 +40,22 @@ harness/test_phase62_forward.py    # End-to-end smoke test
 ## Architecture
 
 ```
-Dataset (3D rendered) ──► build_volume_gt.py ──► V_gt (B, K, H, W) class indices
-                                                   │
-AnimateDiff UNet                                   │
-     │                                             │
-     ├─► Entity features F_0, F_1, F_g             │
-     │        │                                    │
-     │   EntityVolumePredictor                     │
-     │        │                                    │
-     │   V_logits (B, N+1, K, H, W)               │
-     │        │                         L_volume_ce(V_logits, V_gt)
-     │   softmax over class dim ──────────────────►│
-     │        │                                    │
-     │   FirstHitProjector                         │
-     │        │                                    │
-     │   visible_class_map (B, H, W)               │
-     │   visible_features (B, D, H, W)             │
-     │        │                                    │
-     │   VolumeGuidedProcessor                     │
-     │        │ (inject at mid / up2 / multiscale) │
-     │        ▼                                    │
-     ├─► noise_pred ───────────────────► L_diffusion(noise_pred, noise_gt)
-     │
-     ▼
-  output
+Dataset (rendered depth + masks) ─► build_volume_gt.py ─► V_gt / gt_visible / gt_amodal
+                                              │
+AnimateDiff UNet ─► BackboneFeatureExtractor ─► F_g, F_0, F_1
+                                              │
+                                              ├─► EntityVolumePredictor
+                                              │      └─► V_logits / entity_probs
+                                              │
+                                              ├─► FirstHitProjector
+                                              │      └─► visible_class / front_probs / back_probs
+                                              │
+                                              ├─► GuideFeatureAssembler
+                                              │      └─► guide tensors per injection block
+                                              │
+                                              └─► GuideInjectionManager -> UNet hooks
+                                                      └─► noise_pred
+                                                            └─► L_diffusion
 ```
 
 ---
@@ -71,22 +64,22 @@ AnimateDiff UNet                                   │
 
 ### 1. Volume Representation
 - `V_logits`: (B, N+1, K, H, W) where N=2 entities, K=8 depth bins
-- **Voxel-wise softmax** over class dimension (dim=1): bg vs cat vs dog compete
-- **NOT** independent sigmoid — mutual exclusion enforced
-- 3D conv layers for depth-axis continuity
+- `independent_bce` is the current stable baseline; `factorized_fg_id` is the main ablation family
+- `factorized_fg_id` uses `p_fg * q_id` factorization to reduce all-bg collapse
+- 3D conv layers provide depth-axis continuity bias
 
 ### 2. V_gt Construction
-- Built from **actual 3D rendered data**: per-entity depth maps + binary masks
+- Built from rendered depth + masks in `data.phase62`
 - Each voxel gets a class label: 0=bg, 1=entity0, 2=entity1
-- Depth bins derived from actual rendered depth values, not heuristic
-- Fallback (2D mask + depth_order) exists but is NOT the default path
+- `VolumeGTBuilder` caches rendered voxel targets per sample
+- Fallback (2D mask + depth_order) exists but is not the default path
 
 ### 3. First-Hit Projection
 - Scan depth axis k=0..K-1 (front to back)
 - First non-background class wins the pixel
+- Produces `visible_class`, `front_probs`, `back_probs`, plus `amodal` / `visible` maps for ablations
 - **No max pooling, no mean, no weighted average, no transparency**
-- Training: Gumbel-softmax or straight-through for differentiability
-- Inference: hard argmax
+- Training uses straight-through style gradients where needed; inference is hard argmax
 
 ### 4. UNet Injection
 - Projected 2D guide conditions the UNet via spatial addition
@@ -96,14 +89,17 @@ AnimateDiff UNet                                   │
   - `multiscale`: mid + up_blocks.1 + up_blocks.2 + up_blocks.3
 - Each injection point gets a lightweight projection layer
 
-### 5. Losses (exactly 2)
-- `L_diffusion`: MSE(noise_pred, noise_gt)
-- `L_volume_ce`: CrossEntropy(V_logits, V_gt) with class weighting
+### 5. Loss Families
+- Mainline baseline: `L_diffusion` + `L_volume_ce`
+- `L_volume_ce` currently runs as the stable baseline in `independent_bce`
+- Ablation-only structural losses are tracked separately in `training/phase62/objectives/`
+- `loss_visible_dice`, `loss_amodal_dice`, `loss_voxel_exclusive` are experimental, not default
 
 ### 6. Topology Update Schedule
-- `hybrid`: compute volume at step 0, refine at steps T//3 and 2T//3, fix rest
-- `fixed_once`: compute once at step 0, fix for all steps
-- `every_step`: recompute every step (expensive, for ablation only)
+- `S0`: volume-only
+- `S1`: stage1 volume, stage2 diffusion-only binding
+- `S2`: stage1 volume, stage2 low-LR volume + diffusion
+- `S3`: short joint fine-tune after stage2
 
 ---
 
@@ -117,8 +113,14 @@ AnimateDiff UNet                                   │
 
 ---
 
+## Current Results Snapshot
+- `outputs/phase62_ablations/summary.json` records the latest ablation pass.
+- Best current factorized run: `b2_fgid_freeze_bind_fourstream`
+- It improves entity voxels relative to the dead-all-bg regime, but still shows asymmetric drift and `iou_min` collapse in late epochs.
+- Practical takeaway: `independent_bce` remains the conservative baseline; `factorized_fg_id` is the current main ablation to retest after the id-branch fix.
+
 ## Evaluation
 - **Primary**: composite GIF visual inspection (cat ≠ dog, no chimera)
 - **Quantitative**: volume accuracy, projected class IoU vs visible mask
 - **Collision**: overlap frames evaluated separately
-- **Best checkpoint**: selected by projected_class_iou, NOT by soft CE alone
+- **Best checkpoint**: selected by projected_class_iou and `iou_min`, not by soft CE alone

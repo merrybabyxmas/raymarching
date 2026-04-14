@@ -69,3 +69,9 @@ python scripts/run_phase62_ablations.py --config config/phase62/ablations/b0_fgi
 # All 9
 python scripts/run_phase62_ablations.py --all
 ```
+
+## Current Empirical Takeaway
+- The current summary at `outputs/phase62_ablations/summary.json` shows `b2_fgid_freeze_bind_fourstream` as the best factorized run so far.
+- It is better than the old all-background collapse regime, but it still exhibits asymmetric drift in later epochs.
+- The practical mainline baseline remains `independent_bce` until the factorized id branch is re-tested with the corrected dual-entity input path.
+- Structural losses that directly optimize projected visible masks remain ablation-only; they are not the current mainline because they tend to suppress entity mass early.

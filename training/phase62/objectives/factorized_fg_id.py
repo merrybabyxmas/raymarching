@@ -37,6 +37,11 @@ class FactorizedFgIdObjective(VolumeObjective):
         gt_visible: Optional[torch.Tensor] = None,
         gt_amodal: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
+        if outputs.fg_logit is None or outputs.id_logits is None:
+            raise ValueError(
+                "factorized_fg_id requires fg_logit and id_logits in VolumeOutputs"
+            )
+
         fg_logit = outputs.fg_logit[:, 0]   # (B, K, H, W)
         id_logits = outputs.id_logits        # (B, 2, K, H, W)
 
