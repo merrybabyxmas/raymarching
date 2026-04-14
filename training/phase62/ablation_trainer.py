@@ -79,6 +79,7 @@ class AblationTrainer:
             obj_kwargs["lambda_hinge"] = float(getattr(self.train_cfg, "lambda_hinge", 1.0))
             obj_kwargs["hinge_margin"] = float(getattr(self.train_cfg, "hinge_margin", 1.0))
             obj_kwargs["hinge_density_thresh"] = float(getattr(self.train_cfg, "hinge_density_thresh", 0.20))
+            obj_kwargs["lambda_depth_vis"] = float(getattr(self.train_cfg, "lambda_depth_vis", 0.0))
         elif self.objective_name == "independent_bce":
             obj_kwargs["entity_pos_weight"] = float(getattr(self.train_cfg, "entity_pos_weight", 50.0))
         elif self.objective_name == "center_offset":

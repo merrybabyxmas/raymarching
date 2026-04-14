@@ -43,6 +43,7 @@ class FactorizedFgIdObjective(VolumeObjective):
         lambda_hinge: float = 1.0,
         hinge_margin: float = 1.0,
         hinge_density_thresh: float = 0.20,
+        lambda_depth_vis: float = 0.0,
     ):
         super().__init__()
         self.lambda_id = lambda_id
@@ -53,6 +54,7 @@ class FactorizedFgIdObjective(VolumeObjective):
         self.lambda_hinge = lambda_hinge
         self.hinge_margin = hinge_margin
         self.hinge_density_thresh = hinge_density_thresh
+        self.lambda_depth_vis = lambda_depth_vis
 
     def forward(
         self,
@@ -157,6 +159,51 @@ class FactorizedFgIdObjective(VolumeObjective):
                                                    fg_spatial_mask=fg_spatial)
                 total = total + self.lambda_compact * L_compact
 
+        # L_depth_vis: directly supervise entity_probs to concentrate at the
+        # front-most depth bin where each entity is present, for visible fg pixels.
+        #
+        # L_compact encourages concentration in aggregate (entropy minimisation)
+        # but provides no per-pixel depth target.  L_depth_vis directly maximises
+        # entity_probs[n, k_gt, h, w] at the correct depth bin k_gt — a much
+        # stronger and more direct signal for depth localisation.
+        #
+        # Only activated when gt_visible and entity_probs are available.
+        L_depth_vis = fg_logit.new_zeros(())
+        if (self.lambda_depth_vis > 0
+                and gt_visible is not None
+                and outputs.entity_probs is not None):
+            B, K_v, H_v, W_v = V_gt.shape
+            ep = outputs.entity_probs  # (B, 2, K, H, W)
+            K_ep = ep.shape[2]
+            B_vis = min(gt_visible.shape[0], B)
+
+            depth_losses = []
+            for n, entity_class in enumerate([1, 2]):
+                entity_present = (V_gt[:B_vis] == entity_class)  # (B_vis, K, H, W)
+                has_entity = entity_present.any(dim=1)             # (B_vis, H, W)
+                if not has_entity.any():
+                    continue
+
+                # Front-most depth bin (minimum k) where entity is present at each pixel.
+                # (K - 1 - argmax_of_flipped) = argmin of original along K dim.
+                entity_float = entity_present.float()              # (B_vis, K, H, W)
+                front_depth = (K_v - 1) - entity_float.flip(1).argmax(dim=1)  # (B_vis, H, W)
+                front_depth = front_depth.clamp(0, K_ep - 1)
+
+                # Gather entity_probs at front depth bin for entity n
+                depth_idx = front_depth.unsqueeze(1)               # (B_vis, 1, H, W)
+                ep_at_front = ep[:B_vis, n].gather(1, depth_idx).squeeze(1)  # (B_vis, H, W)
+
+                # Loss only where entity is visible (gt_visible) AND present in 3D
+                vis_mask = (gt_visible[:B_vis, n] > 0.5) & has_entity  # (B_vis, H, W)
+                if vis_mask.any():
+                    ep_at_vis = ep_at_front[vis_mask].clamp(min=1e-8)
+                    depth_losses.append(-torch.log(ep_at_vis).mean())
+
+            if depth_losses:
+                L_depth_vis = torch.stack(depth_losses).mean().clamp(max=10.0)
+                total = total + self.lambda_depth_vis * L_depth_vis
+
         return {
             "total": total,
             "L_fg": L_fg.detach(),
@@ -166,4 +213,5 @@ class FactorizedFgIdObjective(VolumeObjective):
             "L_id": L_id.detach(),
             "L_vis": L_vis.detach(),
             "L_compact": L_compact.detach(),
+            "L_depth_vis": L_depth_vis.detach(),
         }

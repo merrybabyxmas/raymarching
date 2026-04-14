@@ -102,10 +102,17 @@ class EntityVolumePredictor(nn.Module):
         # Depth hint injection: optional per-pixel scene depth → depth-bin features.
         # Input: (B, K, H, W) soft depth bin weights derived from scene depth map.
         # Output: (B, hidden, K, H, W) added to shared_seed to concentrate entity_probs.
-        # Zero-init: no change to initial predictions; trains to use depth cues.
+        #
+        # Block-diagonal init: output group k is active when input channel k is high.
+        # This gives an IMMEDIATE useful depth signal from epoch 0 (unlike zero-init).
         self.depth_encoder = nn.Conv2d(depth_bins, hidden * depth_bins, kernel_size=1, bias=True)
-        nn.init.zeros_(self.depth_encoder.weight)
-        nn.init.zeros_(self.depth_encoder.bias)
+        self._init_depth_encoder()
+
+        # Learnable depth positional embedding (K, hidden) — scene-invariant depth bias.
+        # Allows each depth bin to develop a unique feature representation, helping
+        # the shared_3d blocks converge quickly to depth-specific predictions.
+        # Initialised near-zero so it doesn't dominate early training.
+        self.depth_pos_emb = nn.Parameter(torch.zeros(1, hidden, depth_bins, 1, 1))
 
         if representation == "independent":
             self.bg_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
@@ -146,6 +153,24 @@ class EntityVolumePredictor(nn.Module):
                 for head in (self.offset_e0_head, self.offset_e1_head):
                     nn.init.zeros_(head.weight)
                     nn.init.zeros_(head.bias)
+
+    def _init_depth_encoder(self) -> None:
+        """
+        Block-diagonal initialisation for depth_encoder.
+        Output group k (channels k*hidden : (k+1)*hidden) gets weight 0.3
+        on input channel k, and 0 elsewhere.  This immediately produces a
+        depth-bin-specific feature bias from the soft depth weights, giving
+        useful signal from epoch 0 rather than waiting for the encoder to learn.
+        Bias is zero-initialised (no global bias — pure depth-conditional signal).
+        """
+        K = self.depth_bins
+        h = self.hidden
+        nn.init.zeros_(self.depth_encoder.weight)
+        nn.init.zeros_(self.depth_encoder.bias)
+        with torch.no_grad():
+            for k in range(K):
+                # output channels [k*h : (k+1)*h] should activate for input ch k
+                self.depth_encoder.weight[k * h:(k + 1) * h, k, 0, 0] = 0.3
 
     def _to_2d(self, feat: torch.Tensor) -> torch.Tensor:
         B = feat.shape[0]
@@ -201,6 +226,10 @@ class EntityVolumePredictor(nn.Module):
         h_shared_2d = self.shared_2d(h_cat)
 
         shared_seed = self._expand_3d(h_shared_2d, self.expand_shared)
+
+        # Depth positional embedding: scene-invariant per-bin bias.
+        # Allows shared_3d to quickly develop depth-specific representations.
+        shared_seed = shared_seed + self.depth_pos_emb
 
         # Inject scene depth hint (if available) as a depth-bin feature bias.
         # depth_hint provides per-pixel depth → helps concentrate entity_probs

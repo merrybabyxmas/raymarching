@@ -42,6 +42,7 @@ training:
   hinge_margin: 1.0
   hinge_density_thresh: 0.20
   compact_warmup_epoch: 8
+  lambda_depth_vis: 1.0
 
 eval:
   n_steps: 20
