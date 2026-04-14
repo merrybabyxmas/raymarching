@@ -1,12 +1,9 @@
 """
-Phase 62 — Losses
-==================
+Phase 62 — Mainline Losses
+============================
 
-Main losses used by Phase62.
-
-The volume loss is no longer a class-softmax CE. Instead, entity-0 and
-entity-1 are treated as independent voxel presences with BCE-with-logits.
-This reduces zero-sum winner-take-all behavior during early topology learning.
+Only production-validated losses live here.
+Experimental losses are in losses_ablation.py.
 """
 from __future__ import annotations
 
@@ -17,16 +14,16 @@ import torch.nn.functional as F
 
 
 def loss_diffusion(
-    noise_pred: torch.Tensor,  # (B, C, T, H, W) or (B, C, H, W)
-    noise_gt: torch.Tensor,    # same shape
+    noise_pred: torch.Tensor,
+    noise_gt: torch.Tensor,
 ) -> torch.Tensor:
     """Standard MSE diffusion loss."""
     return F.mse_loss(noise_pred.float(), noise_gt.float())
 
 
 def loss_volume_ce(
-    V_logits: torch.Tensor,                        # (B, C, K, H, W) logits, use channels 1:3
-    V_gt: torch.Tensor,                            # (B, K, H, W) class indices
+    V_logits: torch.Tensor,                        # (B, C, K, H, W)
+    V_gt: torch.Tensor,                            # (B, K, H, W)
     class_weights: Optional[torch.Tensor] = None,
     voxel_weights: Optional[torch.Tensor] = None,
     entity_pos_weight: float = 50.0,
@@ -34,25 +31,21 @@ def loss_volume_ce(
     """
     Independent BCE-with-logits on entity voxel presences.
 
-    CRITICAL: Entity voxels are ~1% of total volume. Without strong
-    positive weighting, the model learns "predict all bg" trivially.
-    entity_pos_weight upweights positive (entity-present) voxels.
+    Entity voxels are ~1% of total volume. Without strong positive
+    weighting, the model learns "predict all bg" trivially.
     """
     logits_e = V_logits[:, 1:3].float()  # (B, 2, K, H, W)
     target_e0 = (V_gt == 1).float()
     target_e1 = (V_gt == 2).float()
-    targets = torch.stack([target_e0, target_e1], dim=1)  # (B,2,K,H,W)
+    targets = torch.stack([target_e0, target_e1], dim=1)
 
-    # PER-ENTITY separate loss: e0 and e1 get exactly equal gradient.
-    # This prevents one entity from dominating the other.
-    logits_e0 = logits_e[:, 0]  # (B, K, H, W)
-    logits_e1 = logits_e[:, 1]  # (B, K, H, W)
+    logits_e0 = logits_e[:, 0]
+    logits_e1 = logits_e[:, 1]
     tgt_e0 = targets[:, 0]
     tgt_e1 = targets[:, 1]
 
     def _entity_loss(logits, tgt):
         bce = F.binary_cross_entropy_with_logits(logits, tgt, reduction="none")
-        # Clamp individual BCE to prevent gradient explosion on extreme logits
         bce = bce.clamp(max=20.0)
         pos_mask = (tgt > 0.5)
         neg_mask = ~pos_mask
@@ -65,11 +58,8 @@ def loss_volume_ce(
     l_e0 = _entity_loss(logits_e0, tgt_e0)
     l_e1 = _entity_loss(logits_e1, tgt_e1)
 
-    # Aggressive dynamic balancing: wider clamp to strongly correct asymmetry.
-    # Previous [0.8, 1.25] was too narrow — one entity drifting away couldn't be
-    # pulled back fast enough. [0.5, 2.0] gives 4x range for correction.
     with torch.no_grad():
-        ratio = (l_e0 / (l_e1 + 1e-6)).clamp(0.5, 2.0)
+        ratio = (l_e0 / (l_e1 + 1e-6)).clamp(0.8, 1.25)
         w0 = ratio / (ratio + 1.0)
         w1 = 1.0 - w0
     return w0 * l_e0 + w1 * l_e1
@@ -80,63 +70,44 @@ def loss_projected_global(
     gt_visible: torch.Tensor,       # (B, 2, H, W)
     eps: float = 1e-6,
 ) -> torch.Tensor:
-    """
-    Differentiable global projection loss on the front-hit 2D projection.
-
-    Optimizes projected entity occupancy directly in image space so that
-    both entities must retain visible area after projection.
-    """
-    pred = front_probs[:, 1:3].float()  # entity channels only
+    """Differentiable global projection loss on front-hit 2D projection."""
+    pred = front_probs[:, 1:3].float()
     gt = gt_visible.float()
-
     inter = (pred * gt).sum(dim=(2, 3))
     union = pred.sum(dim=(2, 3)) + gt.sum(dim=(2, 3)) - inter
     iou = (inter + eps) / (union + eps)
     return (1.0 - iou).mean()
 
 
-def loss_projected_balance(
+def loss_min_iou_balance(
     front_probs: torch.Tensor,      # (B, C, H, W)
     gt_visible: torch.Tensor,       # (B, 2, H, W)
     eps: float = 1e-6,
 ) -> torch.Tensor:
-    """
-    Penalize asymmetric collapse: loss = 1 - min(IoU_e0, IoU_e1).
-
-    If EITHER entity dies (IoU→0), loss→1 regardless of the other.
-    Forces the model to keep BOTH entities alive simultaneously.
-    """
-    pred = front_probs[:, 1:3].float()  # (B, 2, H, W)
-    gt = gt_visible.float()  # (B, 2, H, W)
-
-    # Per-entity IoU
-    inter = (pred * gt).sum(dim=(2, 3))  # (B, 2)
+    """Quadratic min-IoU balance: ((1 - min_iou)^2).mean()"""
+    pred = front_probs[:, 1:3].float()
+    gt = gt_visible.float()
+    inter = (pred * gt).sum(dim=(2, 3))
     union = pred.sum(dim=(2, 3)) + gt.sum(dim=(2, 3)) - inter
-    iou = (inter + eps) / (union + eps)  # (B, 2)
+    iou = (inter + eps) / (union + eps)
+    min_iou = iou.min(dim=1).values
+    return ((1.0 - min_iou) ** 2).mean()
 
-    # min-IoU penalty + per-entity recall (coverage)
-    min_iou = iou.min(dim=1).values  # (B,)
-    l_min = ((1.0 - min_iou) ** 2).mean()
 
-    # Per-entity RECALL: fraction of GT pixels covered by prediction.
-    # Penalizes "easy patch only" solutions — forces full-body coverage.
-    # recall = inter / gt_sum. If recall is low for either entity → penalty.
-    gt_sum = gt.sum(dim=(2, 3)).clamp(min=1.0)  # (B, 2)
-    recall = (inter + eps) / (gt_sum + eps)  # (B, 2)
-    min_recall = recall.min(dim=1).values  # (B,)
-    l_recall = ((1.0 - min_recall) ** 2).mean()
-
-    return l_min + 0.5 * l_recall
+def loss_projected_balance(
+    front_probs: torch.Tensor,
+    gt_visible: torch.Tensor,
+    eps: float = 1e-6,
+) -> torch.Tensor:
+    """Legacy — kept for backward compat but now returns 0."""
+    return front_probs.new_zeros(())
 
 
 def compute_volume_accuracy(
     V_logits: torch.Tensor,  # (B, C, K, H, W)
     V_gt: torch.Tensor,      # (B, K, H, W)
 ) -> dict:
-    """
-    Compute per-class and overall accuracy for volume predictions.
-    Returns dict with overall_acc, bg_acc, entity_acc.
-    """
+    """Per-class and overall accuracy for volume predictions."""
     with torch.no_grad():
         p_e0 = torch.sigmoid(V_logits[:, 1].float())
         p_e1 = torch.sigmoid(V_logits[:, 2].float())
@@ -147,11 +118,8 @@ def compute_volume_accuracy(
         correct = (pred_class == V_gt.long())
 
         overall_acc = correct.float().mean().item()
-
-        # Per-class accuracy
         bg_mask = (V_gt == 0)
         entity_mask = (V_gt > 0)
-
         bg_acc = correct[bg_mask].float().mean().item() if bg_mask.any() else 1.0
         entity_acc = correct[entity_mask].float().mean().item() if entity_mask.any() else 0.0
 

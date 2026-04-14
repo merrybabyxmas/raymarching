@@ -111,6 +111,8 @@ class EntityVolumePredictor(nn.Module):
             self.id_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
             self.fg_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
             self.id_head = nn.Conv3d(hidden, 2, kernel_size=1, bias=True)
+            # id_branch needs BOTH entity features to classify e0 vs e1
+            self.expand_id = nn.Conv2d(hidden * 3, hidden * depth_bins, kernel_size=1, bias=True)
 
             if representation == "center_offset":
                 self.offset_e0_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
@@ -188,9 +190,11 @@ class EntityVolumePredictor(nn.Module):
             )
 
         elif self.representation in ("factorized_fg_id", "center_offset"):
-            # fg branch uses shared_3d (gradient flows); id branch uses detached
             fg_feat = self.fg_branch(torch.cat([shared_3d, bg_seed], dim=1))
-            id_feat = self.id_branch(torch.cat([shared_3d_d, e0_seed], dim=1))
+            # id_branch sees BOTH e0 and e1 features + shared context
+            id_seed = self._expand_3d(
+                torch.cat([h_shared_2d, h_e0, h_e1], dim=1), self.expand_id)
+            id_feat = self.id_branch(torch.cat([shared_3d_d, id_seed], dim=1))
 
             fg_logit = self.fg_head(fg_feat)   # (B, 1, K, H, W)
             id_logits = self.id_head(id_feat)  # (B, 2, K, H, W)

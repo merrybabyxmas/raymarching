@@ -31,11 +31,8 @@ from PIL import Image
 
 from training.phase62.losses import (
     loss_diffusion,
-    loss_projected_balance,
     loss_projected_global,
-    loss_amodal_dice,
-    loss_visible_dice,
-    loss_voxel_exclusive,
+    loss_min_iou_balance,
     loss_volume_ce,
     compute_volume_accuracy,
 )
@@ -571,21 +568,9 @@ class Phase62Trainer:
         src_vis = visible_masks if visible_masks is not None else entity_masks
         gt_visible = self._build_gt_visible_tensor(src_vis, B_feat)
 
-        # Proven working losses from v2 run (iou_e0=0.088, iou_e1=0.045)
+        # Mainline losses only — no ablation losses mixed in
         l_global = loss_projected_global(front_probs[:gt_visible.shape[0]], gt_visible)
-
-        # min-IoU balance (quadratic, bounded) — the version that worked
-        pred_bal = front_probs[:gt_visible.shape[0], 1:3].float()
-        gt_bal = gt_visible.float()
-        inter_bal = (pred_bal * gt_bal).sum(dim=(2, 3))
-        union_bal = pred_bal.sum(dim=(2, 3)) + gt_bal.sum(dim=(2, 3)) - inter_bal
-        iou_bal = (inter_bal + 1e-6) / (union_bal + 1e-6)
-        min_iou_bal = iou_bal.min(dim=1).values
-        l_balance = ((1.0 - min_iou_bal) ** 2).mean()
-
-        # Voxel exclusive (light auxiliary — don't let it dominate)
-        l_excl = loss_voxel_exclusive(vol_outputs.entity_probs[:B_feat])
-        l_balance = l_balance + 0.1 * l_excl
+        l_balance = loss_min_iou_balance(front_probs[:gt_visible.shape[0]], gt_visible)
 
         if use_diffusion:
             self.system.set_guides(guides)
