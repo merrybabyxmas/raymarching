@@ -221,8 +221,21 @@ class DebugContract:
     ) -> ContractMetrics:
         m = ContractMetrics(epoch=epoch, stage=stage)
 
-        # ── Volume compactness (fg-masked to avoid bg leakage in depth_mass)
-        if vol_outputs.entity_probs is not None:
+        # ── Volume compactness
+        # Prefer val_compact (averaged over all val samples) over single-sample
+        # measurement from vol_outputs, which is noisy and non-representative.
+        if "val_compact" in val_metrics:
+            m.vol_compactness    = float(val_metrics["val_compact"])
+            # Still compute per-entity for reporting (from first val sample)
+            if vol_outputs.entity_probs is not None:
+                ep = vol_outputs.entity_probs  # (B, 2, K, H, W)
+                b = 0
+                fg_spatial = None
+                if gt_visible is not None and gt_visible.shape[0] > b:
+                    fg_spatial = (gt_visible[b] > 0.5).any(dim=0)  # (H, W)
+                m.vol_compactness_e0 = self._depth_compactness(ep[b, 0], fg_spatial)
+                m.vol_compactness_e1 = self._depth_compactness(ep[b, 1], fg_spatial)
+        elif vol_outputs.entity_probs is not None:
             ep = vol_outputs.entity_probs  # (B, 2, K, H, W)
             b = 0
             # Derive fg spatial mask from gt_visible: True where any entity is present

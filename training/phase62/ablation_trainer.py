@@ -502,6 +502,7 @@ class AblationTrainer:
         diff_losses, struct_losses = [], []
         accs_overall, accs_entity = [], []
         ious_e0, ious_e1 = [], []
+        compacts_e0, compacts_e1 = [], []  # per-sample compact for averaged metric
 
         for vi in self.val_idx:
             try:
@@ -587,6 +588,18 @@ class AblationTrainer:
                 obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
                 struct_losses.append(float(obj_result["total"].item()))
 
+                # Accumulate compact per sample for averaged metric
+                if vol_outputs.entity_probs is not None:
+                    fg_sp = (V_gt > 0).any(dim=1)  # (B, H, W)
+                    for b in range(vol_outputs.entity_probs.shape[0]):
+                        ep_b = vol_outputs.entity_probs[b]  # (2, K, H, W)
+                        fg_b = fg_sp[b] if fg_sp.shape[0] > b else None
+                        from training.phase62.contract import Contract
+                        c_e0 = Contract._depth_compactness(ep_b[0], fg_b)
+                        c_e1 = Contract._depth_compactness(ep_b[1], fg_b)
+                        compacts_e0.append(c_e0)
+                        compacts_e1.append(c_e1)
+
                 # Accuracy
                 ep = vol_outputs.entity_probs[:B_feat]
                 p0, p1 = ep[:, 0], ep[:, 1]
@@ -636,6 +649,9 @@ class AblationTrainer:
             + 0.30 * val_iou_min
         )
 
+        # Average compact over all val samples (more reliable than single-sample measurement)
+        val_compact = min(_avg(compacts_e0), _avg(compacts_e1))
+
         # ── Compute last vol_outputs for contract (reuse last val sample)
         _contract_vol = getattr(self, "_last_val_vol_outputs", None)
         _contract_gt_vis = getattr(self, "_last_val_gt_visible", None)
@@ -648,6 +664,7 @@ class AblationTrainer:
                 val_metrics={
                     "val_iou_min":   val_iou_min,
                     "val_diff_mse":  _avg(diff_losses),
+                    "val_compact":   val_compact,
                 },
                 epoch=epoch,
                 stage=_cstage,
@@ -664,6 +681,7 @@ class AblationTrainer:
             "val_iou_e0": val_iou_e0,
             "val_iou_e1": val_iou_e1,
             "val_iou_min": val_iou_min,
+            "val_compact": val_compact,
             "n_samples": len(diff_losses),
         }
 
@@ -674,6 +692,7 @@ class AblationTrainer:
             f"iou_e0={val_iou_e0:.4f}  "
             f"iou_e1={val_iou_e1:.4f}  "
             f"iou_min={val_iou_min:.4f}  "
+            f"compact={val_compact:.3f}  "
             f"n={len(diff_losses)}",
             flush=True)
 
