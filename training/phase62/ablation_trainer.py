@@ -238,7 +238,7 @@ class AblationTrainer:
         else:
             return sample[0], sample[1], sample[2], sample[3], None, sample[4], None
 
-    def _train_step(self, sample, data_idx: int, epoch: int) -> Optional[Dict]:
+    def _train_step(self, sample, data_idx: int, epoch: int, current_epoch: int = 0) -> Optional[Dict]:
         frames_np, depth_np, depth_orders, meta, sample_dir, entity_masks, visible_masks = \
             self._unpack_sample(sample)
 
@@ -333,13 +333,23 @@ class AblationTrainer:
         la_vol = float(getattr(self.train_cfg, "la_vol", 2.0))
         la_diff = float(getattr(self.train_cfg, "la_diff", 1.0))
 
+        # Solution 2: Gradual diffusion loss warm-up at stage transition
+        # Prevents cold-start explosion when guide network first activates
+        diff_warmup_epochs = int(getattr(self.train_cfg, "diff_warmup_epochs", 5))
+        diff_weight = 0.0  # default (stage1 / S0)
+
         if stage == "stage1" or self.schedule == "S0":
             loss = la_vol * l_struct
         elif stage == "stage2":
             vol_scale = 0.0 if self.schedule == "S1" else 0.25
-            loss = la_diff * l_diff + la_vol * vol_scale * l_struct
+            current_stage_epoch = current_epoch - self.stage1_end
+            diff_weight = min(1.0, (current_stage_epoch + 1) / max(1, diff_warmup_epochs))
+            loss = diff_weight * la_diff * l_diff + la_vol * vol_scale * l_struct
         else:
-            loss = la_diff * l_diff + la_vol * 0.25 * l_struct
+            # stage3: full joint, brief warmup when entering from stage2
+            current_stage_epoch = current_epoch - self.stage2_end
+            diff_weight = min(1.0, (current_stage_epoch + 1) / max(1, diff_warmup_epochs // 2))
+            loss = diff_weight * la_diff * l_diff + la_vol * 0.25 * l_struct
 
         if not torch.isfinite(loss) or loss.item() > 100.0:
             self.system.clear_guides()
@@ -358,10 +368,14 @@ class AblationTrainer:
             self.system.clear_guides()
             return None
 
+        # Solution 3: Gradient clipping — per-group then global safety net
         torch.nn.utils.clip_grad_norm_(self.param_groups["volume"], max_norm=0.3)
         torch.nn.utils.clip_grad_norm_(self.param_groups["assembler"], max_norm=0.3)
         torch.nn.utils.clip_grad_norm_(self.param_groups["adapter"], max_norm=0.3)
         torch.nn.utils.clip_grad_norm_(self.param_groups["lora"], max_norm=0.2)
+        all_params = (self.param_groups["volume"] + self.param_groups["assembler"]
+                      + self.param_groups["adapter"] + self.param_groups["lora"])
+        torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
 
         self.optimizer.step()
         self.system.clear_guides()
@@ -388,6 +402,7 @@ class AblationTrainer:
             "stage": stage,
             "acc_overall": acc_overall,
             "acc_entity": acc_entity,
+            "diff_weight": float(diff_weight),
         }
         for k, v in obj_result.items():
             if k != "total" and isinstance(v, torch.Tensor):
@@ -644,7 +659,7 @@ class AblationTrainer:
 
             for batch_idx, data_idx in enumerate(step_indices):
                 sample = self.dataset[data_idx]
-                r = self._train_step(sample, data_idx, epoch)
+                r = self._train_step(sample, data_idx, epoch, current_epoch=epoch)
                 if r is None:
                     continue
                 losses.append(r["loss"])
@@ -653,8 +668,16 @@ class AblationTrainer:
             stage = self._get_stage(epoch)
             avg_loss = sum(losses) / max(len(losses), 1) if losses else float("nan")
             avg_acc = sum(accs_ent) / max(len(accs_ent), 1) if accs_ent else 0.0
+            # Compute diff_weight for logging (mirrors _train_step logic)
+            _warmup = int(getattr(self.train_cfg, "diff_warmup_epochs", 5))
+            if stage == "stage1" or self.schedule == "S0":
+                _dw = 0.0
+            elif stage == "stage2":
+                _dw = min(1.0, (epoch - self.stage1_end + 1) / max(1, _warmup))
+            else:
+                _dw = min(1.0, (epoch - self.stage2_end + 1) / max(1, _warmup // 2))
             print(f"  [ep {epoch:3d}] {stage}  loss={avg_loss:.4f}  "
-                  f"acc_ent={avg_acc:.4f}  steps={len(losses)}/{steps_per_epoch}",
+                  f"acc_ent={avg_acc:.4f}  diff_w={_dw:.2f}  steps={len(losses)}/{steps_per_epoch}",
                   flush=True)
 
             self.lr_scheduler.step()

@@ -1,7 +1,8 @@
-# B1: factorized_fg_id + S2 (low_lr_bind) + dual guide
-# Uses pretrained B0 checkpoint for volume, then adds diffusion
+# B1: factorized_fg_id + S3 (3-phase joint) + dual guide
+# S3: stage1=volume only → stage2=freeze_bind → stage3=joint fine-tune
+# With diffusion warmup to prevent guide cold-start explosion
 objective: factorized_fg_id
-schedule: S2
+schedule: S3
 representation: factorized_fg_id
 guide_family: dual
 
@@ -14,7 +15,7 @@ inject_config: mid_up2
 update_schedule: hybrid
 
 training:
-  epochs: 50
+  epochs: 60
   steps_per_epoch: 20
   eval_every: 5
   lr_volume: 5e-4
@@ -33,7 +34,8 @@ training:
   seed: 7
   la_feature_sep: 0.0
   temp_start: 1.0
-  temp_end: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
 
 eval:
   n_steps: 20

@@ -1,6 +1,7 @@
-# B2: factorized_fg_id + S1 (freeze_bind) + four_stream guide
+# B2: factorized_fg_id + S3 (3-phase joint) + four_stream guide
+# four_stream: [V_0*F_0, V_1*F_1, (A_0-V_0)*F_0, (A_1-V_1)*F_1]
 objective: factorized_fg_id
-schedule: S1
+schedule: S3
 representation: factorized_fg_id
 guide_family: four_stream
 
@@ -13,7 +14,7 @@ inject_config: mid_up2
 update_schedule: hybrid
 
 training:
-  epochs: 50
+  epochs: 60
   steps_per_epoch: 20
   eval_every: 5
   lr_volume: 5e-4
@@ -24,11 +25,16 @@ training:
   la_vol: 2.0
   lambda_id: 1.0
   fg_pos_weight: 20.0
+  lambda_vis: 0.0
   t_max: 300
   n_frames: 8
   height: 256
   width: 256
   seed: 42
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
 
 eval:
   n_steps: 20
