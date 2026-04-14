@@ -82,11 +82,18 @@ def _compute_amodal_dice(
     spatial_w: int,
     eps: float = 1e-6,
 ) -> float:
-    """Dice between predicted amodal projection and GT amodal mask."""
+    """Dice between predicted amodal projection and GT amodal mask.
+
+    Fix (v23): upsample pred to GT resolution instead of downsampling GT.
+    The vol outputs are at 16×16; GT masks are at 256×256.
+    Downsampling 256→16 dilutes the binary mask to near-zero (each 16×16 GT pixel
+    represents only ~0.006% of the total area), collapsing dice to ~0.000.
+    Upsampling pred 16→256 (bilinear) and comparing to binary GT gives meaningful dice.
+    """
     with torch.no_grad():
         B = amodal_e.shape[0]
         H, W = amodal_e.shape[1], amodal_e.shape[2]
-        pred = amodal_e.float().clamp(0, 1)
+        pred = amodal_e.float().clamp(0, 1)   # (B, H, W)
 
         gt = gt_mask.float()
         if gt.dim() == 2:
@@ -95,12 +102,24 @@ def _compute_amodal_dice(
             gt = gt.reshape(B, 1, H_gt, H_gt)
         elif gt.dim() == 3:
             gt = gt.unsqueeze(1)
-        if gt.shape[2] != H or gt.shape[3] != W:
-            gt = F.interpolate(gt, size=(H, W), mode='bilinear', align_corners=False)
-        gt = gt.squeeze(1).clamp(0, 1)  # (B, H, W)
+        else:
+            gt = gt.unsqueeze(1) if gt.dim() == 3 else gt
+        H_gt, W_gt = gt.shape[2], gt.shape[3]
+        gt = gt.clamp(0, 1)   # (B, 1, H_gt, W_gt)
 
-        inter = (pred * gt).sum(dim=(1, 2))
-        denom = pred.sum(dim=(1, 2)) + gt.sum(dim=(1, 2))
+        # Upsample pred to GT resolution (bilinear) rather than downsampling GT.
+        # This preserves the sparse GT mask signal at full resolution.
+        if H != H_gt or W != W_gt:
+            pred_up = F.interpolate(
+                pred.unsqueeze(1), size=(H_gt, W_gt),
+                mode='bilinear', align_corners=False,
+            ).squeeze(1)  # (B, H_gt, W_gt)
+        else:
+            pred_up = pred
+        gt_sq = gt.squeeze(1).clamp(0, 1)  # (B, H_gt, W_gt)
+
+        inter = (pred_up * gt_sq).sum(dim=(1, 2))
+        denom = pred_up.sum(dim=(1, 2)) + gt_sq.sum(dim=(1, 2))
         dice = ((2.0 * inter + eps) / (denom + eps))
         return float(dice.mean().item())
 
@@ -144,8 +163,16 @@ def _compute_cos_F_overlap(
         return float(cos_at_overlap.mean().clamp(0, 1).item())
 
 
-def _compute_lcc(entity_probs_3d: torch.Tensor, threshold: float = 0.3) -> float:
-    """Largest Connected Component ratio for (K, H, W) entity probability volume."""
+def _compute_lcc(entity_probs_3d: torch.Tensor, threshold: float = 0.15) -> float:
+    """Largest Connected Component ratio for (K, H, W) entity probability volume.
+
+    Threshold lowered from 0.3 → 0.15 (v23):
+    factorized_fg_id entity_probs are bounded by fg_magnitude × depth_attn × q_n.
+    With balanced identities (q_n ≈ 0.5) and depth_attn[k_front] ≈ 0.5,
+    peak entity_probs ≈ fg_magnitude × 0.25. For fg_magnitude ≈ 0.8:
+    peak ≈ 0.20. Threshold=0.30 cuts off most of the entity signal.
+    Threshold=0.15 captures the entity blob accurately.
+    """
     if not _SCIPY_OK:
         return 1.0
     binary = (entity_probs_3d.detach().cpu().float().numpy() > threshold)

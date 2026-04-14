@@ -1,0 +1,98 @@
+# B1 v24: Longer stage1 + all v23 fixes (seed 7)
+#
+# v23 diagnosis (2026-04-14, ep89 end-of-stage2):
+#   gate=0.3500 ✓ — ceiling clamp working perfectly.
+#   compact=0.410 (target 0.60) — stage3 unfreeze available but only 30ep at 0.05×lr.
+#     Compact dropped from 0.432 (ep29) to 0.410 (ep89) as adapters changed vol inputs.
+#   D_vis=0.209 (target 0.25) — iou_min=0.117, need 0.143 for D_vis≥0.25.
+#   overlay=0.278 (target 0.35) — below threshold at stage2 end.
+#   winner=0.536 (target 0.45) — improving but insufficient with lambda_balance=1.0.
+#   D_amo=0.000 — FIXED in evaluator.py (upsample pred → GT resolution).
+#   LCC threshold — FIXED in evaluator.py/contract.py (0.3→0.15 binary threshold).
+#
+# Root causes:
+#   1. compact: only 30ep of stage1 (ep0-29) where vol CAN train. After that, vol frozen
+#      in stage2. Stage3 unfreeze at 0.05×lr may not recover fully.
+#      Fix: stage1_epochs_override=40 → 40ep stage1 (instead of 30).
+#      Also lambda_compact: 4.0→6.0 for faster depth concentration.
+#
+#   2. overlay: degraded in mid-stage2 (0.35→0.28). With gate capped at 0.35 throughout,
+#      guide injection is stable. Overlay degradation likely from adapter overshooting.
+#      Fix: reduce lr_adapter (1e-4→5e-5) to slow adapter, giving vol more adaptation time.
+#
+#   3. winner: lambda_balance=1.0 improved from 0.61→0.50, but not reaching ≤0.45.
+#      Fix: lambda_balance: 1.0→2.0 (doubled).
+#
+#   4. D_vis: iou_min needs 0.143 (currently 0.117). Will naturally improve in stage3
+#      with unfrozen vol + better fg_magnitude training.
+#
+# Expected improvements:
+#   - compact: 40ep stage1 + lambda_compact=6.0 → reach 0.50-0.55 by ep40.
+#              Stage3 (30ep, unfrozen, 0.05×lr) → push to 0.60.
+#   - overlay: slower adapters → more stable guide alignment → 0.35+ by ep50.
+#   - winner: lambda_balance=2.0 → ≤0.45 by ep60.
+#   - D_vis: stage3 vol training → iou_min≥0.143 → D_vis≥0.25.
+#   - D_amo: evaluator fix applied → real values (expected ~0.30-0.60).
+#   - LCC: lower threshold (0.15) → more accurate LCC measurement.
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: false       # vol unfrozen in stage3 for compact recovery
+stage1_epochs_override: 40     # v24: 40ep stage1 (vs 30ep default for 120ep/S3)
+
+training:
+  epochs: 120
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5              # v24: 1e-4 → 5e-5 (slower adapter for overlay stability)
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 6.0           # v24: 4.0 → 6.0 (faster depth concentration in stage1)
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35                # ceiling clamp from v23
+  lambda_balance: 2.0           # v24: 1.0 → 2.0 (winner_ratio → ≤0.45)
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

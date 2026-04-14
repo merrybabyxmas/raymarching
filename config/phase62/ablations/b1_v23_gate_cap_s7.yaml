@@ -1,0 +1,97 @@
+# B1 v23: Gate ceiling + vol unfreeze in stage3 + stronger balance (seed 7)
+#
+# v22 diagnosis (2026-04-14):
+#   Gate gradient fix (v22) confirmed working: gate grew 0.06→0.48 through diffusion.
+#   But three new failures emerged:
+#   1. Gate overshoot: gate=0.480 at ep89 (CGUIDE_GATE_HI=0.35). No upper bound in v22.
+#      → overlay collapsed: 0.38 (ep59) → 0.31 (ep89), over-injection saturates diffusion.
+#   2. Compact frozen: freeze_vol_stage3=true AND freeze_deep_vol in S3 schedule stage2
+#      → vol (depth_attn) NEVER trains after ep29. compact stuck at 0.39-0.40 (target 0.60).
+#   3. Winner_ratio: 0.609 at ep89, lambda_balance=0.3 too weak. Target ≤0.45.
+#
+# v23 fixes (all mathematically targeted, no heuristic patches):
+#   1. Gate ceiling hard clamp (max_gate: 0.35):
+#      After optimizer.step(), clamp gate_param ≤ atanh(0.35) in stage2+stage3.
+#      d(guide_eff)/d(gate) stays nonzero below ceiling; clamp activates only at boundary.
+#      Directional gradient still flows to gate_param — only prevents overshoot.
+#      Expected: gate stabilises at ≈0.30-0.35 instead of drifting to 0.48+.
+#
+#   2. freeze_vol_stage3: false (vol unfrozen in stage3):
+#      Stage2 correctly freezes vol (S3 schedule) to protect depth_attn from
+#      destabilisation during diffusion adapter training. Stage3 is the refinement phase —
+#      vol can now receive L_compact + L_depth_ce gradient for compact ≥ 0.60.
+#      lr_vol in stage3 = lr_vol * 0.05 (already implemented in trainer for this case).
+#      Risk: v17 showed iou_min oscillation without gate fix. v23 has gate fix + ceiling,
+#      so guide constrains vol training direction more precisely.
+#
+#   3. lambda_balance: 0.3 → 1.0:
+#      L_balance = (vis_e0.mean - vis_e1.mean)^2. WinnerRatio = 0.609 despite 0.3.
+#      3× stronger signal to push WinnerRatio → 0.45.
+#
+# Expected trajectories:
+#   - gate: grows in stage2, clamped at 0.35 by ep45-50, stable for rest of training
+#   - compact: 0.40 (end stage2) → 0.60+ by ep110 with vol training in stage3
+#   - winner: 0.60 → 0.45 by ep70 with lambda_balance=1.0
+#   - overlay: recovers to ≥0.35 with gate stabilised at 0.35
+#   - diff_mse: currently 0.051, should reach 0.05 by ep70
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: false   # v23: unfreeze vol in stage3 for compact recovery
+
+training:
+  epochs: 120
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 1e-4
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.2
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 4.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  lambda_gate_push: 0.0        # no push — gradient now flows correctly
+  min_gate_stage3: 0.10        # safety floor
+  max_gate: 0.35               # v23: ceiling clamp, applies stage2+stage3
+  lambda_balance: 1.0          # v23: 0.3 → 1.0 (winner_ratio 0.61 → ≤0.45)
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

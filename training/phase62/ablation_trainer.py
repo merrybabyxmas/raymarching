@@ -142,7 +142,10 @@ class AblationTrainer:
             self.stage1_end = max(1, epochs // 3)
             self.stage2_end = epochs
         elif self.schedule == "S3":
-            self.stage1_end = max(1, epochs // 4)
+            # v24: stage1_epochs_override allows longer stage1 for compact growth.
+            # Default: epochs//4 (30ep for 120ep). Override: e.g. 40 for better compact.
+            s1_override = int(getattr(self.config, "stage1_epochs_override", 0))
+            self.stage1_end = s1_override if s1_override > 0 else max(1, epochs // 4)
             self.stage2_end = max(self.stage1_end + 1, 3 * epochs // 4)
         else:
             raise ValueError(f"Unknown schedule: {self.schedule}")
@@ -509,6 +512,19 @@ class AblationTrainer:
             min_gate_param = 0.5 * math.log((1.0 + min_gate) / (1.0 - min_gate))
             for gate_p in self.system.assembler.guide_gates.values():
                 gate_p.data.clamp_(min=min_gate_param)
+
+        # v23: Gate ceiling clamp — force gate_param ≤ atanh(max_gate) in stage2+stage3.
+        # Gate grows freely through diffusion gradient. Without an upper bound it overshoots
+        # CGUIDE_GATE_HI=0.35 (v22 reached 0.48+), over-injecting guide and collapsing
+        # overlay (0.38→0.31 as gate: 0.31→0.48). Hard clamp is the simplest correct fix —
+        # d(guide_eff)/d(gate) stays non-zero below ceiling; clamp only activates at boundary.
+        max_gate = float(getattr(self.train_cfg, "max_gate", 1.0))
+        if max_gate < 1.0 and stage in ("stage2", "stage3") and hasattr(self.system.assembler, "guide_gates"):
+            import math
+            max_gate_param = 0.5 * math.log((1.0 + max_gate) / (1.0 - max_gate))
+            for gate_p in self.system.assembler.guide_gates.values():
+                gate_p.data.clamp_(max=max_gate_param)
+
         self.system.clear_guides()
 
         # Metrics
@@ -738,8 +754,17 @@ class AblationTrainer:
                 gt_visible=_contract_gt_vis,
                 val_metrics={
                     "val_iou_min":   val_iou_min,
+                    "val_iou_e0":    val_iou_e0,
+                    "val_iou_e1":    val_iou_e1,
                     "val_diff_mse":  _avg(diff_losses),
                     "val_compact":   val_compact,
+                    # v22 new metrics (computed by Phase62Evaluator or set to 0 if not available)
+                    "val_amo_dice_e0": getattr(self, "_val_amo_dice_e0", 0.0),
+                    "val_amo_dice_e1": getattr(self, "_val_amo_dice_e1", 0.0),
+                    "val_cos_F_overlap": getattr(self, "_val_cos_F_overlap", 0.0),
+                    "val_lcc_e0": getattr(self, "_val_lcc_e0", 1.0),
+                    "val_lcc_e1": getattr(self, "_val_lcc_e1", 1.0),
+                    "val_pass_rate_clips": getattr(self, "_val_pass_rate_clips", 0.0),
                 },
                 epoch=epoch,
                 stage=_cstage,

@@ -243,11 +243,15 @@ class DebugContract:
         return max(vis_e0, vis_e1) / total
 
     @staticmethod
-    def _compute_lcc(entity_probs_3d: torch.Tensor, threshold: float = 0.3) -> float:
+    def _compute_lcc(entity_probs_3d: torch.Tensor, threshold: float = 0.15) -> float:
         """
         Largest Connected Component ratio for a (K, H, W) entity probability map.
         LCC = (size of largest fg component) / (total fg voxels).
         Near 1.0 = single compact blob; near 0.0 = many disconnected fragments.
+
+        Threshold = 0.15 (lowered from 0.3 in v23):
+        factorized_fg_id entity_probs peak at fg_magnitude × depth_attn × q_n ≈ 0.20.
+        Threshold=0.30 cut off most signal; 0.15 accurately captures entity voxels.
         """
         if not _SCIPY_OK:
             return 1.0  # skip if scipy not available
