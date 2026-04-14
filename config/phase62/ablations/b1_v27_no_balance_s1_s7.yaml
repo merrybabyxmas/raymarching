@@ -1,0 +1,98 @@
+# B1 v27: balance_warmup_epoch=100 — disable L_balance in stage1 so compact can grow (seed 7)
+#
+# v26 diagnosis (2026-04-14, ep64 in stage1):
+#   compact=0.374-0.425 — STUCK at 0.40 equilibrium after 64 stage1 epochs.
+#   100-epoch stage1 does NOT help because compact plateau is caused by L_balance opposing L_compact.
+#
+# Mathematical root cause of compact ceiling at 0.40:
+#   vis_e = fg_magnitude × (depth_attn ⊙ q).sum(depth)
+#   L_balance = (vis_e0.mean() - vis_e1.mean())^2 — wants depth_attn spread across both entity bins
+#   L_compact = -mean(max_k depth_attn_k) — wants depth_attn concentrated in one bin
+#   With lambda_balance = lambda_compact = 3.0:
+#     Both forces equal strength → equilibrium at compact ≈ 0.40 (observed consistently across v24/v25/v26).
+#   To break equilibrium: need lambda_compact >> lambda_balance.
+#   BUT increasing lambda_compact risks instability; BETTER to zero out lambda_balance in stage1.
+#
+# v27 fix: balance_warmup_epoch = 100 (disable L_balance for all of stage1)
+#   Stage1 (ep0-99): L_balance=0, only L_compact (3.0), L_id (3.0), L_depth_ce (3.0) drive depth_attn
+#     All three HELP compact — no opposing force.
+#     Expected: compact grows to 0.65-0.80 in 100 epochs (L_balance removed = doubled effective compact pressure).
+#   Stage2 (ep100-164): L_balance re-enabled (3.0) for entity balance in guide/diffusion context.
+#     Vol at 1% lr → compact held at ~0.60-0.75.
+#   Stage3 (ep165-219): freeze_vol_stage3=True — compact fully protected.
+#
+# Expected trajectories:
+#   compact: 0→0.70 (ep99) → 0.62 (ep164, some drift) → 0.62 (ep219, frozen)
+#   D_amo: at compact=0.62+, depth separation excellent → D_amo ~0.40-0.55 ✓
+#   LCC: compact blobs → connected → LCC ~0.85+ ✓
+#   D_vis: iou > 0.14 → D_vis > 0.25 ✓
+#   gate: reaches 0.35 by ~ep130 ✓
+#   overlay: ≥0.35 ✓
+#   diff_mse: ≤0.05 by ~ep180 ✓
+#   winner: ~0.50-0.52 → < 0.55 ✓
+#   All 5 contracts from ~ep190, C_robust (5×) by ~ep215
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true           # protect compact in stage3
+freeze_fg_spatial_stage3: true    # protect overlay in stage3
+stage1_epochs_override: 100       # 100ep stage1 for compact growth
+vol_stage2_lr_factor: 0.01        # prevent compact decline in stage2
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100       # v27 KEY: disable L_balance for all of stage1
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0             # active from ep100 (stage2) onwards
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

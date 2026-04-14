@@ -420,11 +420,25 @@ class AblationTrainer:
         if current_epoch < compact_warmup_epoch:
             self.objective.lambda_compact = 0.0
 
+        # v27: balance_warmup_epoch — disable L_balance during stage1 so L_compact can
+        # grow freely without opposing force. L_balance (vis_e0 ≈ vis_e1) acts on depth_attn
+        # via vis_e = fg_magnitude × (depth_attn ⊙ q).sum(depth), pulling depth_attn to
+        # spread across both entity bins — exactly opposing L_compact concentration.
+        # With lambda_balance = lambda_compact = 3.0, equilibrium compact ≈ 0.40.
+        # Setting lambda_balance=0 in stage1 removes this opposing force → compact grows to 0.65+.
+        balance_warmup_epoch = int(getattr(self.train_cfg, "balance_warmup_epoch", 0))
+        saved_lambda_balance = getattr(self.objective, "lambda_balance", 0.0)
+        if balance_warmup_epoch > 0 and current_epoch < balance_warmup_epoch:
+            if hasattr(self.objective, "lambda_balance"):
+                self.objective.lambda_balance = 0.0
+
         obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
         l_struct = obj_result["total"].clamp(max=50.0)
 
-        # Restore lambda_compact after forward pass
+        # Restore lambda_compact and lambda_balance after forward pass
         self.objective.lambda_compact = saved_lambda_compact
+        if hasattr(self.objective, "lambda_balance"):
+            self.objective.lambda_balance = saved_lambda_balance
 
         # Feature separation loss (Issue 2 fix): push F_0 and F_1 apart
         la_sep = float(getattr(self.train_cfg, "la_feature_sep", 0.1))
