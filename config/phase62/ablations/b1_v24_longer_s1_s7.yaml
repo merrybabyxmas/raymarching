@@ -47,8 +47,11 @@ spatial_w: 16
 n_classes: 3
 inject_config: mid_up2
 update_schedule: hybrid
-freeze_vol_stage3: false       # vol unfrozen in stage3 for compact recovery
-stage1_epochs_override: 40     # v24: 40ep stage1 (vs 30ep default for 120ep/S3)
+freeze_vol_stage3: false          # vol unfrozen in stage3 for compact recovery
+freeze_fg_spatial_stage3: true    # v24: keep fg_spatial frozen (overlay stability)
+                                  # v23: unfreezing fg_spatial→overlay 0.28→0.18 (BAD)
+                                  # Only depth-attn (volume) trains → compact grows safely
+stage1_epochs_override: 40        # v24: 40ep stage1 (vs 30ep default for 120ep/S3)
 
 training:
   epochs: 120

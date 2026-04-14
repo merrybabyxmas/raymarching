@@ -260,9 +260,16 @@ class AblationTrainer:
             # v17 showed iou_min oscillation (0.141→0.089→0.109) when volume trains
             # jointly with adapters in stage3. Freezing protects S1+S2 metrics while
             # guide (assembler + adapters + lora) continues to learn.
+            # v24: separate freeze control for volume vs fg_spatial.
+            # freeze_vol_stage3=false + freeze_fg_spatial_stage3=true: trains depth-related
+            # vol params (for compact) while freezing spatial fg map (for overlay stability).
+            # v23 showed that unfreezing fg_spatial in stage3 drops overlay 0.28→0.18.
             freeze_vol_s3 = bool(getattr(self.config, "freeze_vol_stage3", False))
-            for p in self.param_groups["volume"] + self.param_groups["fg_spatial"]:
+            freeze_fg_s3 = bool(getattr(self.config, "freeze_fg_spatial_stage3", freeze_vol_s3))
+            for p in self.param_groups["volume"]:
                 p.requires_grad_(not freeze_vol_s3)
+            for p in self.param_groups["fg_spatial"]:
+                p.requires_grad_(not freeze_fg_s3)
             for p in self.param_groups["assembler"] + self.param_groups["adapter"] + self.param_groups["lora"]:
                 p.requires_grad_(True)
             for group in self.optimizer.param_groups:
@@ -270,7 +277,7 @@ class AblationTrainer:
                 if name == "volume_pred":
                     group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.05
                 elif name == "fg_spatial":
-                    group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.10
+                    group["lr"] = 0.0 if freeze_fg_s3 else group["initial_lr"] * 0.10
                 else:
                     group["lr"] = group["initial_lr"]
 
