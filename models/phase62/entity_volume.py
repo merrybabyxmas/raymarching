@@ -10,6 +10,7 @@ Supports multiple volume representations:
 """
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 import torch
@@ -111,8 +112,11 @@ class EntityVolumePredictor(nn.Module):
         # Learnable depth positional embedding (K, hidden) — scene-invariant depth bias.
         # Allows each depth bin to develop a unique feature representation, helping
         # the shared_3d blocks converge quickly to depth-specific predictions.
-        # Initialised near-zero so it doesn't dominate early training.
-        self.depth_pos_emb = nn.Parameter(torch.zeros(1, hidden, depth_bins, 1, 1))
+        # Sinusoidal init: each K bin gets a DISTINCT feature fingerprint immediately,
+        # unlike zero-init which provides no depth signal until after many gradient steps.
+        # sin/cos waves of different frequencies ensure orthogonal representations.
+        self.depth_pos_emb = nn.Parameter(
+            self._make_sinusoidal_depth_emb(depth_bins, hidden))
 
         if representation == "independent":
             self.bg_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
@@ -153,6 +157,30 @@ class EntityVolumePredictor(nn.Module):
                 for head in (self.offset_e0_head, self.offset_e1_head):
                     nn.init.zeros_(head.weight)
                     nn.init.zeros_(head.bias)
+
+    @staticmethod
+    def _make_sinusoidal_depth_emb(depth_bins: int, hidden: int) -> torch.Tensor:
+        """
+        Sinusoidal positional encoding for depth bins → (1, hidden, K, 1, 1).
+
+        Each K bin gets a UNIQUE feature vector of sin/cos waves at different
+        frequencies, identical to transformer positional encodings. This provides
+        orthogonal depth representations from epoch 0, unlike zero-init which
+        provides no differentiation until gradients push the embedding.
+
+        Scaled to ±0.3 so it's useful but doesn't overpower learned features.
+        """
+        K = depth_bins
+        H = hidden
+        pe = torch.zeros(H, K)
+        position = torch.arange(K, dtype=torch.float).unsqueeze(1)  # (K, 1)
+        div_term = torch.exp(torch.arange(0, H, 2, dtype=torch.float) *
+                             -(math.log(10.0) / H))  # (H/2,)
+        pe[0::2, :] = torch.sin(position * div_term).T   # (H/2, K)
+        pe[1::2, :] = torch.cos(position * div_term).T   # (H/2, K)
+        # Scale to ±0.3
+        pe = pe * 0.3
+        return pe.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # (1, H, K, 1, 1)
 
     def _init_depth_encoder(self) -> None:
         """
