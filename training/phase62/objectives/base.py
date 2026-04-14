@@ -10,13 +10,14 @@ import torch.nn as nn
 @dataclass
 class VolumeOutputs:
     """Standardized outputs from volume prediction + projection."""
-    fg_logit: Optional[torch.Tensor] = None       # (B, 1, K, H, W)
-    id_logits: Optional[torch.Tensor] = None       # (B, 2, K, H, W)
-    entity_logits: Optional[torch.Tensor] = None   # (B, 2, K, H, W) independent per-entity
-    entity_probs: Optional[torch.Tensor] = None    # (B, 2, K, H, W)
-    visible_class: Optional[torch.Tensor] = None   # (B, H, W)
-    front_probs: Optional[torch.Tensor] = None     # (B, C, H, W)
-    back_probs: Optional[torch.Tensor] = None      # (B, C, H, W)
+    fg_logit: Optional[torch.Tensor] = None             # (B, 1, K, H, W) depth logit
+    fg_spatial_logit: Optional[torch.Tensor] = None     # (B, 1, H, W) spatial fg head
+    id_logits: Optional[torch.Tensor] = None            # (B, 2, K, H, W)
+    entity_logits: Optional[torch.Tensor] = None        # (B, 2, K, H, W) independent per-entity
+    entity_probs: Optional[torch.Tensor] = None         # (B, 2, K, H, W)
+    visible_class: Optional[torch.Tensor] = None        # (B, H, W)
+    front_probs: Optional[torch.Tensor] = None          # (B, C, H, W)
+    back_probs: Optional[torch.Tensor] = None           # (B, C, H, W)
     amodal: Dict[str, torch.Tensor] = field(default_factory=dict)
     visible: Dict[str, torch.Tensor] = field(default_factory=dict)
 

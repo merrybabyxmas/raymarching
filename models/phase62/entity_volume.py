@@ -130,6 +130,11 @@ class EntityVolumePredictor(nn.Module):
             self.id_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
             self.fg_head = nn.Conv3d(hidden, 1, kernel_size=1, bias=True)
             self.id_head = nn.Conv3d(hidden, 2, kernel_size=1, bias=True)
+            # Separate 2D spatial fg head: "Is fg present at this (h,w) pixel?"
+            # Decoupled from fg_head (which now controls depth_attn only).
+            # fg_magnitude = sigmoid(fg_spatial_head(h_shared_2d)) — no K coupling.
+            # L_fg_spatial trains this to be 1 at fg pixels, 0 at bg.
+            self.fg_spatial_head = nn.Conv2d(hidden, 1, kernel_size=1, bias=True)
             # id_branch needs BOTH entity features to classify e0 vs e1
             self.expand_id = nn.Conv2d(hidden * 3, hidden * depth_bins, kernel_size=1, bias=True)
 
@@ -153,6 +158,8 @@ class EntityVolumePredictor(nn.Module):
             nn.init.zeros_(self.fg_head.bias)
             nn.init.zeros_(self.id_head.weight)
             nn.init.zeros_(self.id_head.bias)
+            nn.init.zeros_(self.fg_spatial_head.weight)
+            nn.init.zeros_(self.fg_spatial_head.bias)
             if self.representation == "center_offset":
                 for head in (self.offset_e0_head, self.offset_e1_head):
                     nn.init.zeros_(head.weight)
@@ -301,32 +308,35 @@ class EntityVolumePredictor(nn.Module):
             fg_logit = self.fg_head(fg_feat)   # (B, 1, K, H, W)
             id_logits = self.id_head(id_feat)  # (B, 2, K, H, W)
 
-            # Depth-concentrated p_fg: sigmoid(fg_max) × softmax_over_K(fg_logit)
+            # Factorized entity_probs with DECOUPLED fg/depth heads:
             #
-            # Problem: sigmoid(fg_logit) can be high at ALL K bins simultaneously →
-            # entity_probs spread uniformly → compact ≈ 0 no matter what loss we use.
+            # Problem with depth-softmax (fg_max + softmax coupling):
+            #   fg_magnitude = sigmoid(max_k(fg_logit)) couples fg and depth gradients.
+            #   BCE at non-front K bins flows back through sigmoid(max) and fights depth
+            #   concentration → compact oscillates and stalls at ~0.15.
             #
-            # Fix: factor fg into two components:
-            #   fg_magnitude = sigmoid(max_k(fg_logit)):  "Is fg present at (h,w)?"
-            #   depth_attn = softmax_k(fg_logit):          "WHERE in depth is fg?"
-            # p_fg = fg_magnitude × depth_attn  → ALWAYS concentrated in K
-            # (softmax is non-uniform unless all logits are identical, which isn't a
-            #  stable fixed point under front-surface BCE + depth CE supervision)
-            fg_logit_vol = fg_logit[:, 0].float()  # (B, K, H, W)
-            fg_max = fg_logit_vol.max(dim=1, keepdim=True).values  # (B, 1, H, W)
-            fg_magnitude = torch.sigmoid(fg_max)                   # (B, 1, H, W)
-            depth_attn = torch.softmax(fg_logit_vol, dim=1)        # (B, K, H, W)
-            p_fg = fg_magnitude.squeeze(1) * depth_attn            # (B, K, H, W)
+            # Fix: Separate fg spatial detection from depth localization:
+            #   fg_spatial_logit = fg_spatial_head(h_shared_2d)   "Is fg at (h,w)?"
+            #   fg_magnitude = sigmoid(fg_spatial_logit)          NO K coupling
+            #   depth_attn = softmax_K(fg_logit[:, 0])            pure depth localization
+            #   p_fg = fg_magnitude × depth_attn
+            #
+            # L_fg_spatial: BCE(fg_spatial_logit, Y_fg_any) → trains fg_magnitude
+            # L_depth_ce: CE(fg_logit_vol at fg pixels, k_front) → trains depth_attn
+            # These are fully decoupled — no gradient interference.
+            fg_spatial_logit = self.fg_spatial_head(h_shared_2d)   # (B, 1, H, W)
+            fg_magnitude = torch.sigmoid(fg_spatial_logit)          # (B, 1, H, W)
 
-            # Store fg_magnitude back for objective access via fg_logit field:
-            # fg_logit[:, 0] is still available; objective uses fg_logit_vol internally.
-            # q_n = softmax(z_id)_n
-            q = torch.softmax(id_logits.float(), dim=1)   # (B, 2, K, H, W)
-            # p_n = p_fg * q_n
+            fg_logit_vol = fg_logit[:, 0].float()          # (B, K, H, W)
+            depth_attn = torch.softmax(fg_logit_vol, dim=1)  # (B, K, H, W)
+            p_fg = fg_magnitude * depth_attn               # (B, K, H, W)
+
+            q = torch.softmax(id_logits.float(), dim=1)    # (B, 2, K, H, W)
             entity_probs = p_fg.unsqueeze(1) * q           # (B, 2, K, H, W)
 
             outputs = VolumeOutputs(
                 fg_logit=fg_logit,
+                fg_spatial_logit=fg_spatial_logit,
                 id_logits=id_logits,
                 entity_probs=entity_probs,
             )

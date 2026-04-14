@@ -1,20 +1,28 @@
 """
 Factorized Foreground + Identity objective with rendering-consistent terms.
 
-p_fg(x) = sigmoid(z_fg(x))
-q_n(x)  = softmax(z_id(x))_n,  n in {0, 1}
-p_n(x)  = p_fg(x) * q_n(x)
+Architecture (v12 — decoupled fg/depth heads):
+  fg_magnitude = sigmoid(fg_spatial_logit)  → (B, 1, H, W) spatial fg presence
+  depth_attn = softmax_K(fg_logit_vol)      → (B, K, H, W) depth localization
+  p_fg = fg_magnitude × depth_attn
+  q_n = softmax(id_logits)_n
+  p_n = p_fg × q_n
 
-L_fg      = BCE(z_fg, Y_fg_front) + lambda_dice * Dice(p_fg, Y_fg_front)
-            where Y_fg_front = 1 ONLY at the front-most occupied depth bin per (h,w).
-            Using full-volume Y_fg pushed fg_logit HIGH across ALL occupied K bins
-            → entity_probs spread uniformly in depth → compact ≈ 0 always.
-            Front-surface supervision concentrates fg_logit at ONE K bin per pixel
-            → entity_probs peaks at front surface → compact >> 0.
-L_id      = CE(z_id, Y_id | Y_fg_full=1)  on ALL occupied bins (for better id learning)
-L_vis     = Dice(visible_e_n, gt_visible_n)  rendered-space loss
-L_compact = H(depth_mass_e0) + H(depth_mass_e1)  depth entropy minimisation (secondary)
-L         = L_fg + lambda_id * L_id + lambda_vis * L_vis + lambda_compact * L_compact
+L_fg_spatial = BCE(fg_spatial_logit, Y_fg_any)
+               where Y_fg_any = 1 if ANY entity at (h,w), 0 if pure background.
+               Trains fg_magnitude to be 1 at fg pixels, 0 at bg.
+               Clean spatial supervision — no coupling with depth.
+L_depth_ce   = CE(fg_logit_vol at fg-any pixels, k_front_target)
+               Directly trains depth_attn to concentrate at the front-most occupied
+               K bin. CE is the cleanest depth supervision — no gradient coupling
+               between fg_magnitude and depth_attn.
+L_id         = CE(z_id, Y_id | Y_fg_full=1)  on ALL occupied bins
+L_vis        = Dice(visible_e_n, gt_visible_n)  rendered-space loss
+L_compact    = H(depth_mass_e0) + H(depth_mass_e1)  depth entropy (secondary)
+L_depth_vis  = -log(entity_probs[n, k_front, h, w]) for visible fg pixels (direct depth)
+L            = L_fg_spatial + lambda_depth_ce * L_depth_ce
+               + lambda_id * L_id + lambda_vis * L_vis
+               + lambda_compact * L_compact + lambda_depth_vis * L_depth_vis
 """
 from __future__ import annotations
 
@@ -69,24 +77,23 @@ class FactorizedFgIdObjective(VolumeObjective):
     def __init__(
         self,
         lambda_id: float = 1.0,
-        fg_pos_weight: float = 20.0,
+        fg_pos_weight: float = 10.0,
         lambda_vis: float = 0.5,
         lambda_compact: float = 0.5,
-        lambda_dice: float = 1.0,
-        lambda_hinge: float = 1.0,
+        lambda_depth_ce: float = 3.0,
+        lambda_depth_vis: float = 0.0,
+        # Legacy params (kept for config backwards-compat, not used in v12 objective):
+        lambda_dice: float = 0.0,
+        lambda_hinge: float = 0.0,
         hinge_margin: float = 1.0,
         hinge_density_thresh: float = 0.20,
-        lambda_depth_vis: float = 0.0,
     ):
         super().__init__()
         self.lambda_id = lambda_id
         self.fg_pos_weight = fg_pos_weight
         self.lambda_vis = lambda_vis
         self.lambda_compact = lambda_compact
-        self.lambda_dice = lambda_dice
-        self.lambda_hinge = lambda_hinge
-        self.hinge_margin = hinge_margin
-        self.hinge_density_thresh = hinge_density_thresh
+        self.lambda_depth_ce = lambda_depth_ce
         self.lambda_depth_vis = lambda_depth_vis
 
     def forward(
@@ -96,56 +103,43 @@ class FactorizedFgIdObjective(VolumeObjective):
         gt_visible: Optional[torch.Tensor] = None,
         gt_amodal: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
-        fg_logit = outputs.fg_logit[:, 0]   # (B, K, H, W)
+        fg_logit = outputs.fg_logit[:, 0]   # (B, K, H, W) — depth logit
         id_logits = outputs.id_logits        # (B, 2, K, H, W)
 
-        # L_fg: BCE + Dice + Hinge on the FRONT-SURFACE of each entity.
-        #
-        # Architecture: entity_volume now uses depth-softmax:
-        #   p_fg = sigmoid(max_k(fg_logit)) × softmax_k(fg_logit)
-        # This ARCHITECTURALLY enforces compact entity_probs — softmax can't be
-        # uniform unless all K logits are equal (not a stable training fixed point).
-        #
-        # BCE on raw fg_logit with front-surface target still works:
-        #   - Pushes fg_logit[k_front] HIGH, fg_logit[k_other] LOW
-        #   - Softmax then concentrates at k_front → compact >> 0
-        #
-        # Y_fg_full still used for L_id (id discrimination over all occupied bins).
-        Y_fg = _front_surface_mask(V_gt)        # (B, K, H, W)  front surface only (see docstring)
-        Y_fg_any = (V_gt > 0).any(dim=1).float()  # (B, H, W)  "any entity at (h,w)"
+        # ── Y_fg targets ──────────────────────────────────────────────────────
+        Y_fg_any = (V_gt > 0).any(dim=1).float()   # (B, H, W): fg presence at pixel
+        occupied = (V_gt > 0).float()               # (B, K, H, W): all occupied bins
+        k_front = occupied.argmax(dim=1)            # (B, H, W): front-most depth bin
+
+        # ── L_fg_spatial: BCE on spatial fg/bg detection ──────────────────────
+        # Trains fg_magnitude = sigmoid(fg_spatial_head(h_2d)) → 1 at fg, 0 at bg.
+        # Clean 2D supervision, NO coupling with depth_attn (fg_logit unchanged).
         pos_weight = torch.tensor([self.fg_pos_weight], device=fg_logit.device)
-        # BCE on fg_logit with front-surface target: trains logit to peak at k_front
-        L_bce = F.binary_cross_entropy_with_logits(
-            fg_logit, Y_fg, pos_weight=pos_weight, reduction="mean")
-
-        # Dice component: use entity_probs (depth-softmax output) to measure fg/bg
-        # matching. entity_probs.sum(dim=1) = p_fg (concentrated via softmax).
-        if outputs.entity_probs is not None:
-            p_fg_conc = outputs.entity_probs.sum(dim=1)  # (B, K, H, W) concentrated
-            eps_d = 1e-6
-            fg_inter = (p_fg_conc * Y_fg).sum()
-            fg_denom = p_fg_conc.sum() + Y_fg.sum() + eps_d
-            L_dice_fg = 1.0 - (2.0 * fg_inter + eps_d) / (fg_denom + eps_d)
+        if outputs.fg_spatial_logit is not None:
+            fg_spatial = outputs.fg_spatial_logit[:, 0]  # (B, H, W)
+            L_fg_spatial = F.binary_cross_entropy_with_logits(
+                fg_spatial, Y_fg_any, pos_weight=pos_weight, reduction="mean")
         else:
-            p_fg = torch.sigmoid(fg_logit)
-            eps_d = 1e-6
-            fg_inter = (p_fg * Y_fg).sum()
-            fg_denom = p_fg.sum() + Y_fg.sum() + eps_d
-            L_dice_fg = 1.0 - (2.0 * fg_inter + eps_d) / (fg_denom + eps_d)
+            # Fallback: use max over K as proxy spatial logit (backward compat)
+            fg_spatial = fg_logit.max(dim=1).values  # (B, H, W)
+            L_fg_spatial = F.binary_cross_entropy_with_logits(
+                fg_spatial, Y_fg_any, pos_weight=pos_weight, reduction="mean")
 
-        # Hinge on fg_logit at front-surface bins: ensures max logit at front surface.
-        # With density gating: only dense (many fg pixels per K) bins trigger hinge.
-        Y_fg_density = Y_fg.sum(dim=(2, 3), keepdim=True)          # (B, K, 1, 1)
-        max_density = Y_fg_density.amax(dim=1, keepdim=True).clamp(min=1.0)  # (B, 1, 1, 1)
-        dense_mask = (Y_fg_density / max_density) > self.hinge_density_thresh   # (B, K, 1, 1)
-        hinge_active = Y_fg.bool() & dense_mask.expand_as(Y_fg)  # (B, K, H, W)
-        if hinge_active.any():
-            fg_logits_at_dense = fg_logit[hinge_active]
-            L_hinge = F.relu(self.hinge_margin - fg_logits_at_dense).mean()
+        # ── L_depth_ce: CE on depth_attn = softmax_K(fg_logit) ───────────────
+        # Directly trains depth_attn to concentrate at k_front for fg pixels.
+        # CE gradient: pushes fg_logit[k_front] up, all k_others down — no coupling
+        # with fg_magnitude since fg_spatial_head is separate.
+        Y_fg_any_bool = Y_fg_any.bool()
+        if Y_fg_any_bool.any():
+            depth_logit_fg = fg_logit.permute(0, 2, 3, 1)   # (B, H, W, K)
+            depth_logit_flat = depth_logit_fg[Y_fg_any_bool]  # (n_fg, K)
+            k_front_flat = k_front[Y_fg_any_bool]              # (n_fg,)
+            L_depth_ce = F.cross_entropy(depth_logit_flat, k_front_flat, reduction="mean")
+            L_depth_ce = L_depth_ce.clamp(max=10.0)
         else:
-            L_hinge = fg_logit.new_zeros(())
+            L_depth_ce = fg_logit.new_zeros(())
 
-        L_fg = L_bce + self.lambda_dice * L_dice_fg + self.lambda_hinge * L_hinge
+        L_fg = L_fg_spatial + self.lambda_depth_ce * L_depth_ce
 
         # L_id: CE over ALL occupied depth bins (not just front surface).
         # Identity discrimination (e0 vs e1) is useful wherever the entity
@@ -249,9 +243,8 @@ class FactorizedFgIdObjective(VolumeObjective):
         return {
             "total": total,
             "L_fg": L_fg.detach(),
-            "L_bce": L_bce.detach(),
-            "L_dice_fg": L_dice_fg.detach(),
-            "L_hinge": L_hinge.detach(),
+            "L_fg_spatial": L_fg_spatial.detach(),
+            "L_depth_ce": L_depth_ce.detach(),
             "L_id": L_id.detach(),
             "L_vis": L_vis.detach(),
             "L_compact": L_compact.detach(),
