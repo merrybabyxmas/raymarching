@@ -1,0 +1,94 @@
+# B1 v31: lambda_id=5.0 — midpoint to balance entity identity and overlay (seed 7)
+#
+# Empirical finding from v28/v29/v30 (2026-04-14):
+#
+# lambda_id=10 (v28, v29): winner=0.51-0.58 (good balance), BUT overlay degrades in stage3
+#   stage3 freeze at ep165: overlay~0.34 → drops to 0.217-0.295 → FAILS C_guide
+#
+# lambda_id=3 (v30): overlay=0.33-0.34 (developing well in stage2), BUT entity 0 collapses
+#   entity 0 stuck at 0.055-0.070 despite 24ep of full L_balance → winner=0.72-0.74 → FAILS C_guide
+#
+# Root cause of entity 0 collapse (lambda_id=3):
+#   L_id gradient on entity 0 ∝ lambda_id × (1 - q_e0)
+#   With lambda_id=3, gradient too weak to prevent entity 0 from shrinking once
+#   entity 1 gains slight advantage. L_balance adds equal-visibility pressure but
+#   can't overcome the entity-id gradient deficit.
+#
+# v31 fix: lambda_id = 5.0 (midpoint between 3 and 10)
+#   - Entity 0 gradient: 67% stronger than lambda_id=3 → should prevent collapse
+#   - fg_spatial learns less aggressive boundaries than lambda_id=10 → overlay preserved
+#   - Expected winner: ~0.55-0.62 (lambda_id=5 gives 1.67× entity separation vs 3.33×)
+#   - Expected overlay: 0.35-0.37 in stage3 (similar to v27 range, less degradation than v28/v29)
+#
+# Mathematical prediction (compact = f(q)):
+#   lambda_id=5 logit_diff at ep40 (800 steps): 5.0 × 5e-4 × 800 × 0.3 = 0.60
+#   → q_e0 at entity 0 voxels ≈ 0.645, q_e0 at entity 1 voxels ≈ 0.355 (softer than lambda_id=10)
+#   compact ≈ 0.40 (same data-limited ceiling regardless of lambda_id) ✓
+#   winner: softer q → entity_probs less concentrated → winner ~0.58-0.62 (vs 0.51 for lambda_id=10)
+#
+# All other params same as v30 (= v27 config with calibrated contract.py thresholds).
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 5.0              # v31 KEY: midpoint 3→5←10; prevents entity collapse, preserves overlay
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
