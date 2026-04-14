@@ -99,6 +99,14 @@ class EntityVolumePredictor(nn.Module):
             Residual3DBlock(hidden),
         )
 
+        # Depth hint injection: optional per-pixel scene depth → depth-bin features.
+        # Input: (B, K, H, W) soft depth bin weights derived from scene depth map.
+        # Output: (B, hidden, K, H, W) added to shared_seed to concentrate entity_probs.
+        # Zero-init: no change to initial predictions; trains to use depth cues.
+        self.depth_encoder = nn.Conv2d(depth_bins, hidden * depth_bins, kernel_size=1, bias=True)
+        nn.init.zeros_(self.depth_encoder.weight)
+        nn.init.zeros_(self.depth_encoder.bias)
+
         if representation == "independent":
             self.bg_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
             self.e0_branch = _make_branch(hidden * 2, hidden, n_blocks=2)
@@ -148,11 +156,40 @@ class EntityVolumePredictor(nn.Module):
         h_3d = proj(feat_2d)
         return h_3d.reshape(B, self.hidden, self.depth_bins, self.spatial_h, self.spatial_w)
 
+    def _depth_hint_feat(
+        self,
+        depth_hint: torch.Tensor,  # (B, H, W) normalized depth in [0,1]
+    ) -> torch.Tensor:
+        """
+        Convert per-pixel scene depth to a (B, hidden, K, H, W) feature bias.
+
+        Uses a soft Gaussian assignment of depth values to depth bins:
+          depth_weights[b, k, h, w] = softmax_k(exp(-(d - bin_center_k)^2 / sigma^2))
+
+        The resulting per-spatial-pixel depth distribution is encoded by
+        depth_encoder into a (B, hidden*K, H, W) feature, reshaped to 3D.
+        With zero-init, initial output is 0 → safe initialisation.
+        """
+        B, H, W = depth_hint.shape
+        K = self.depth_bins
+
+        # Continuous depth in bin units: 0 → bin 0 centre, K-1 → bin K-1 centre
+        depth_bin_cont = depth_hint.unsqueeze(1) * (K - 1)   # (B, 1, H, W)
+        bin_idx = torch.arange(K, device=depth_hint.device,
+                               dtype=depth_hint.dtype).view(1, K, 1, 1)  # (1,K,1,1)
+        sigma = 1.0   # ≈ 1 bin width smoothness
+        raw = torch.exp(-(depth_bin_cont - bin_idx) ** 2 / (2.0 * sigma ** 2))  # (B,K,H,W)
+        dw = raw / raw.sum(dim=1, keepdim=True).clamp(min=1e-6)                 # normalised
+
+        feat = self.depth_encoder(dw)               # (B, hidden*K, H, W)
+        return feat.reshape(B, self.hidden, K, H, W)
+
     def forward(
         self,
         F_g: torch.Tensor,
         F_0: torch.Tensor,
         F_1: torch.Tensor,
+        depth_hint: Optional[torch.Tensor] = None,  # (B, H_vol, W_vol) scene depth [0,1]
     ) -> VolumeOutputs:
         B = F_g.shape[0]
 
@@ -164,6 +201,14 @@ class EntityVolumePredictor(nn.Module):
         h_shared_2d = self.shared_2d(h_cat)
 
         shared_seed = self._expand_3d(h_shared_2d, self.expand_shared)
+
+        # Inject scene depth hint (if available) as a depth-bin feature bias.
+        # depth_hint provides per-pixel depth → helps concentrate entity_probs
+        # at the correct depth bins instead of spreading uniformly.
+        if depth_hint is not None:
+            depth_feat = self._depth_hint_feat(depth_hint)  # (B, hidden, K, H_vol, W_vol)
+            shared_seed = shared_seed + depth_feat
+
         shared_3d = self.shared_3d(self.shared_3d_in(shared_seed))
 
         bg_seed = self._expand_3d(h_g, self.expand_bg)

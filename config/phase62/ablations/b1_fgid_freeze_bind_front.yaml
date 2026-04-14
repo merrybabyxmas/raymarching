@@ -23,9 +23,9 @@ training:
   lr_lora: 5e-5
   lr_adapter: 1e-4
   la_diff: 1.0
-  la_vol: 2.0
-  lambda_id: 1.0
-  fg_pos_weight: 20.0
+  la_vol: 3.0
+  lambda_id: 3.0
+  fg_pos_weight: 50.0
   lambda_vis: 0.0
   t_max: 300
   n_frames: 8
@@ -36,12 +36,12 @@ training:
   temp_start: 1.0
   temp_end: 0.3
   diff_warmup_epochs: 5
-  lambda_compact: 0.2
+  lambda_compact: 1.0
   lambda_dice: 1.0
   lambda_hinge: 1.0
   hinge_margin: 1.0
   hinge_density_thresh: 0.20
-  compact_warmup_epoch: 10
+  compact_warmup_epoch: 8
 
 eval:
   n_steps: 20

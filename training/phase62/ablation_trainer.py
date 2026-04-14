@@ -291,8 +291,28 @@ class AblationTrainer:
         if F_g is None or F_0 is None or F_1 is None:
             return None
 
+        # Build scene depth hint: (B_feat, H_vol, W_vol) ∈ [0,1]
+        # Provides per-pixel depth cues so the 3D predictor can learn compact blobs.
+        depth_hint_train = None
+        if depth_np is not None:
+            B_feat = F_g.shape[0]
+            dmap = depth_np[:B_feat].astype(np.float32)        # (T', H_scene, W_scene)
+            dmax = float(dmap.max()) + 1e-6
+            dmap_norm = torch.from_numpy(dmap / dmax).to(self.device)  # (T', H, W)
+            H_vol, W_vol = self.config.spatial_h, self.config.spatial_w
+            if dmap_norm.shape[-2:] != (H_vol, W_vol):
+                dmap_norm = F.interpolate(
+                    dmap_norm.unsqueeze(1).float(),
+                    size=(H_vol, W_vol), mode="bilinear", align_corners=False,
+                ).squeeze(1)
+            if dmap_norm.shape[0] < B_feat:
+                n_rep = max(1, B_feat // dmap_norm.shape[0])
+                dmap_norm = dmap_norm.repeat(n_rep, 1, 1)[:B_feat]
+            depth_hint_train = dmap_norm  # (B_feat, H_vol, W_vol)
+
         # Volume prediction
-        vol_outputs = self.system.predict_volume(F_g, F_0, F_1)
+        vol_outputs = self.system.predict_volume(F_g, F_0, F_1,
+                                                  depth_hint=depth_hint_train)
 
         # Build V_gt
         depth_maps = depth_np[:T_frames] if depth_np is not None else None
@@ -517,7 +537,26 @@ class AblationTrainer:
                 if F_g is None or F_0 is None or F_1 is None:
                     continue
 
-                vol_outputs = self.system.predict_volume(F_g, F_0, F_1)
+                # Build depth hint for val step
+                depth_hint_val = None
+                if depth_np is not None:
+                    B_feat_hint = F_g.shape[0]
+                    dmap_v = depth_np[:B_feat_hint].astype(np.float32)
+                    dmax_v = float(dmap_v.max()) + 1e-6
+                    dmap_v_norm = torch.from_numpy(dmap_v / dmax_v).to(self.device)
+                    H_vol, W_vol = self.config.spatial_h, self.config.spatial_w
+                    if dmap_v_norm.shape[-2:] != (H_vol, W_vol):
+                        dmap_v_norm = F.interpolate(
+                            dmap_v_norm.unsqueeze(1).float(),
+                            size=(H_vol, W_vol), mode="bilinear", align_corners=False,
+                        ).squeeze(1)
+                    if dmap_v_norm.shape[0] < B_feat_hint:
+                        n_rep = max(1, B_feat_hint // dmap_v_norm.shape[0])
+                        dmap_v_norm = dmap_v_norm.repeat(n_rep, 1, 1)[:B_feat_hint]
+                    depth_hint_val = dmap_v_norm
+
+                vol_outputs = self.system.predict_volume(F_g, F_0, F_1,
+                                                          depth_hint=depth_hint_val)
 
                 depth_maps = depth_np[:T_frames]
                 V_gt_np = self.gt_builder.build_batch(

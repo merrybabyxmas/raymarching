@@ -10,7 +10,7 @@ via config-driven construction.
 """
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -64,8 +64,9 @@ class Phase62System(nn.Module):
         F_g: torch.Tensor,
         F_0: torch.Tensor,
         F_1: torch.Tensor,
+        depth_hint: "Optional[torch.Tensor]" = None,  # (B, H_vol, W_vol) ∈ [0,1]
     ) -> VolumeOutputs:
-        return self.volume_pred(F_g, F_0, F_1)
+        return self.volume_pred(F_g, F_0, F_1, depth_hint=depth_hint)
 
     def project_and_assemble(
         self,
