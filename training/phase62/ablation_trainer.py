@@ -594,9 +594,9 @@ class AblationTrainer:
                     for b in range(vol_outputs.entity_probs.shape[0]):
                         ep_b = vol_outputs.entity_probs[b]  # (2, K, H, W)
                         fg_b = fg_sp[b] if fg_sp.shape[0] > b else None
-                        from training.phase62.contract import Contract
-                        c_e0 = Contract._depth_compactness(ep_b[0], fg_b)
-                        c_e1 = Contract._depth_compactness(ep_b[1], fg_b)
+                        from training.phase62.contract import DebugContract
+                        c_e0 = DebugContract._depth_compactness(ep_b[0], fg_b)
+                        c_e1 = DebugContract._depth_compactness(ep_b[1], fg_b)
                         compacts_e0.append(c_e0)
                         compacts_e1.append(c_e1)
 
