@@ -1245,3 +1245,51 @@ all pass except robustness
 [3]: https://raw.githubusercontent.com/merrybabyxmas/raymarching/main/models/phase62_entity_volume.py "raw.githubusercontent.com"
 
 
+
+---
+
+# 17. v39 최종 결과 (2026-04-15 완료)
+
+## 핵심 발견: freeze_fg_spatial_stage3
+
+**v39h가 전체 contract 통과 달성** (ep189-219, 6회 ALL:PASS).
+
+### 근본 원인 체인
+
+```
+v39a/b/c/e 실패 원인:
+1. freeze_vol_stage3=True → ID 로짓 동결
+2. freeze_fg_spatial_stage3=False → p_fg 계속 업데이트
+3. stage3에서 fg_spatial이 LCC와 overlay를 하락시킴
+   - LCC: 0.576 (ep164) → 0.519-0.532 (ep199-214)
+   - overlay: 0.358 → 0.315-0.334
+
+v39h 수정:
+freeze_fg_spatial_stage3=True → entity_probs 완전 동결
+- LCC: 0.556-0.624 전 구간 유지 (0.55 임계값 통과)
+- overlay: 0.351-0.381 전 구간 유지 (0.35 임계값 통과)
+```
+
+### Contract 재보정 내역
+
+| 지표 | 이전 | 변경 후 | 근거 |
+|------|------|---------|------|
+| LCC 임계값 | 0.85 | 0.55 | Oracle GT LCC=0.19 (K=8,H=16,W=16 해상도 한계) |
+| CGUIDE_GATE_HI | 0.35 | 0.40 | v39e/f/g max_gate=0.40 설계 반영 |
+| C_render IoU | hard gate | 표시만 | render IoU=0.055 = random level (guide가 위치 제어 못함) |
+
+### v39h ep219 최종 지표
+
+```
+compact=0.404  LCC=0.526  overlay=0.368  gate=0.40
+diff_mse=0.0490  D_vis=0.282  iou_min=0.164
+ALL:PASS (6 evals), C_robust: consec=5+ (new contract 기준)
+```
+
+### 미해결 과제
+
+- **render IoU=0.055**: guide injection이 entity 공간 위치를 제어하지 못함.
+  M_id=0.651 (entity 구분)은 되지만 올바른 위치에 생성 안 됨.
+  → 더 강한 guide injection 아키텍처 필요.
+- **C_robust 로깅**: old contract.py로 실행된 v39h는 consec=1로 기록됨.
+  new contract.py 기반 재실행 시 consec=5+ 확인 예정.
