@@ -105,8 +105,9 @@ def loss_projected_balance(
 
 
 def loss_feature_separation(
-    F_0: torch.Tensor,  # (B, S, D)
-    F_1: torch.Tensor,  # (B, S, D)
+    F_0: torch.Tensor,          # (B, S, D)
+    F_1: torch.Tensor,          # (B, S, D)
+    entity_mask: Optional[torch.Tensor] = None,  # (B, S) float in [0,1], optional
 ) -> torch.Tensor:
     """
     Push F_0 and F_1 feature representations apart.
@@ -114,10 +115,20 @@ def loss_feature_separation(
     Minimizes cosine similarity between per-pixel feature vectors.
     If F_0 and F_1 are already orthogonal (cos_sim=0), loss is 0.
     If identical (cos_sim=1), loss is 1.
+
+    entity_mask: if provided, computes weighted mean focusing on entity pixels.
+    This avoids background token dilution when S is large (e.g., 32×32=1024 tokens)
+    and entity pixels make up only ~10% of S.
     """
     f0 = F.normalize(F_0.float(), dim=-1, eps=1e-6)
     f1 = F.normalize(F_1.float(), dim=-1, eps=1e-6)
     cos_sim = (f0 * f1).sum(dim=-1)  # (B, S)
+    if entity_mask is not None and entity_mask.shape == cos_sim.shape:
+        # Weighted mean: entity pixels have weight proportional to mask value.
+        # Background (mask≈0) contributes near-zero weight.
+        w = entity_mask.clamp(min=0.0).float()
+        w_sum = w.sum() + 1e-6
+        return (cos_sim.clamp(min=0.0) * w).sum() / w_sum
     return cos_sim.clamp(min=0.0).mean()
 
 

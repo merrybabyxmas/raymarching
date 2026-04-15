@@ -499,7 +499,29 @@ class AblationTrainer:
         # Feature separation loss (Issue 2 fix): push F_0 and F_1 apart
         la_sep = float(getattr(self.train_cfg, "la_feature_sep", 0.1))
         if la_sep > 0:
-            l_sep = loss_feature_separation(F_0, F_1)
+            # v40g: entity-masked separation — focus gradient on entity pixels only.
+            # With spatial_h=32 (S=1024), only ~10% of tokens are entity pixels.
+            # Background tokens dilute the gradient → cosF stays high without masking.
+            # entity_mask_sep: union of GT entity masks, resized to feature sequence length.
+            _use_sep_mask = bool(getattr(self.train_cfg, "use_entity_sep_mask", False))
+            _sep_mask = None
+            if _use_sep_mask and entity_masks is not None and F_0 is not None:
+                try:
+                    S_feat = F_0.shape[1]
+                    B_sep = min(F_0.shape[0], int(entity_masks.shape[0]))
+                    _gt = torch.from_numpy(entity_masks[:B_sep].astype(np.float32)).to(self.device)  # (B, 2, S_mask)
+                    S_mask = _gt.shape[-1]
+                    hw_m = int(round(S_mask ** 0.5))
+                    hw_f = int(round(S_feat ** 0.5))
+                    if hw_m * hw_m == S_mask and hw_f * hw_f == S_feat:
+                        # Union of entity 0 and entity 1 masks
+                        _union = (_gt[:, 0] + _gt[:, 1]).clamp(0, 1).reshape(B_sep, 1, hw_m, hw_m)
+                        if hw_m != hw_f:
+                            _union = F.interpolate(_union, size=(hw_f, hw_f), mode='nearest')
+                        _sep_mask = _union.reshape(B_sep, S_feat)
+                except Exception:
+                    _sep_mask = None
+            l_sep = loss_feature_separation(F_0, F_1, entity_mask=_sep_mask)
             l_struct = l_struct + la_sep * l_sep
 
         # ── Priority 4 losses ─────────────────────────────────────────────────
