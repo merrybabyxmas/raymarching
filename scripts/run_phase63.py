@@ -585,7 +585,7 @@ class Phase63Trainer:
             print(f"  ✓ Best checkpoint saved (epoch {epoch})", flush=True)
 
     def _load_checkpoint(self, ckpt_path: str):
-        state = torch.load(ckpt_path, map_location=self.device)
+        state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
         self.system.field.load_state_dict(state["field_state"])
         if "guide_encoder_state" in state:
             self.system.guide_encoder.load_state_dict(state["guide_encoder_state"])
@@ -704,8 +704,955 @@ class Phase63Trainer:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Stage 2 Trainer — Guide Encoder Pretrain (EntityField frozen)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Phase63Stage2Trainer:
+    """
+    Stage 2: Freeze EntityField, train StructuredGuideEncoder.
+
+    Training signal: diffusion MSE loss.  The guide is injected into the UNet
+    via hooks; if the guide carries useful spatial information the noise
+    prediction improves → lower MSE.
+
+    Optional contrast loss: penalises cases where the guided UNet is *worse*
+    than the no-guide baseline by more than ``contrast_margin``.
+    """
+
+    def __init__(self, config, pipe, backbone_mgr: BackboneManager, dataset, device: str):
+        self.config = config
+        self.pipe = pipe
+        self.backbone_mgr = backbone_mgr
+        self.dataset = dataset
+        self.device = device
+        self.tc = config.training
+        self.run_name = getattr(config, "run_name", "p63_stage2")
+
+        self.save_dir = Path(f"checkpoints/phase63/{self.run_name}")
+        self.debug_dir = Path(f"outputs/phase63/{self.run_name}")
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        (self.debug_dir / "eval").mkdir(parents=True, exist_ok=True)
+
+        self.system = Phase63System(config).to(device)
+        self.evaluator = EntityEvaluator(
+            visible_survival_thresh=float(getattr(config.eval, "visible_survival_thresh", 0.02))
+        )
+        self.gt_builder = VolumeGTBuilder(
+            depth_bins=config.depth_bins,
+            spatial_h=config.spatial_h,
+            spatial_w=config.spatial_w,
+            render_resolution=int(getattr(config.data, "volume_gt_render_resolution", 128)),
+        )
+
+        raw_ds = dataset.raw_dataset() if hasattr(dataset, "raw_dataset") else dataset
+        overlap_scores = compute_dataset_overlap_scores(raw_ds)
+        val_frac = getattr(config.data, "val_frac", 0.2)
+        self.train_idx, self.val_idx = split_train_val(
+            overlap_scores, val_frac=val_frac, min_val=MIN_VAL_SAMPLES)
+        self.sample_weights = make_sampling_weights(self.train_idx, overlap_scores)
+        print(f"[Data] train={len(self.train_idx)} val={len(self.val_idx)}", flush=True)
+
+        self._load_stage1(getattr(config, "stage1_ckpt", "checkpoints/phase63/p63_stage1/best.pt"))
+        self._setup_optimizer()
+        self.history: List[Dict] = []
+        self.best_val_score = -1.0
+        self.best_epoch = -1
+
+    def _load_stage1(self, ckpt_path: str):
+        path = Path(ckpt_path)
+        if not path.exists():
+            print(f"[Stage2] WARNING: stage1 checkpoint not found at {ckpt_path}", flush=True)
+            return
+        state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+        self.system.field.load_state_dict(state["field_state"])
+        print(f"[Stage2] Loaded stage1 field from {ckpt_path} (ep {state.get('epoch', '?')})",
+              flush=True)
+
+    def _setup_optimizer(self):
+        # Freeze field (it's already trained)
+        for p in self.system.field.parameters():
+            p.requires_grad_(False)
+        # Freeze backbone adapters/lora (no UNet backbone update in stage2)
+        for p in self.backbone_mgr.adapter_params():
+            p.requires_grad_(False)
+
+        # LoRA small update for diffusion compatibility
+        lora_params = self.backbone_mgr.lora_params()
+        guide_params = list(self.system.guide_encoder.parameters())
+        for p in guide_params + lora_params:
+            p.requires_grad_(True)
+
+        lr_guide = float(getattr(self.tc, "lr_guide", 1e-4))
+        lr_lora  = float(getattr(self.tc, "lr_lora",  1e-5))
+
+        self.optimizer = optim.AdamW([
+            {"params": guide_params, "lr": lr_guide, "name": "guide_encoder"},
+            {"params": lora_params,  "lr": lr_lora,  "name": "lora"},
+        ], weight_decay=1e-4)
+        for g in self.optimizer.param_groups:
+            g["initial_lr"] = g["lr"]
+
+        total_epochs = int(self.tc.epochs)
+        self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=max(1, total_epochs), eta_min=1e-6)
+
+    def _get_backbone_features(self, frames_np, meta, n_frames, height, width, t_tensor):
+        """Run UNet forward to extract backbone features (no grad needed for field)."""
+        T = min(int(frames_np.shape[0]), n_frames)
+        frames_resized = np.stack([
+            np.array(Image.fromarray(frames_np[t]).convert("RGB").resize(
+                (width, height), Image.BILINEAR))
+            for t in range(T)
+        ])
+        latents = encode_frames_to_latents(self.pipe, frames_resized, self.device)
+        toks_e0, toks_e1, full_prompt = _get_entity_tokens_p63(self.pipe, meta, self.device)
+        prompt_embeds = _encode_text(self.pipe, full_prompt, self.device)
+        self.backbone_mgr.set_entity_tokens(toks_e0, toks_e1)
+        self.backbone_mgr.reset_slot_store()
+        return latents, frames_resized, prompt_embeds
+
+    def _train_step(self, sample) -> Optional[Dict]:
+        frames_np, depth_np, depth_orders, meta, sample_dir, \
+            entity_masks, visible_masks = _unpack_sample(sample)
+
+        n_frames = int(getattr(self.tc, "n_frames", 1))
+        T = min(int(frames_np.shape[0]), n_frames)
+        if T < 1:
+            return None
+
+        height = int(getattr(self.tc, "height", 256))
+        width  = int(getattr(self.tc, "width",  256))
+        t_max  = int(getattr(self.tc, "t_max",  500))
+
+        # Encode frames → latents
+        frames_np = frames_np[:T]
+        frames_resized = np.stack([
+            np.array(Image.fromarray(frames_np[t]).convert("RGB").resize(
+                (width, height), Image.BILINEAR))
+            for t in range(T)
+        ])
+        latents = encode_frames_to_latents(self.pipe, frames_resized, self.device)
+
+        toks_e0, toks_e1, full_prompt = _get_entity_tokens_p63(self.pipe, meta, self.device)
+        prompt_embeds = _encode_text(self.pipe, full_prompt, self.device)
+        self.backbone_mgr.set_entity_tokens(toks_e0, toks_e1)
+        self.backbone_mgr.reset_slot_store()
+
+        noise = torch.randn_like(latents)
+        t_idx = torch.randint(0, t_max, (1,), device=self.device).long()
+        noisy_latents = self.pipe.scheduler.add_noise(latents, noise, t_idx)
+
+        # ── Step A: No-guide baseline forward ───────────────────────────────
+        with torch.no_grad():
+            _ = self.pipe.unet(noisy_latents, t_idx,
+                               encoder_hidden_states=prompt_embeds, return_dict=False)
+            ext = self.backbone_mgr.primary
+            if ext.last_Fg is None:
+                return None
+            F_g_ng  = ext.last_Fg.float()
+            F_e0_ng = ext.last_F0.float()
+            F_e1_ng = ext.last_F1.float()
+
+        noise_pred_baseline = self.pipe.unet(
+            noisy_latents, t_idx,
+            encoder_hidden_states=prompt_embeds, return_dict=False
+        )[0]
+        loss_baseline = F.mse_loss(noise_pred_baseline, noise)
+
+        # ── Step B: Guided forward ───────────────────────────────────────────
+        H_gt = self.config.spatial_h
+        W_gt = self.config.spatial_w
+        color0 = meta.get("color0", [0.85, 0.15, 0.1])
+        color1 = meta.get("color1", [0.1, 0.25, 0.85])
+        img_t_f = torch.from_numpy(frames_resized[:1].astype(np.float32)).to(self.device) / 255.0
+        img_t_f = img_t_f.permute(0, 3, 1, 2)
+        img_small = F.interpolate(img_t_f, size=(H_gt, W_gt), mode="bilinear", align_corners=False)
+        c0 = torch.tensor(color0, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+        c1 = torch.tensor(color1, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+        hint0 = (1.0 - (img_small - c0).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+        hint1 = (1.0 - (img_small - c1).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+
+        # Field forward (frozen, no grad)
+        with torch.no_grad():
+            self.backbone_mgr.reset_slot_store()
+            _ = self.pipe.unet(noisy_latents, t_idx,
+                               encoder_hidden_states=prompt_embeds, return_dict=False)
+            ext = self.backbone_mgr.primary
+            if ext.last_Fg is None:
+                return None
+            F_g  = ext.last_Fg.float()
+            F_e0 = ext.last_F0.float()
+            F_e1 = ext.last_F1.float()
+            field_out, render_out = self.system.forward_field_and_render(
+                F_g, F_e0, F_e1, img_hint_e0=hint0, img_hint_e1=hint1)
+
+        # Guide encoder (trainable) + guide injection
+        guides = self.system.encode_guide(render_out, field_out, F_e0, F_e1)
+        self.system.set_guides(guides)
+        self.system.injection_mgr.register_hooks(self.pipe.unet)
+
+        self.backbone_mgr.reset_slot_store()
+        noise_pred_guided = self.pipe.unet(
+            noisy_latents, t_idx,
+            encoder_hidden_states=prompt_embeds, return_dict=False
+        )[0]
+        self.system.injection_mgr.remove_hooks()
+
+        loss_guided = F.mse_loss(noise_pred_guided, noise)
+
+        # ── Loss ────────────────────────────────────────────────────────────
+        lambda_diff     = float(getattr(self.tc, "lambda_diff",     1.0))
+        lambda_contrast = float(getattr(self.tc, "lambda_contrast",  0.5))
+        margin          = float(getattr(self.tc, "contrast_margin",  0.02))
+
+        total = lambda_diff * loss_guided
+
+        # Contrast: guide should help — guided loss ≤ baseline loss - margin
+        if lambda_contrast > 0.0:
+            contrast_loss = F.relu(loss_guided - loss_baseline + margin)
+            total = total + lambda_contrast * contrast_loss
+        else:
+            contrast_loss = torch.zeros(1, device=self.device)
+
+        self.optimizer.zero_grad()
+        total.backward()
+        grad_clip = float(getattr(self.tc, "grad_clip", 1.0))
+        torch.nn.utils.clip_grad_norm_(
+            [p for g in self.optimizer.param_groups for p in g["params"]
+             if p.requires_grad and p.grad is not None],
+            grad_clip,
+        )
+        self.optimizer.step()
+
+        return {
+            "loss_total":    float(total.item()),
+            "loss_diff":     float(loss_guided.item()),
+            "loss_baseline": float(loss_baseline.item()),
+            "loss_contrast": float(contrast_loss.item()) if hasattr(contrast_loss, "item") else 0.0,
+            "diff_improvement": float((loss_baseline - loss_guided).item()),
+        }
+
+    @torch.no_grad()
+    def _validate(self, epoch: int) -> Dict:
+        self.backbone_mgr.eval()
+        preds, gts = [], []
+
+        for idx in self.val_idx[:8]:
+            try:
+                sample = self.dataset[idx]
+            except Exception:
+                continue
+
+            frames_np, depth_np, depth_orders, meta, sample_dir, \
+                entity_masks, visible_masks = _unpack_sample(sample)
+
+            n_frames = int(getattr(self.tc, "n_frames", 1))
+            T = min(int(frames_np.shape[0]), n_frames)
+            if T < 1:
+                continue
+
+            gt_vis_tensor = _build_gt_masks(
+                (visible_masks[:T] if visible_masks is not None else entity_masks[:T]),
+                self.config.spatial_h, self.config.spatial_w, self.device)
+            gt_amo_tensor = _build_gt_masks(
+                entity_masks[:T], self.config.spatial_h, self.config.spatial_w, self.device)
+
+            height = int(getattr(self.tc, "height", 256))
+            width  = int(getattr(self.tc, "width",  256))
+            frame_0 = np.array(
+                Image.fromarray(frames_np[0]).convert("RGB").resize(
+                    (width, height), Image.BILINEAR)
+            )[np.newaxis]
+            latents = encode_frames_to_latents(self.pipe, frame_0, self.device)
+            noise = torch.randn_like(latents)
+            t_max_val = int(getattr(self.tc, "t_max", 500))
+            t_val = torch.randint(0, max(1, t_max_val), (1,), device=self.device).long()
+            noisy = self.pipe.scheduler.add_noise(latents, noise, t_val)
+
+            toks_e0, toks_e1, full_prompt = _get_entity_tokens_p63(self.pipe, meta, self.device)
+            prompt_embeds = _encode_text(self.pipe, full_prompt, self.device)
+            self.backbone_mgr.set_entity_tokens(toks_e0, toks_e1)
+            self.backbone_mgr.reset_slot_store()
+
+            _ = self.pipe.unet(noisy, t_val,
+                               encoder_hidden_states=prompt_embeds, return_dict=False)
+            ext = self.backbone_mgr.primary
+            if ext.last_Fg is None:
+                continue
+            F_g  = ext.last_Fg.float()
+            F_e0 = ext.last_F0.float()
+            F_e1 = ext.last_F1.float()
+
+            H_gt_v = gt_vis_tensor.shape[-2]
+            W_gt_v = gt_vis_tensor.shape[-1]
+            color0_v = meta.get("color0", [0.85, 0.15, 0.1])
+            color1_v = meta.get("color1", [0.1, 0.25, 0.85])
+            frame0_t = torch.from_numpy(frame_0.astype(np.float32)).to(self.device) / 255.0
+            frame0_t = frame0_t.permute(0, 3, 1, 2)
+            img_small_v = F.interpolate(frame0_t, size=(H_gt_v, W_gt_v),
+                                        mode="bilinear", align_corners=False)
+            c0_v = torch.tensor(color0_v, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+            c1_v = torch.tensor(color1_v, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+            hint0 = (1.0 - (img_small_v - c0_v).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+            hint1 = (1.0 - (img_small_v - c1_v).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+
+            field_out, render_out = self.system.forward_field_and_render(
+                F_g, F_e0, F_e1, img_hint_e0=hint0, img_hint_e1=hint1)
+
+            preds.append({
+                "visible_e0": render_out.visible_e0[0],
+                "visible_e1": render_out.visible_e1[0],
+                "amodal_e0":  render_out.amodal_e0[0],
+                "amodal_e1":  render_out.amodal_e1[0],
+            })
+            gts.append({
+                "visible_e0": gt_vis_tensor[0, 0],
+                "visible_e1": gt_vis_tensor[0, 1],
+                "amodal_e0":  gt_amo_tensor[0, 0],
+                "amodal_e1":  gt_amo_tensor[0, 1],
+            })
+
+        self.backbone_mgr.train()
+        if not preds:
+            return {"visible_iou_min": 0.0, "visible_survival_min": 0.0, "amodal_iou_min": 0.0}
+        return self.evaluator.evaluate_sequence(preds, gts)
+
+    def _save_checkpoint(self, epoch: int, metrics: Dict, is_best: bool = False):
+        state = {
+            "epoch": epoch,
+            "field_state":         self.system.field.state_dict(),
+            "guide_encoder_state": self.system.guide_encoder.state_dict(),
+            "optimizer_state":     self.optimizer.state_dict(),
+            "metrics": metrics,
+            "config": {k: v for k, v in vars(self.config).items() if not callable(v)},
+        }
+        torch.save(state, self.save_dir / f"ep{epoch:04d}.pt")
+        if is_best:
+            torch.save(state, self.save_dir / "best.pt")
+            print(f"  ✓ Best checkpoint saved (epoch {epoch})", flush=True)
+
+    def _load_checkpoint(self, ckpt_path: str):
+        state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+        self.system.field.load_state_dict(state["field_state"])
+        if "guide_encoder_state" in state:
+            self.system.guide_encoder.load_state_dict(state["guide_encoder_state"])
+        print(f"[Resume] Loaded from {ckpt_path} (epoch {state['epoch']})", flush=True)
+        return int(state.get("epoch", 0))
+
+    def train(self, resume_from: Optional[str] = None):
+        _seed_all(int(getattr(self.tc, "seed", 42)))
+        start_epoch = 0
+        if resume_from:
+            start_epoch = self._load_checkpoint(resume_from) + 1
+
+        epochs = int(self.tc.epochs)
+        steps_per_epoch = int(getattr(self.tc, "steps_per_epoch", 30))
+        eval_every = int(getattr(self.tc, "eval_every", 5))
+
+        print(f"\n{'='*60}", flush=True)
+        print(f"[Phase63] Stage 2 — Guide Encoder Pretrain", flush=True)
+        print(f"  epochs={epochs}  steps/ep={steps_per_epoch}", flush=True)
+        print(f"  save_dir={self.save_dir}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
+        for epoch in range(start_epoch, epochs):
+            t0 = time.time()
+            self.backbone_mgr.eval()   # backbone frozen; keep BatchNorm in eval
+            self.system.field.eval()
+            self.system.guide_encoder.train()
+
+            if self.sample_weights is not None:
+                ep_idx = random.choices(self.train_idx,
+                                        weights=self.sample_weights.tolist(),
+                                        k=steps_per_epoch)
+            else:
+                ep_idx = [random.choice(self.train_idx) for _ in range(steps_per_epoch)]
+
+            step_metrics: List[Dict] = []
+            for step, idx in enumerate(ep_idx):
+                try:
+                    sample = self.dataset[idx]
+                    m = self._train_step(sample)
+                    if m is not None:
+                        step_metrics.append(m)
+                except Exception as exc:
+                    import traceback
+                    print(f"  [step {step}] error: {exc}", flush=True)
+                    if step == 0:
+                        traceback.print_exc()
+                    continue
+
+            self.lr_scheduler.step()
+
+            if not step_metrics:
+                print(f"  [epoch {epoch}] no valid steps", flush=True)
+                continue
+
+            ep_m = {k: float(np.mean([s[k] for s in step_metrics if k in s]))
+                    for k in step_metrics[0]}
+            ep_m["epoch"] = epoch
+            ep_m["time_s"] = time.time() - t0
+
+            if epoch % eval_every == 0 or epoch == epochs - 1:
+                self.system.field.eval()
+                self.system.guide_encoder.eval()
+                val_m = self._validate(epoch)
+                self.system.guide_encoder.train()
+                ep_m.update({f"val_{k}": v for k, v in val_m.items()})
+
+                val_score = float(val_m.get("amodal_iou_min", 0.0))
+                is_best = val_score > self.best_val_score
+                if is_best:
+                    self.best_val_score = val_score
+                    self.best_epoch = epoch
+                self._save_checkpoint(epoch, ep_m, is_best=is_best)
+
+                print(
+                    f"[ep {epoch:3d}] "
+                    f"loss={ep_m['loss_total']:.4f} "
+                    f"diff={ep_m.get('loss_diff', 0):.4f} "
+                    f"Δ={ep_m.get('diff_improvement', 0):+.4f} | "
+                    f"val_amo_iou={val_m.get('amodal_iou_min', 0):.4f} "
+                    f"val_surv={val_m.get('visible_survival_min', 0):.4f} "
+                    f"({ep_m['time_s']:.1f}s)",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[ep {epoch:3d}] "
+                    f"loss={ep_m['loss_total']:.4f} "
+                    f"diff={ep_m.get('loss_diff', 0):.4f} "
+                    f"Δ={ep_m.get('diff_improvement', 0):+.4f} "
+                    f"({ep_m['time_s']:.1f}s)",
+                    flush=True,
+                )
+
+            self.history.append(ep_m)
+
+        hist_path = self.debug_dir / "history.json"
+        with open(hist_path, "w") as f:
+            json.dump(self.history, f, indent=2)
+        print(f"\n[Done] best epoch={self.best_epoch} amodal_iou_min={self.best_val_score:.4f}",
+              flush=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3 Trainer — Full Joint Training
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Phase63Stage3Trainer:
+    """
+    Stage 3: Joint fine-tuning of EntityField + StructuredGuideEncoder + LoRA.
+
+    Combines Stage 1 field losses with Stage 2 diffusion loss.
+    Loads from stage2 best.pt (or stage1 if stage2 is absent).
+    """
+
+    def __init__(self, config, pipe, backbone_mgr: BackboneManager, dataset, device: str):
+        self.config = config
+        self.pipe = pipe
+        self.backbone_mgr = backbone_mgr
+        self.dataset = dataset
+        self.device = device
+        self.tc = config.training
+        self.run_name = getattr(config, "run_name", "p63_stage3")
+
+        self.save_dir = Path(f"checkpoints/phase63/{self.run_name}")
+        self.debug_dir = Path(f"outputs/phase63/{self.run_name}")
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        (self.debug_dir / "eval").mkdir(parents=True, exist_ok=True)
+        (self.debug_dir / "train_viz").mkdir(parents=True, exist_ok=True)
+
+        self.system = Phase63System(config).to(device)
+        self.evaluator = EntityEvaluator(
+            visible_survival_thresh=float(getattr(config.eval, "visible_survival_thresh", 0.02))
+        )
+        self.gt_builder = VolumeGTBuilder(
+            depth_bins=config.depth_bins,
+            spatial_h=config.spatial_h,
+            spatial_w=config.spatial_w,
+            render_resolution=int(getattr(config.data, "volume_gt_render_resolution", 128)),
+        )
+
+        raw_ds = dataset.raw_dataset() if hasattr(dataset, "raw_dataset") else dataset
+        overlap_scores = compute_dataset_overlap_scores(raw_ds)
+        val_frac = getattr(config.data, "val_frac", 0.2)
+        self.train_idx, self.val_idx = split_train_val(
+            overlap_scores, val_frac=val_frac, min_val=MIN_VAL_SAMPLES)
+        self.sample_weights = make_sampling_weights(self.train_idx, overlap_scores)
+        print(f"[Data] train={len(self.train_idx)} val={len(self.val_idx)}", flush=True)
+
+        self._load_best_prior(config)
+        self._setup_optimizer()
+        self.history: List[Dict] = []
+        self.best_val_score = -1.0
+        self.best_epoch = -1
+
+    def _load_best_prior(self, config):
+        stage2_ckpt = getattr(config, "stage2_ckpt",
+                              "checkpoints/phase63/p63_stage2/best.pt")
+        stage1_ckpt = getattr(config, "stage1_ckpt",
+                              "checkpoints/phase63/p63_stage1/best.pt")
+
+        ckpt_path = stage2_ckpt if Path(stage2_ckpt).exists() else stage1_ckpt
+        if not Path(ckpt_path).exists():
+            print(f"[Stage3] WARNING: no prior checkpoint found", flush=True)
+            return
+
+        state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+        self.system.field.load_state_dict(state["field_state"])
+        if "guide_encoder_state" in state:
+            self.system.guide_encoder.load_state_dict(state["guide_encoder_state"])
+        print(f"[Stage3] Loaded prior checkpoint from {ckpt_path} (ep {state.get('epoch','?')})",
+              flush=True)
+
+    def _setup_optimizer(self):
+        field_params   = list(self.system.field.parameters())
+        guide_params   = list(self.system.guide_encoder.parameters())
+        adapter_params = self.backbone_mgr.adapter_params()
+        lora_params    = self.backbone_mgr.lora_params()
+
+        for p in field_params + guide_params + adapter_params + lora_params:
+            p.requires_grad_(True)
+
+        lr_field   = float(getattr(self.tc, "lr_field",   2e-4))
+        lr_guide   = float(getattr(self.tc, "lr_guide",   5e-5))
+        lr_adapter = float(getattr(self.tc, "lr_adapter", 5e-5))
+        lr_lora    = float(getattr(self.tc, "lr_lora",    1e-5))
+
+        self.optimizer = optim.AdamW([
+            {"params": field_params,   "lr": lr_field,   "name": "field"},
+            {"params": guide_params,   "lr": lr_guide,   "name": "guide_encoder"},
+            {"params": adapter_params, "lr": lr_adapter, "name": "adapters"},
+            {"params": lora_params,    "lr": lr_lora,    "name": "lora"},
+        ], weight_decay=1e-4)
+        for g in self.optimizer.param_groups:
+            g["initial_lr"] = g["lr"]
+
+        total_epochs = int(self.tc.epochs)
+        self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=max(1, total_epochs), eta_min=1e-6)
+
+    def _train_step(self, sample) -> Optional[Dict]:
+        frames_np, depth_np, depth_orders, meta, sample_dir, \
+            entity_masks, visible_masks = _unpack_sample(sample)
+
+        n_frames = int(getattr(self.tc, "n_frames", 1))
+        T = min(int(frames_np.shape[0]), n_frames)
+        if T < 1:
+            return None
+
+        frames_np = frames_np[:T]
+        depth_np  = depth_np[:T]
+        depth_orders = list(depth_orders)[:T]
+        entity_masks = entity_masks[:T]
+        gt_vis_np = visible_masks[:T] if visible_masks is not None else None
+
+        V_gt_np = self.gt_builder.build_batch(
+            depth_maps=depth_np,
+            entity_masks=entity_masks,
+            depth_orders=depth_orders,
+            visible_masks=gt_vis_np,
+            meta=meta,
+            sample_dir=sample_dir,
+        )
+
+        if visible_masks is not None:
+            gt_vis_tensor = _build_gt_masks(visible_masks[:T],
+                                            self.config.spatial_h, self.config.spatial_w,
+                                            self.device)
+        else:
+            gt_vis_tensor = _build_gt_masks(entity_masks[:T],
+                                            self.config.spatial_h, self.config.spatial_w,
+                                            self.device)
+        gt_amo_tensor = _build_gt_masks(entity_masks[:T],
+                                        self.config.spatial_h, self.config.spatial_w,
+                                        self.device)
+
+        height = int(getattr(self.tc, "height", 256))
+        width  = int(getattr(self.tc, "width",  256))
+        t_max  = int(getattr(self.tc, "t_max",  500))
+
+        frames_resized = np.stack([
+            np.array(Image.fromarray(frames_np[t]).convert("RGB").resize(
+                (width, height), Image.BILINEAR))
+            for t in range(T)
+        ])
+        latents = encode_frames_to_latents(self.pipe, frames_resized, self.device)
+
+        toks_e0, toks_e1, full_prompt = _get_entity_tokens_p63(self.pipe, meta, self.device)
+        prompt_embeds = _encode_text(self.pipe, full_prompt, self.device)
+        self.backbone_mgr.set_entity_tokens(toks_e0, toks_e1)
+        self.backbone_mgr.reset_slot_store()
+
+        noise = torch.randn_like(latents)
+        t_idx = torch.randint(0, t_max, (1,), device=self.device).long()
+        noisy_latents = self.pipe.scheduler.add_noise(latents, noise, t_idx)
+
+        # ── Extract backbone features ────────────────────────────────────────
+        _ = self.pipe.unet(noisy_latents, t_idx,
+                           encoder_hidden_states=prompt_embeds, return_dict=False)
+        ext = self.backbone_mgr.primary
+        if ext.last_Fg is None:
+            return None
+        F_g  = ext.last_Fg.float()
+        F_e0 = ext.last_F0.float()
+        F_e1 = ext.last_F1.float()
+
+        # ── Color routing hints ─────────────────────────────────────────────
+        B   = F_g.shape[0]
+        H_gt = gt_vis_tensor.shape[-2]
+        W_gt = gt_vis_tensor.shape[-1]
+        color0 = meta.get("color0", [0.85, 0.15, 0.1])
+        color1 = meta.get("color1", [0.1, 0.25, 0.85])
+        img_t_f = torch.from_numpy(frames_resized[:1].astype(np.float32)).to(self.device) / 255.0
+        img_t_f = img_t_f.permute(0, 3, 1, 2)
+        img_small = F.interpolate(img_t_f, size=(H_gt, W_gt), mode="bilinear", align_corners=False)
+        c0 = torch.tensor(color0, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+        c1 = torch.tensor(color1, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+        routing0_hint = (1.0 - (img_small - c0).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+        routing1_hint = (1.0 - (img_small - c1).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+        routing0 = routing0_hint.squeeze(1)
+        routing1 = routing1_hint.squeeze(1)
+
+        # ── Field + render ──────────────────────────────────────────────────
+        field_out, render_out = self.system.forward_field_and_render(
+            F_g, F_e0, F_e1, img_hint_e0=routing0_hint, img_hint_e1=routing1_hint)
+
+        def _maybe_resize(x):
+            if x.shape[-2:] != (H_gt, W_gt):
+                return F.interpolate(x.unsqueeze(1), size=(H_gt, W_gt),
+                                     mode="bilinear", align_corners=False).squeeze(1)
+            return x
+
+        vis_e0 = _maybe_resize(render_out.visible_e0)
+        vis_e1 = _maybe_resize(render_out.visible_e1)
+        amo_e0 = _maybe_resize(render_out.amodal_e0)
+        amo_e1 = _maybe_resize(render_out.amodal_e1)
+
+        # ── Field losses ────────────────────────────────────────────────────
+        lam = self.tc
+        loss_vis  = loss_visible_dice(vis_e0, vis_e1, gt_vis_tensor[:B, 0], gt_vis_tensor[:B, 1])
+        loss_amo  = loss_amodal_dice(amo_e0, amo_e1, gt_amo_tensor[:B, 0], gt_amo_tensor[:B, 1])
+        loss_occ  = loss_occlusion_consistency(vis_e0, vis_e1, amo_e0, amo_e1)
+        min_surv  = float(getattr(self.config.eval, "min_survival", 0.02))
+        loss_surv = loss_entity_survival(vis_e0, vis_e1, min_survival=min_surv)
+
+        total = (float(getattr(lam, "lambda_vis",      1.0)) * loss_vis
+               + float(getattr(lam, "lambda_amo",      0.5)) * loss_amo
+               + float(getattr(lam, "lambda_occ",      0.3)) * loss_occ
+               + float(getattr(lam, "lambda_survival", 5.0)) * loss_surv)
+
+        lambda_color = float(getattr(lam, "lambda_color", 0.0))
+        if lambda_color > 0.0:
+            loss_color = 0.5 * (F.mse_loss(amo_e0, routing0) + F.mse_loss(amo_e1, routing1))
+            total = total + lambda_color * loss_color
+        else:
+            loss_color = torch.zeros(1, device=self.device)
+
+        # ── Diffusion loss (guided UNet forward) ───────────────────────────
+        lambda_diff = float(getattr(lam, "lambda_diff", 1.0))
+        guides = self.system.encode_guide(render_out, field_out, F_e0, F_e1)
+        self.system.set_guides(guides)
+        self.system.injection_mgr.register_hooks(self.pipe.unet)
+        self.backbone_mgr.reset_slot_store()
+        noise_pred_guided = self.pipe.unet(
+            noisy_latents, t_idx,
+            encoder_hidden_states=prompt_embeds, return_dict=False
+        )[0]
+        self.system.injection_mgr.remove_hooks()
+        loss_diff = F.mse_loss(noise_pred_guided, noise)
+        total = total + lambda_diff * loss_diff
+
+        # ── Optional contrast ────────────────────────────────────────────────
+        lambda_contrast = float(getattr(lam, "lambda_contrast", 0.0))
+        if lambda_contrast > 0.0:
+            with torch.no_grad():
+                self.backbone_mgr.reset_slot_store()
+                noise_pred_ng = self.pipe.unet(
+                    noisy_latents, t_idx,
+                    encoder_hidden_states=prompt_embeds, return_dict=False
+                )[0]
+                loss_baseline = F.mse_loss(noise_pred_ng, noise)
+            margin = float(getattr(lam, "contrast_margin", 0.02))
+            contrast_loss = F.relu(loss_diff - loss_baseline + margin)
+            total = total + lambda_contrast * contrast_loss
+        else:
+            contrast_loss = torch.zeros(1, device=self.device)
+
+        # ── Backward ────────────────────────────────────────────────────────
+        self.optimizer.zero_grad()
+        total.backward()
+        grad_clip = float(getattr(lam, "grad_clip", 0.5))
+        torch.nn.utils.clip_grad_norm_(
+            [p for g in self.optimizer.param_groups for p in g["params"]
+             if p.requires_grad and p.grad is not None],
+            grad_clip,
+        )
+        self.optimizer.step()
+
+        with torch.no_grad():
+            m = compute_entity_metrics(
+                vis_e0, vis_e1, amo_e0, amo_e1,
+                gt_vis_tensor[:B], gt_amo_tensor[:B],
+            )
+
+        return {
+            "loss_total": float(total.item()),
+            "loss_vis":   float(loss_vis.item()),
+            "loss_amo":   float(loss_amo.item()),
+            "loss_diff":  float(loss_diff.item()),
+            **{k: float(v) for k, v in m.items()},
+        }
+
+    @torch.no_grad()
+    def _validate(self, epoch: int) -> Dict:
+        self.backbone_mgr.eval()
+        preds, gts = [], []
+
+        for idx in self.val_idx[:8]:
+            try:
+                sample = self.dataset[idx]
+            except Exception:
+                continue
+
+            frames_np, depth_np, depth_orders, meta, sample_dir, \
+                entity_masks, visible_masks = _unpack_sample(sample)
+
+            n_frames = int(getattr(self.tc, "n_frames", 1))
+            T = min(int(frames_np.shape[0]), n_frames)
+            if T < 1:
+                continue
+
+            gt_vis_tensor = _build_gt_masks(
+                (visible_masks[:T] if visible_masks is not None else entity_masks[:T]),
+                self.config.spatial_h, self.config.spatial_w, self.device)
+            gt_amo_tensor = _build_gt_masks(
+                entity_masks[:T], self.config.spatial_h, self.config.spatial_w, self.device)
+
+            height = int(getattr(self.tc, "height", 256))
+            width  = int(getattr(self.tc, "width",  256))
+            frame_0 = np.array(
+                Image.fromarray(frames_np[0]).convert("RGB").resize(
+                    (width, height), Image.BILINEAR)
+            )[np.newaxis]
+            latents = encode_frames_to_latents(self.pipe, frame_0, self.device)
+            noise = torch.randn_like(latents)
+            t_max_val = int(getattr(self.tc, "t_max", 500))
+            t_val = torch.randint(0, max(1, t_max_val), (1,), device=self.device).long()
+            noisy = self.pipe.scheduler.add_noise(latents, noise, t_val)
+
+            toks_e0, toks_e1, full_prompt = _get_entity_tokens_p63(self.pipe, meta, self.device)
+            prompt_embeds = _encode_text(self.pipe, full_prompt, self.device)
+            self.backbone_mgr.set_entity_tokens(toks_e0, toks_e1)
+            self.backbone_mgr.reset_slot_store()
+
+            _ = self.pipe.unet(noisy, t_val,
+                               encoder_hidden_states=prompt_embeds, return_dict=False)
+            ext = self.backbone_mgr.primary
+            if ext.last_Fg is None:
+                continue
+            F_g  = ext.last_Fg.float()
+            F_e0 = ext.last_F0.float()
+            F_e1 = ext.last_F1.float()
+
+            H_gt_v = gt_vis_tensor.shape[-2]
+            W_gt_v = gt_vis_tensor.shape[-1]
+            color0_v = meta.get("color0", [0.85, 0.15, 0.1])
+            color1_v = meta.get("color1", [0.1, 0.25, 0.85])
+            frame0_t = torch.from_numpy(frame_0.astype(np.float32)).to(self.device) / 255.0
+            frame0_t = frame0_t.permute(0, 3, 1, 2)
+            img_small_v = F.interpolate(frame0_t, size=(H_gt_v, W_gt_v),
+                                        mode="bilinear", align_corners=False)
+            c0_v = torch.tensor(color0_v, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+            c1_v = torch.tensor(color1_v, device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+            hint0 = (1.0 - (img_small_v - c0_v).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+            hint1 = (1.0 - (img_small_v - c1_v).abs().mean(1, keepdim=True) * 3.0).clamp(0.0, 1.0)
+
+            field_out, render_out = self.system.forward_field_and_render(
+                F_g, F_e0, F_e1, img_hint_e0=hint0, img_hint_e1=hint1)
+
+            preds.append({
+                "visible_e0": render_out.visible_e0[0],
+                "visible_e1": render_out.visible_e1[0],
+                "amodal_e0":  render_out.amodal_e0[0],
+                "amodal_e1":  render_out.amodal_e1[0],
+            })
+            gts.append({
+                "visible_e0": gt_vis_tensor[0, 0],
+                "visible_e1": gt_vis_tensor[0, 1],
+                "amodal_e0":  gt_amo_tensor[0, 0],
+                "amodal_e1":  gt_amo_tensor[0, 1],
+            })
+
+        self.backbone_mgr.train()
+        if not preds:
+            return {"visible_iou_min": 0.0, "visible_survival_min": 0.0, "amodal_iou_min": 0.0}
+        return self.evaluator.evaluate_sequence(preds, gts)
+
+    def _save_checkpoint(self, epoch: int, metrics: Dict, is_best: bool = False):
+        state = {
+            "epoch": epoch,
+            "field_state":         self.system.field.state_dict(),
+            "guide_encoder_state": self.system.guide_encoder.state_dict(),
+            "optimizer_state":     self.optimizer.state_dict(),
+            "metrics": metrics,
+            "config": {k: v for k, v in vars(self.config).items() if not callable(v)},
+        }
+        torch.save(state, self.save_dir / f"ep{epoch:04d}.pt")
+        if is_best:
+            torch.save(state, self.save_dir / "best.pt")
+            print(f"  ✓ Best checkpoint saved (epoch {epoch})", flush=True)
+
+    def _load_checkpoint(self, ckpt_path: str):
+        state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+        self.system.field.load_state_dict(state["field_state"])
+        if "guide_encoder_state" in state:
+            self.system.guide_encoder.load_state_dict(state["guide_encoder_state"])
+        print(f"[Resume] Loaded from {ckpt_path} (epoch {state['epoch']})", flush=True)
+        return int(state.get("epoch", 0))
+
+    def train(self, resume_from: Optional[str] = None):
+        _seed_all(int(getattr(self.tc, "seed", 42)))
+        start_epoch = 0
+        if resume_from:
+            start_epoch = self._load_checkpoint(resume_from) + 1
+
+        epochs = int(self.tc.epochs)
+        steps_per_epoch = int(getattr(self.tc, "steps_per_epoch", 30))
+        eval_every = int(getattr(self.tc, "eval_every", 5))
+
+        print(f"\n{'='*60}", flush=True)
+        print(f"[Phase63] Stage 3 — Full Joint Training", flush=True)
+        print(f"  epochs={epochs}  steps/ep={steps_per_epoch}", flush=True)
+        print(f"  save_dir={self.save_dir}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
+        for epoch in range(start_epoch, epochs):
+            t0 = time.time()
+            self.backbone_mgr.train()
+            self.system.field.train()
+            self.system.guide_encoder.train()
+
+            if self.sample_weights is not None:
+                ep_idx = random.choices(self.train_idx,
+                                        weights=self.sample_weights.tolist(),
+                                        k=steps_per_epoch)
+            else:
+                ep_idx = [random.choice(self.train_idx) for _ in range(steps_per_epoch)]
+
+            step_metrics: List[Dict] = []
+            for step, idx in enumerate(ep_idx):
+                try:
+                    sample = self.dataset[idx]
+                    m = self._train_step(sample)
+                    if m is not None:
+                        step_metrics.append(m)
+                except Exception as exc:
+                    import traceback
+                    print(f"  [step {step}] error: {exc}", flush=True)
+                    if step == 0:
+                        traceback.print_exc()
+                    continue
+
+            self.lr_scheduler.step()
+
+            if not step_metrics:
+                print(f"  [epoch {epoch}] no valid steps", flush=True)
+                continue
+
+            ep_m = {k: float(np.mean([s[k] for s in step_metrics if k in s]))
+                    for k in step_metrics[0]}
+            ep_m["epoch"] = epoch
+            ep_m["time_s"] = time.time() - t0
+
+            if epoch % eval_every == 0 or epoch == epochs - 1:
+                self.system.field.eval()
+                self.system.guide_encoder.eval()
+                val_m = self._validate(epoch)
+                self.system.field.train()
+                self.system.guide_encoder.train()
+                ep_m.update({f"val_{k}": v for k, v in val_m.items()})
+
+                val_score = float(val_m.get("amodal_iou_min", 0.0))
+                is_best = val_score > self.best_val_score
+                if is_best:
+                    self.best_val_score = val_score
+                    self.best_epoch = epoch
+                self._save_checkpoint(epoch, ep_m, is_best=is_best)
+
+                print(
+                    f"[ep {epoch:3d}] "
+                    f"loss={ep_m['loss_total']:.4f} "
+                    f"diff={ep_m.get('loss_diff', 0):.4f} "
+                    f"amo={ep_m.get('loss_amo', 0):.4f} | "
+                    f"val_amo_iou={val_m.get('amodal_iou_min', 0):.4f} "
+                    f"val_vis_iou={val_m.get('visible_iou_min', 0):.4f} "
+                    f"val_surv={val_m.get('visible_survival_min', 0):.4f} "
+                    f"({ep_m['time_s']:.1f}s)",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[ep {epoch:3d}] "
+                    f"loss={ep_m['loss_total']:.4f} "
+                    f"diff={ep_m.get('loss_diff', 0):.4f} "
+                    f"amo_iou={ep_m.get('amodal_iou_min', 0):.4f} "
+                    f"({ep_m['time_s']:.1f}s)",
+                    flush=True,
+                )
+
+            self.history.append(ep_m)
+
+        hist_path = self.debug_dir / "history.json"
+        with open(hist_path, "w") as f:
+            json.dump(self.history, f, indent=2)
+        print(f"\n[Done] best epoch={self.best_epoch} amodal_iou_min={self.best_val_score:.4f}",
+              flush=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _build_common(config, device: str):
+    """Shared pipeline / backbone / dataset setup for all stages."""
+    from scripts.run_animatediff import load_pipeline
+
+    print("[Phase63] Loading AnimateDiff pipeline...", flush=True)
+    pipe = load_pipeline(device=device)
+    pipe.scheduler.set_timesteps(50, device=device)
+    pipe.unet.enable_gradient_checkpointing()
+
+    for p in pipe.unet.parameters():
+        p.requires_grad_(False)
+    for p in pipe.text_encoder.parameters():
+        p.requires_grad_(False)
+    for p in pipe.vae.parameters():
+        p.requires_grad_(False)
+
+    print("[Phase63] Injecting backbone feature extractors...", flush=True)
+    adapter_rank = int(getattr(config.model, "adapter_rank", 64))
+    lora_rank    = int(getattr(config.model, "lora_rank",    4))
+    extractors, _ = inject_backbone_extractors(
+        pipe,
+        adapter_rank=adapter_rank,
+        lora_rank=lora_rank,
+        inject_keys=DEFAULT_INJECT_KEYS,
+    )
+    for ext in extractors:
+        ext.to(device)
+    backbone_mgr = BackboneManager(
+        extractors, DEFAULT_INJECT_KEYS, primary_idx=2)
+
+    data_root = getattr(config.data, "data_root", "toy/data_objaverse")
+    n_frames  = int(getattr(config.training, "n_frames", 8))
+    print(f"[Phase63] Loading dataset from {data_root}...", flush=True)
+    dataset = Phase62DatasetAdapter(data_root, n_frames=n_frames)
+    print(f"[Phase63] Dataset size: {len(dataset)}", flush=True)
+
+    return pipe, backbone_mgr, dataset
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -719,44 +1666,16 @@ def main():
 
     _seed_all(int(getattr(getattr(config, "training", config), "seed", 42)))
 
-    # ── Pipeline ──────────────────────────────────────────────────────────────
-    from scripts.run_animatediff import load_pipeline
-    print("[Phase63] Loading AnimateDiff pipeline...", flush=True)
-    pipe = load_pipeline(device=device)
-    pipe.scheduler.set_timesteps(50, device=device)
-    pipe.unet.enable_gradient_checkpointing()
+    pipe, backbone_mgr, dataset = _build_common(config, device)
 
-    for p in pipe.unet.parameters():
-        p.requires_grad_(False)
-    for p in pipe.text_encoder.parameters():
-        p.requires_grad_(False)
-    for p in pipe.vae.parameters():
-        p.requires_grad_(False)
+    run_name = getattr(config, "run_name", "")
+    if "stage2" in run_name or "stage2" in args.config:
+        trainer = Phase63Stage2Trainer(config, pipe, backbone_mgr, dataset, device)
+    elif "stage3" in run_name or "stage3" in args.config:
+        trainer = Phase63Stage3Trainer(config, pipe, backbone_mgr, dataset, device)
+    else:
+        trainer = Phase63Trainer(config, pipe, backbone_mgr, dataset, device)
 
-    # ── Backbone extractors ────────────────────────────────────────────────────
-    print("[Phase63] Injecting backbone feature extractors...", flush=True)
-    adapter_rank = int(getattr(config.model, "adapter_rank", 64))
-    lora_rank    = int(getattr(config.model, "lora_rank",    4))
-    extractors, _ = inject_backbone_extractors(
-        pipe,
-        adapter_rank=adapter_rank,
-        lora_rank=lora_rank,
-        inject_keys=DEFAULT_INJECT_KEYS,
-    )
-    for ext in extractors:
-        ext.to(device)
-    backbone_mgr = BackboneManager(
-        extractors, DEFAULT_INJECT_KEYS, primary_idx=2)  # up_blocks.3: 32×32, feat_dim=320
-
-    # ── Dataset ───────────────────────────────────────────────────────────────
-    data_root = getattr(config.data, "data_root", "toy/data_objaverse")
-    n_frames  = int(getattr(config.training, "n_frames", 8))
-    print(f"[Phase63] Loading dataset from {data_root}...", flush=True)
-    dataset = Phase62DatasetAdapter(data_root, n_frames=n_frames)
-    print(f"[Phase63] Dataset size: {len(dataset)}", flush=True)
-
-    # ── Trainer ───────────────────────────────────────────────────────────────
-    trainer = Phase63Trainer(config, pipe, backbone_mgr, dataset, device)
     trainer.train(resume_from=args.ckpt)
 
 

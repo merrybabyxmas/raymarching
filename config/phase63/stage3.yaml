@@ -1,0 +1,71 @@
+# Phase 63 — Stage 3: Full Joint Training
+# EntityField + GuideEncoder + LoRA jointly trained
+# Loads from stage2 best.pt (falls back to stage1 best.pt)
+# GPU: CUDA_VISIBLE_DEVICES=3
+
+run_name: p63_stage3
+
+# ── Model (same as Stage 1/2) ────────────────────────────────────────────────
+depth_bins: 8
+hidden_dim: 64
+app_dim: 32
+spatial_h: 32
+spatial_w: 32
+feat_dim: 320
+inject_config: multiscale
+guide_max_ratio: 0.15   # slightly higher ratio: allow stronger guide
+gate_warm_start: 0.0
+
+# ── Training ─────────────────────────────────────────────────────────────────
+training:
+  epochs: 30
+  steps_per_epoch: 30
+  eval_every: 5
+  lr_field:   2.0e-4   # field at lower LR (avoid catastrophic forgetting)
+  lr_guide:   5.0e-5   # guide encoder fine-tune
+  lr_adapter: 5.0e-5   # backbone adapters
+  lr_lora:    1.0e-5   # UNet LoRA
+
+  # Loss weights (Stage 3: field + diffusion jointly)
+  lambda_vis:      1.0   # visible Dice
+  lambda_amo:      0.5   # amodal Dice
+  lambda_occ:      0.3   # occlusion consistency
+  lambda_survival: 5.0   # entity survival (lower: already stable from stage1)
+  lambda_color:    1.0   # color routing (maintain routing)
+  lambda_diff:     1.0   # diffusion MSE
+  lambda_contrast: 0.3   # guide contrast
+
+  contrast_margin: 0.02
+  grad_clip: 0.5
+  t_max: 500         # full noise range
+  n_frames: 1
+  height: 256
+  width: 256
+  seed: 42
+  collision_prob: 0.5
+
+# ── Stage 2 checkpoint ───────────────────────────────────────────────────────
+stage2_ckpt: checkpoints/phase63/p63_stage2/best.pt
+stage1_ckpt: checkpoints/phase63/p63_stage1/best.pt   # fallback
+
+# ── Eval ─────────────────────────────────────────────────────────────────────
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+  visible_survival_thresh: 0.02
+  min_survival: 0.03
+
+# ── Data ─────────────────────────────────────────────────────────────────────
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+# ── Backbone ──────────────────────────────────────────────────────────────────
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+  feat_dim: 640
