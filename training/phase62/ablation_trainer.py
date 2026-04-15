@@ -28,6 +28,7 @@ from training.phase62.objectives.base import VolumeOutputs
 from training.phase62.losses import (
     loss_diffusion, loss_feature_separation, compute_volume_accuracy,
     loss_spatial_coherence, loss_fg_coverage_prior, loss_permutation_consistency,
+    loss_amodal_entity_coverage, loss_temporal_centroid_consistency,
 )
 from training.phase62.evaluator import Phase62Evaluator, _encode_text, _get_entity_tokens_with_fallback
 from training.phase62.rollout import Phase62RolloutRunner
@@ -518,6 +519,36 @@ class AblationTrainer:
                         vol_outputs.entity_probs, self._prev_entity_probs)
                     l_struct = l_struct + la_perm * l_perm
                 self._prev_entity_probs = vol_outputs.entity_probs.detach().clone()
+
+        # ── Amodal entity coverage: ensure BOTH entities have amodal presence ──
+        # Critical for four_stream guide: back_e0/back_e1 streams carry occluded
+        # entity signal. If either entity's amodal field is all-zero, its back
+        # stream is dead and guide provides no identity-preserving signal for
+        # that entity during contact/occlusion frames.
+        la_amo = float(getattr(self.train_cfg, "lambda_amodal_coverage", 0.0))
+        if la_amo > 0 and vol_outputs.entity_probs is not None:
+            _min_amo = float(getattr(self.train_cfg, "min_amodal_coverage", 0.02))
+            l_amo = loss_amodal_entity_coverage(vol_outputs, min_coverage=_min_amo)
+            l_struct = l_struct + la_amo * l_amo
+
+        # ── Temporal centroid consistency: entity identity across frames ────────
+        # Centroid-based version of permutation consistency.
+        # More robust than volumetric overlap during contact frames (where
+        # spatial overlap of two entities is expected and valid).
+        # Requires frame-level entity_probs; uses _frame_ep_buffer to accumulate.
+        la_tc = float(getattr(self.train_cfg, "lambda_temporal_centroid", 0.0))
+        if la_tc > 0 and vol_outputs.entity_probs is not None:
+            if not hasattr(self, "_frame_ep_buffer"):
+                self._frame_ep_buffer = []
+            self._frame_ep_buffer.append(vol_outputs.entity_probs.detach())
+            # Keep last 4 frames for temporal consistency
+            if len(self._frame_ep_buffer) > 4:
+                self._frame_ep_buffer = self._frame_ep_buffer[-4:]
+            if len(self._frame_ep_buffer) >= 2:
+                # Use current frame + 1 previous to compute centroid shift
+                _ep_pair = [self._frame_ep_buffer[-2], vol_outputs.entity_probs]
+                l_tc = loss_temporal_centroid_consistency(_ep_pair)
+                l_struct = l_struct + la_tc * l_tc
 
         if use_diffusion:
             self.system.set_guides(guides)

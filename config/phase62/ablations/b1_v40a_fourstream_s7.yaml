@@ -1,0 +1,115 @@
+# B1 v40a: four_stream guide — Amodal Dual-Path Guide (2026-04-15)
+#
+# MOTIVATION (from requirements.md analysis):
+#   Current v39h uses guide_family: dual, which assembles guide from
+#   front_probs/back_probs weighted by all classes (bg, e0, e1).
+#   During contact/collision frames when entities overlap at the same depth:
+#     - first-hit projection makes one entity invisible (projection collapse)
+#     - dual guide therefore carries ZERO information for the occluded entity
+#     - UNet learns to generate only the visible entity → single-entity collapse
+#
+# FIX (four_stream guide — already implemented in conditioning.py:163-172):
+#   guide_base = [vis_e0*h_e0, vis_e1*h_e1,        ← visible entity streams
+#                 (amo_e0-vis_e0)*h_e0,              ← occluded e0 stream
+#                 (amo_e1-vis_e1)*h_e1]              ← occluded e1 stream
+#   Even when entity1 is occluded (vis_e1≈0), its amodal field keeps
+#   (amo_e1-vis_e1)≈amo_e1>0 → occluded stream carries entity1 identity to UNet.
+#   UNet now receives: "entity0 is HERE (visible)", "entity1 is THERE (occluded)"
+#   → both identities preserved even during contact.
+#
+# ARCHITECTURE CHANGE vs v39h:
+#   guide_family: dual → four_stream
+#   in_ch: hidden*2=128 → hidden*4=256 (block_projectors are wider)
+#   All other parameters identical to v39h (freeze_fg_spatial_stage3, TV, etc.)
+#
+# EXPECTED BEHAVIOR:
+#   - guide_cosine(e0, e1) < 0.5: guide maps for two entities spatially distinct
+#   - render IoU > 0.10 (vs current 0.055=random): guide starts controlling layout
+#   - M_id maintained ≥ 0.65: entity identity preserved
+#   - C_topo/C_guide/C_diff contracts maintained (same vol structure as v39h)
+#
+# Key difference from v39h: guide_family only. Same vol, same freeze strategy.
+# Run on GPU 0 (free after v39a finished).
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: four_stream            # KEY CHANGE: dual → four_stream (amodal dual-path)
+guide_max_ratio: 0.15                # slightly stronger guide injection (was 0.10 default)
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true       # same as v39h: lock stage2-exit metrics
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+scene_type: col
+gate_warm_start: 0.1
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 1.0
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.5
+  min_gate_stage3: 0.10
+  max_gate: 0.40
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  # Priority 4 losses (same as v39h)
+  lambda_spatial_coherence: 0.3
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+
+  # NEW: Amodal entity coverage — ensures back_e0/back_e1 streams carry signal
+  # Fires when either entity's amodal coverage < 2% of spatial pixels
+  lambda_amodal_coverage: 0.5
+  min_amodal_coverage: 0.02
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0

@@ -265,12 +265,16 @@ def inject_guide_into_unet_features(
 
 class GuideInjectionManager:
 
-    def __init__(self, inject_config: str = "mid_up2"):
+    def __init__(self, inject_config: str = "mid_up2", guide_max_ratio: float = 0.1):
         self.inject_config = inject_config
         self.block_names = INJECT_CONFIGS.get(inject_config, ["mid", "up2"])
         self._hooks: list = []
         self._guides: Dict[str, torch.Tensor] = {}
         self._gate_fn: Optional[Callable[[str], torch.Tensor]] = None
+        # guide_max_ratio: max guide amplitude as fraction of UNet hidden-state std.
+        # Default 0.1 is conservative (1-8% effective at gate=0.1-0.4).
+        # Set 0.2-0.5 for stronger spatial control at the cost of potential artifacts.
+        self.guide_max_ratio: float = float(guide_max_ratio)
 
     def set_guides(
         self,
@@ -300,10 +304,12 @@ class GuideInjectionManager:
             gate = self._gate_fn(block_name) if self._gate_fn is not None else None
             if isinstance(output, tuple):
                 h = output[0]
-                h = inject_guide_into_unet_features(h, guide, gate=gate)
+                h = inject_guide_into_unet_features(
+                    h, guide, gate=gate, max_ratio=self.guide_max_ratio)
                 return (h,) + output[1:]
             else:
-                return inject_guide_into_unet_features(output, guide, gate=gate)
+                return inject_guide_into_unet_features(
+                    output, guide, gate=gate, max_ratio=self.guide_max_ratio)
         return hook_fn
 
     def register_hooks(self, unet) -> None:

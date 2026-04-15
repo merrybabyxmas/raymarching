@@ -280,6 +280,112 @@ def loss_permutation_consistency(
     return torch.relu(flip - direct + margin).mean()
 
 
+def loss_amodal_entity_coverage(
+    vol_outputs,
+    min_coverage: float = 0.03,
+) -> torch.Tensor:
+    """
+    Amodal entity coverage prior: ensure BOTH entities have sufficient
+    amodal (3D volumetric) presence.
+
+    Differs from loss_fg_coverage_prior which only checks max over entities.
+    This checks EACH entity independently, preventing one entity from
+    "surviving" at the expense of the other going to zero.
+
+    amodal_en = 1 - prod_k(1 - entity_probs[:, n, k]) (marginalized over depth)
+    L = relu(min_coverage - mean(amodal_e0))^2 + relu(min_coverage - mean(amodal_e1))^2
+
+    Used with four_stream guide to ensure back_e0 and back_e1 streams
+    (occluded entity features) carry actual signal during training.
+    """
+    amo_e0 = vol_outputs.amodal.get("e0") if vol_outputs.amodal else None
+    amo_e1 = vol_outputs.amodal.get("e1") if vol_outputs.amodal else None
+
+    if amo_e0 is None or amo_e1 is None:
+        # Fallback: compute from entity_probs directly
+        if vol_outputs.entity_probs is None:
+            return torch.tensor(0.0)
+        ep = vol_outputs.entity_probs.float()   # (B, 2, K, H, W)
+        amo_e0 = 1.0 - (1.0 - ep[:, 0]).prod(dim=1)   # (B, H, W)
+        amo_e1 = 1.0 - (1.0 - ep[:, 1]).prod(dim=1)   # (B, H, W)
+
+    cov_e0 = amo_e0.float().mean(dim=(-2, -1))  # (B,)
+    cov_e1 = amo_e1.float().mean(dim=(-2, -1))  # (B,)
+
+    shortfall_e0 = (min_coverage - cov_e0).clamp(min=0.0)
+    shortfall_e1 = (min_coverage - cov_e1).clamp(min=0.0)
+    return (shortfall_e0 ** 2 + shortfall_e1 ** 2).mean()
+
+
+def loss_temporal_centroid_consistency(
+    entity_probs_frames: "list[torch.Tensor]",
+    margin: float = 0.05,
+) -> torch.Tensor:
+    """
+    Centroid-based temporal entity slot consistency.
+
+    Enforces that the spatial centroid of each entity in the 2D amodal
+    field moves smoothly between frames, and that entity assignments
+    are not flipped (entity0 stays entity0, entity1 stays entity1).
+
+    For each consecutive frame pair (t, t+1):
+      cost_same = || centroid_e0(t) - centroid_e0(t+1) ||^2
+                + || centroid_e1(t) - centroid_e1(t+1) ||^2
+      cost_swap = || centroid_e0(t) - centroid_e1(t+1) ||^2
+                + || centroid_e1(t) - centroid_e0(t+1) ||^2
+
+    L = relu(cost_swap - cost_same + margin)  per pair
+
+    Unlike loss_permutation_consistency which uses volumetric Dice overlap,
+    centroid-based loss is more robust during contact/collision frames where
+    volumetric overlap is expected (both entities occupy similar spatial regions).
+
+    entity_probs_frames: list of (B, 2, K, H, W) tensors, one per frame.
+    """
+    if len(entity_probs_frames) < 2:
+        return torch.tensor(0.0, device=entity_probs_frames[0].device
+                            if entity_probs_frames else torch.device("cpu"))
+
+    device = entity_probs_frames[0].device
+    total = torch.tensor(0.0, device=device)
+    n_pairs = 0
+
+    for t in range(len(entity_probs_frames) - 1):
+        ep_t = entity_probs_frames[t].float()    # (B, 2, K, H, W)
+        ep_t1 = entity_probs_frames[t + 1].float()
+
+        # 2D amodal field: marginalize over depth
+        amo_t  = 1.0 - (1.0 - ep_t ).prod(dim=2)   # (B, 2, H, W)
+        amo_t1 = 1.0 - (1.0 - ep_t1).prod(dim=2)   # (B, 2, H, W)
+
+        B, _, H, W = amo_t.shape
+        grid_y = torch.arange(H, device=device, dtype=torch.float32)
+        grid_x = torch.arange(W, device=device, dtype=torch.float32)
+
+        def _centroid(amodal_2d):
+            # amodal_2d: (B, 2, H, W)
+            mass = amodal_2d.sum(dim=(-2, -1)).clamp(min=1e-6)  # (B, 2)
+            cy = (amodal_2d * grid_y.view(1, 1, H, 1)).sum(dim=(-2, -1)) / mass
+            cx = (amodal_2d * grid_x.view(1, 1, 1, W)).sum(dim=(-2, -1)) / mass
+            return torch.stack([cy, cx], dim=-1)  # (B, 2, 2)
+
+        c_t  = _centroid(amo_t)   # (B, 2, 2)  — [entity, (y, x)]
+        c_t1 = _centroid(amo_t1)  # (B, 2, 2)
+
+        # Same assignment: e0→e0, e1→e1 (want this to be CHEAP)
+        cost_same = ((c_t - c_t1) ** 2).sum(dim=-1).sum(dim=-1)      # (B,)
+        # Swapped assignment: e0→e1, e1→e0 (want this to be EXPENSIVE)
+        cost_swap = ((c_t[:, [1, 0], :] - c_t1) ** 2).sum(dim=-1).sum(dim=-1)  # (B,)
+
+        # Penalize when cost_same > cost_swap + margin
+        # (i.e., same assignment is more expensive than swap → flip detected)
+        L_pair = torch.relu(cost_same - cost_swap - margin).mean()
+        total = total + L_pair
+        n_pairs += 1
+
+    return total / max(n_pairs, 1)
+
+
 def compute_volume_accuracy(
     V_logits: torch.Tensor,  # (B, C, K, H, W)
     V_gt: torch.Tensor,      # (B, K, H, W)

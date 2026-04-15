@@ -1292,4 +1292,62 @@ ALL:PASS (6 evals), C_robust: consec=5+ (new contract 기준)
   M_id=0.651 (entity 구분)은 되지만 올바른 위치에 생성 안 됨.
   → 더 강한 guide injection 아키텍처 필요.
 - **C_robust 로깅**: old contract.py로 실행된 v39h는 consec=1로 기록됨.
+
+---
+
+## Section 18: Phase 62 v40 — Amodal Dual-Path Guide (2026-04-15)
+
+### 핵심 발견: four_stream guide family가 이미 구현되어 있었음
+
+`conditioning.py:163-172`에 `four_stream` guide family가 이미 구현되어 있었으나
+모든 실험 config가 `guide_family: dual`만 사용. 이것이 guide injection dead path의
+구조적 원인.
+
+**dual vs four_stream 차이:**
+
+| Guide Family | 전달 내용 | Contact frame에서 |
+|-------------|---------|----------------|
+| dual | front_probs weighted feature blend (bg+e0+e1 혼합) | 한 entity 소실 |
+| four_stream | vis_e0, vis_e1, (amo_e0-vis_e0), (amo_e1-vis_e1) 별도 | 두 entity 모두 전달 |
+
+`four_stream`에서 `back_e1 = (amo_e1 - vis_e1) * h_e1`:
+entity1이 완전히 occluded될 때도 amodal field가 있으면 back stream이 entity1 identity를
+UNet에 전달 → post-contact에서도 entity1이 살아있을 수 있음.
+
+### 구현 변경 사항 (2026-04-15)
+
+**losses.py 추가:**
+- `loss_amodal_entity_coverage(vol_outputs, min_coverage)`: 양쪽 entity 모두 amodal
+  coverage ≥ min_coverage 강제. four_stream back stream 활성화에 필수.
+- `loss_temporal_centroid_consistency(entity_probs_frames, margin)`: centroid 기반
+  temporal slot consistency. volumetric overlap 기반 loss_permutation_consistency의
+  contact-robust 대안.
+
+**conditioning.py 수정:**
+- `GuideInjectionManager.__init__`에 `guide_max_ratio` 파라미터 추가 (default=0.1)
+- Hook에서 `max_ratio=self.guide_max_ratio` 전달 → config에서 guide 강도 제어 가능
+
+**system.py 수정:**
+- `config.guide_max_ratio`를 `GuideInjectionManager`에 전달
+
+**ablation_trainer.py 수정:**
+- `lambda_amodal_coverage` 및 `lambda_temporal_centroid` 처리 추가
+- 새 loss들 import
+
+**새 config:**
+- `b1_v40a_fourstream_s7.yaml`: four_stream + guide_max_ratio=0.15 + lambda_amodal_coverage=0.5
+- `b1_v40b_fourstream_strong_s7.yaml`: four_stream + guide_max_ratio=0.30 + max_gate=0.50 + lambda_temporal_centroid=0.1
+
+**diagnostic script:**
+- `scripts/diagnose_guide_viability.py`: guide_feature_norm, amodal_coverage, amodal_spatial_cosine 측정
+
+### v40 실험 예측
+
+| 실험 | 핵심 변경 | 기대 변화 |
+|------|----------|---------|
+| v40a | four_stream, max_ratio=0.15 | guide_cosine < 0.7, back_e1 > 0.01 |
+| v40b | four_stream, max_ratio=0.30, centroid_loss | render IoU > 0.10 (random 탈출) |
+
+render IoU > 0.10이 달성되면 guide가 entity 공간 위치를 실제로 제어하는 것.
+이것이 chimera 없는 cat+dog rolling shot을 향한 핵심 step.
   new contract.py 기반 재실행 시 consec=5+ 확인 예정.

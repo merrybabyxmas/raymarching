@@ -57,8 +57,10 @@ class Phase62System(nn.Module):
             gate_warm_start=gate_warm_start,
         )
 
+        guide_max_ratio = float(getattr(config, "guide_max_ratio", 0.1))
         self.injection_mgr = GuideInjectionManager(
             inject_config=config.inject_config,
+            guide_max_ratio=guide_max_ratio,
         )
 
     def predict_volume(
