@@ -78,6 +78,8 @@ class AblationTrainer:
             obj_kwargs["lambda_depth_ce"] = float(getattr(self.train_cfg, "lambda_depth_ce", 3.0))
             obj_kwargs["lambda_depth_vis"] = float(getattr(self.train_cfg, "lambda_depth_vis", 0.0))
             obj_kwargs["lambda_balance"] = float(getattr(self.train_cfg, "lambda_balance", 0.0))
+            obj_kwargs["detach_fg_from_entity_losses"] = bool(getattr(self.train_cfg, "detach_fg_from_entity_losses", False))
+            obj_kwargs["lambda_overlay_preserve"] = 0.0  # starts at 0; activated at stage3 entry via _set_epoch_trainability
             # Legacy params (kept for backwards compat if config includes them):
             obj_kwargs["lambda_dice"] = float(getattr(self.train_cfg, "lambda_dice", 0.0))
             obj_kwargs["lambda_hinge"] = float(getattr(self.train_cfg, "lambda_hinge", 0.0))
@@ -291,6 +293,14 @@ class AblationTrainer:
                     group["lr"] = 0.0 if freeze_fg_s3 else group["initial_lr"] * 0.10
                 else:
                     group["lr"] = group["initial_lr"]
+
+            # v35: Activate overlay-preserving loss in stage3.
+            # Rendered fg-coverage Dice(front_probs[:, 1:].sum, GT_fg_any) supervises
+            # fg_spatial to maintain fg coverage as UNet features drift.
+            # Only fires when fg_spatial is unfrozen (otherwise gradient can't reach fg_spatial_head).
+            if hasattr(self, "objective") and hasattr(self.objective, "lambda_overlay_preserve"):
+                lambda_op_s3 = float(getattr(self.config, "lambda_overlay_preserve_s3", 0.0))
+                self.objective.lambda_overlay_preserve = lambda_op_s3
 
     def _build_gt_tensor(self, src_masks, B_feat: int) -> torch.Tensor:
         T = min(int(src_masks.shape[0]), B_feat)

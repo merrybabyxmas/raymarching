@@ -83,6 +83,8 @@ class FactorizedFgIdObjective(VolumeObjective):
         lambda_depth_ce: float = 3.0,
         lambda_depth_vis: float = 0.0,
         lambda_balance: float = 0.0,   # v22: penalise vis_e0 ≠ vis_e1 imbalance
+        detach_fg_from_entity_losses: bool = False,  # v34: stop L_vis/L_depth_vis/L_balance gradient to fg_magnitude
+        lambda_overlay_preserve: float = 0.0,  # v35: rendered fg-coverage preservation loss (activates in stage3)
         # Legacy params (kept for config backwards-compat, not used in v12 objective):
         lambda_dice: float = 0.0,
         lambda_hinge: float = 0.0,
@@ -97,6 +99,8 @@ class FactorizedFgIdObjective(VolumeObjective):
         self.lambda_depth_ce = lambda_depth_ce
         self.lambda_depth_vis = lambda_depth_vis
         self.lambda_balance = lambda_balance
+        self.detach_fg_from_entity_losses = detach_fg_from_entity_losses
+        self.lambda_overlay_preserve = lambda_overlay_preserve
 
     def forward(
         self,
@@ -158,12 +162,42 @@ class FactorizedFgIdObjective(VolumeObjective):
 
         total = L_fg + self.lambda_id * L_id
 
+        # ── Detached-fg entity_probs for entity-specific losses ──────────────
+        # v34: detach_fg_from_entity_losses=True stops L_vis/L_depth_vis/L_balance
+        # gradients from reaching fg_magnitude (fg_spatial_head parameters).
+        #
+        # Root cause: with balanced entities (lambda_id=10, sharp q), L_vis Dice
+        # denominator produces gradients that push p_fg DOWN at wrong-entity pixels.
+        # With collapsed entity (lambda_id=3), entity 1 covers full fg → L_vis pushes
+        # p_fg toward fg_union (overlay HIGH). The coupling between entity-specific
+        # L_vis and fg_magnitude is what causes high-lambda_id → low-overlay.
+        #
+        # Fix: entity-specific losses (L_vis, L_depth_vis, L_balance) use
+        # entity_probs recomputed with p_fg.detach() — gradient flows to q and
+        # depth_attn only. fg_magnitude is trained solely by L_fg_spatial (direct
+        # BCE toward GT fg union) → overlay preserved regardless of lambda_id.
+        if (self.detach_fg_from_entity_losses
+                and outputs.entity_probs is not None
+                and outputs.id_logits is not None):
+            # q = softmax(id_logits, dim=1): (B, 2, K, H, W)
+            q_probs = torch.softmax(outputs.id_logits, dim=1)
+            # p_fg = sum of entity_probs over entity axis (since sum_e q_e = 1 for 2-class)
+            p_fg_sum = outputs.entity_probs.sum(dim=1, keepdim=True)  # (B, 1, K, H, W)
+            ep_for_entity_losses = (p_fg_sum.detach() * q_probs).clamp(0.0, 1.0)
+            # Alpha-composite over K axis for visible projections
+            _vis_e0_det = 1.0 - (1.0 - ep_for_entity_losses[:, 0].clamp(0.0, 1.0 - 1e-7)).prod(dim=1)
+            _vis_e1_det = 1.0 - (1.0 - ep_for_entity_losses[:, 1].clamp(0.0, 1.0 - 1e-7)).prod(dim=1)
+        else:
+            ep_for_entity_losses = outputs.entity_probs
+            _vis_e0_det = outputs.visible.get("e0") if outputs.visible else None
+            _vis_e1_det = outputs.visible.get("e1") if outputs.visible else None
+
         # L_vis: rendering-consistent Dice on projected visible output
         # Only active when visible projections are available (after projection step)
         L_vis = fg_logit.new_zeros(())
-        if gt_visible is not None and "e0" in outputs.visible and "e1" in outputs.visible:
-            vis_e0 = outputs.visible["e0"]
-            vis_e1 = outputs.visible["e1"]
+        if gt_visible is not None and _vis_e0_det is not None and _vis_e1_det is not None:
+            vis_e0 = _vis_e0_det
+            vis_e1 = _vis_e1_det
             B_vis = min(vis_e0.shape[0], gt_visible.shape[0])
             # Only apply rendered dice when fg has learned something (prevents
             # fighting foreground growth at init where visible ≈ 0.5 everywhere)
@@ -208,9 +242,9 @@ class FactorizedFgIdObjective(VolumeObjective):
         L_depth_vis = fg_logit.new_zeros(())
         if (self.lambda_depth_vis > 0
                 and gt_visible is not None
-                and outputs.entity_probs is not None):
+                and ep_for_entity_losses is not None):
             B, K_v, H_v, W_v = V_gt.shape
-            ep = outputs.entity_probs  # (B, 2, K, H, W)
+            ep = ep_for_entity_losses  # (B, 2, K, H, W) — fg detached if detach_fg_from_entity_losses
             K_ep = ep.shape[2]
             B_vis = min(gt_visible.shape[0], B)
 
@@ -249,12 +283,40 @@ class FactorizedFgIdObjective(VolumeObjective):
         # Only activates when both projections are present.
         L_balance = fg_logit.new_zeros(())
         if (self.lambda_balance > 0
-                and "e0" in outputs.visible and "e1" in outputs.visible):
-            vis_e0 = outputs.visible["e0"]
-            vis_e1 = outputs.visible["e1"]
-            B_b = min(vis_e0.shape[0], vis_e1.shape[0])
-            L_balance = (vis_e0[:B_b].mean() - vis_e1[:B_b].mean()).pow(2)
+                and _vis_e0_det is not None and _vis_e1_det is not None):
+            vis_e0_b = _vis_e0_det
+            vis_e1_b = _vis_e1_det
+            B_b = min(vis_e0_b.shape[0], vis_e1_b.shape[0])
+            L_balance = (vis_e0_b[:B_b].mean() - vis_e1_b[:B_b].mean()).pow(2)
             total = total + self.lambda_balance * L_balance
+
+        # L_overlay_preserve: rendered fg-coverage preservation loss (v35).
+        # Activates in stage3 (trainer sets lambda_overlay_preserve > 0 on stage3 entry).
+        #
+        # Root cause of stage3 overlay drop (v28-v34): UNet features drift as LoRA/adapters
+        # train → vol/fg_spatial outputs change even with frozen params → entity_probs change
+        # → visible_class changes → overlay drops.
+        #
+        # Fix: Dice(front_probs[:, 1:].sum(), GT_fg_any) directly supervises the rendered
+        # fg probability toward GT fg union. With fg_spatial unfrozen in stage3, gradient
+        # flows: L_overlay_preserve → front_probs (straight-through) → entity_probs → p_fg
+        # → fg_magnitude (fg_spatial_head) → fg_spatial adapts to maintain fg coverage
+        # regardless of UNet feature drift.
+        #
+        # Must only activate in stage3 (NOT stage1/2) to avoid reinforcing entity 0
+        # dominance before entity balance forms. Trainer sets lambda_overlay_preserve=0
+        # during stage1/2 and switches to lambda_overlay_preserve_s3 at stage3 entry.
+        L_overlay_preserve = fg_logit.new_zeros(())
+        if (self.lambda_overlay_preserve > 0
+                and outputs.front_probs is not None
+                and gt_visible is not None):
+            B_op = min(outputs.front_probs.shape[0], gt_visible.shape[0])
+            # GT fg union: any entity visible at each pixel
+            gt_fg_any = (gt_visible[:B_op] > 0.5).any(dim=1).float()  # (B, H, W)
+            # Rendered fg probability: entity 0 + entity 1 front probs (differentiable)
+            pred_fg_prob = outputs.front_probs[:B_op, 1:].sum(dim=1)  # (B, H, W)
+            L_overlay_preserve = _dice(pred_fg_prob, gt_fg_any).clamp(max=5.0)
+            total = total + self.lambda_overlay_preserve * L_overlay_preserve
 
         return {
             "total": total,
@@ -266,4 +328,5 @@ class FactorizedFgIdObjective(VolumeObjective):
             "L_compact": L_compact.detach(),
             "L_depth_vis": L_depth_vis.detach(),
             "L_balance": L_balance.detach(),
+            "L_overlay_preserve": L_overlay_preserve.detach(),
         }

@@ -1,0 +1,99 @@
+# B1 v36: lambda_overlay_preserve_s3=5.0 — stronger fg-coverage preservation in stage3
+#
+# v35 OUTCOME (2026-04-15):
+#   overlay held in early stage3 (ep169-189: 0.369→0.359→0.359→0.349→0.352)
+#   but declined in late stage3 (ep194-209: 0.348→0.321→0.325→0.296)
+#   The drop accelerated after diff_mse crossed 0.050 (ep199) — late-stage diffusion
+#   convergence causes faster UNet feature changes, overwhelming lambda=2.0.
+#
+# v35 final metrics (ep209):
+#   compact=0.412 ✓, winner=0.55 ✓, diff_mse=0.0498 ✓
+#   overlay=0.296 ✗ (needed ≥0.35) — FAILED
+#
+# ROOT CAUSE of v35 failure:
+#   L_overlay_preserve=2.0 was sufficient to hold overlay in stage3 ep165-189
+#   but as diffusion training converged (diff_mse→0.050), UNet latents changed
+#   faster/more drastically in late stage3 → fg_spatial couldn't track via lambda=2.0
+#   gradient signal alone.
+#
+# FIX (v36): lambda_overlay_preserve_s3=5.0 (2.5x stronger)
+#   Stronger gradient signal forces fg_spatial to maintain coverage against
+#   more aggressive UNet feature changes in late stage3.
+#   All other params identical to v35.
+#
+# v35 stage2 ending state (ep164):
+#   overlay=0.368 ✓, winner=0.54 ✓, diff_mse=0.0507 — entering stage3 strong
+#
+# Expected v36:
+#   compact: 0.40-0.43 (vol frozen, same as v35) ✓
+#   winner: 0.50-0.55 (lambda_id=10, same as v35) ✓
+#   overlay: 0.35+ THROUGHOUT stage3 (lambda=5.0 stronger hold) ✓
+#   diff_mse: ≤0.050 by ep200 (same diffusion training) ✓
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false   # unfrozen: adapts via L_overlay_preserve in stage3
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0             # entity balance (winner~0.51-0.55)
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+# v36 KEY: stronger overlay-preserving loss (2.5x v35)
+lambda_overlay_preserve_s3: 5.0
