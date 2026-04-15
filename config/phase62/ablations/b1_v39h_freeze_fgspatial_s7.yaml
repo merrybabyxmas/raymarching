@@ -1,0 +1,101 @@
+# B1 v39h: freeze_fg_spatial_stage3=true — lock stage2-exit metrics into stage3
+#
+# ROOT CAUSE of v39e failure (diagnosed 2026-04-15):
+#   At stage3 entry (ep164), v39e had LCC=0.576 and overlay=0.358 — both above thresholds.
+#   But freeze_fg_spatial_stage3=false let fg_spatial keep updating, which drove:
+#     LCC: 0.576 (ep164) → 0.519-0.532 (ep199-214)   [below new threshold 0.55]
+#     overlay: 0.358 (ep164) → 0.315-0.334 (ep199-214) [below threshold 0.35]
+#   The same pattern killed v39b/c/d.
+#
+# Fix (v39h):
+#   freeze_fg_spatial_stage3: false → TRUE
+#   Locks entity_probs at stage3 entry. LCC and overlay stay at stage2-exit values.
+#   Diffusion training still proceeds through adapter+LoRA (not through fg_spatial).
+#
+# Expected outcome at stage3 (ep165-219):
+#   - LCC frozen at ~0.57-0.60 (≥0.55 threshold) → C_topo ✓
+#   - overlay frozen at ~0.355-0.37 (≥0.35 threshold) → C_guide ✓
+#   - diff_mse: 0.051→≤0.05 around ep185-195 → C_diff ✓ (same as v39b/c pattern)
+#   - C_bind ✓ (has been passing throughout)
+#   - C_render: IoU borderline (2D rendering quality; may pass with fixed entity_probs)
+#   - C_robust: need 5 consecutive ALL-PASS
+#
+# Everything else identical to v39e.
+# Run on GPU 3 (free after v39d finished at ep219).
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true       # KEY CHANGE: was false in v39e
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+scene_type: col
+gate_warm_start: 0.1
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 1.0
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.5
+  min_gate_stage3: 0.10
+  max_gate: 0.40
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  # Priority 4 losses (same as v39e)
+  lambda_spatial_coherence: 0.3
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
