@@ -60,7 +60,7 @@ training:
   height: 256
   width: 256
   seed: 7
-  la_feature_sep: 2.0
+  la_feature_sep: 3.0                  # KEY: match v40h (3.0) for balanced entity features
   use_entity_sep_mask: true
   scene_type: col
   temp_start: 1.0

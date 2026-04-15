@@ -68,7 +68,9 @@ training:
   height: 256
   width: 256
   seed: 7
-  la_feature_sep: 2.0                  # entity-masked sep (safe, v40h confirmed 0.000 cosF)
+  la_feature_sep: 3.0                  # KEY: 3.0 = balanced entity features (v40h la_sep=3.0
+                                       # had balance=0.905 at stage2 end; v40i la_sep=2.0
+                                       # showed declining balance 0.901→0.493 in stage2)
   use_entity_sep_mask: true            # focus gradient on entity pixels only
   scene_type: col
   temp_start: 1.0
