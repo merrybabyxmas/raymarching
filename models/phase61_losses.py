@@ -2,12 +2,13 @@
 Phase 61 — Loss Functions for Depth-Layered Volume Diffusion
 ==============================================================
 
-4 losses operating on DepthVolumeHead + VolumeCompositor outputs:
+Losses operating on DepthVolumeHead + VolumeCompositor outputs:
 
   L_composite        : MSE(noise_pred, noise_gt) — scene-level diffusion quality
-  L_alpha_volume     : BCE on per-bin alpha predictions vs depth-bin targets
+  L_alpha_volume     : softmax-aligned CE on per-bin e0/e1/bg logits
   L_visible_ownership: BCE on summed rendering weights vs GT visible masks
   L_depth_expected   : expected-depth ordering margin loss in overlap regions
+  L_feat_ortho       : overlap-only feature orthogonality for F0/F1
 """
 from __future__ import annotations
 
@@ -33,26 +34,43 @@ def loss_alpha_volume(
     eps:           float = 1e-6,
 ) -> torch.Tensor:
     """
-    BCE with logits on per-bin alpha predictions vs depth-bin targets.
+    Softmax-aligned 3-class CE on per-bin logits vs depth-bin targets.
 
-    Uses binary_cross_entropy_with_logits for numerical stability.
-    Optional valid masks allow ignoring bins where GT is ambiguous.
+    Rendering treats each bin as a joint categorical distribution over
+    {entity0, entity1, background}. Training should match that same
+    categorical geometry instead of supervising alpha logits independently.
+
+    valid0/valid1 are merged into a single supervision mask. Unsupervised
+    bins are ignored in the CE reduction.
     """
     l0 = alpha0_logits.float()
     l1 = alpha1_logits.float()
     t0 = tgt0_bins.float()
     t1 = tgt1_bins.float()
 
-    if valid0 is not None and valid1 is not None:
-        v0 = valid0.float()
-        v1 = valid1.float()
-        bce0 = (F.binary_cross_entropy_with_logits(l0, t0, reduction="none") * v0).sum() / v0.sum().clamp(min=1.0)
-        bce1 = (F.binary_cross_entropy_with_logits(l1, t1, reduction="none") * v1).sum() / v1.sum().clamp(min=1.0)
-    else:
-        bce0 = F.binary_cross_entropy_with_logits(l0, t0, reduction="mean")
-        bce1 = F.binary_cross_entropy_with_logits(l1, t1, reduction="mean")
+    bg_logits = torch.zeros_like(l0)
+    logits = torch.stack([l0, l1, bg_logits], dim=-1)  # (B, S, K, 3)
 
-    return 0.5 * (bce0 + bce1)
+    target_cls = torch.full(
+        t0.shape, 2, dtype=torch.long, device=t0.device)  # bg by default
+    target_cls = torch.where(t0 > 0.5, torch.zeros_like(target_cls), target_cls)
+    target_cls = torch.where(t1 > 0.5, torch.ones_like(target_cls), target_cls)
+
+    if valid0 is not None and valid1 is not None:
+        valid = ((valid0.float() + valid1.float()) > 0.0)
+        ignore_index = -100
+        target_cls = torch.where(
+            valid,
+            target_cls,
+            torch.full_like(target_cls, ignore_index),
+        )
+        return F.cross_entropy(
+            logits.view(-1, 3),
+            target_cls.view(-1),
+            ignore_index=ignore_index,
+        )
+
+    return F.cross_entropy(logits.view(-1, 3), target_cls.view(-1))
 
 
 def loss_visible_ownership(
@@ -145,3 +163,31 @@ def loss_depth_expected(
         n_total = n_total + ov_b.sum()
 
     return total_violation / n_total.clamp(min=1.0)
+
+
+def loss_feature_orthogonality(
+    feat0:           torch.Tensor,  # (B, S, D)
+    feat1:           torch.Tensor,  # (B, S, D)
+    entity_masks_BS: torch.Tensor,  # (B, 2, S)
+    eps:             float = 1e-6,
+) -> torch.Tensor:
+    """
+    Penalize overlap-region feature contamination between entity branches.
+
+    The volume compositor can only separate objects cleanly if the incoming
+    entity features are themselves disentangled. We therefore discourage
+    F0/F1 from pointing in the same direction on pixels where both entities
+    are present.
+    """
+    f0 = F.normalize(feat0.float(), dim=-1, eps=eps)
+    f1 = F.normalize(feat1.float(), dim=-1, eps=eps)
+    overlap = (
+        (entity_masks_BS[:, 0, :].float() > 0.5)
+        & (entity_masks_BS[:, 1, :].float() > 0.5)
+    )
+    if overlap.sum() < 1:
+        return torch.tensor(0.0, device=feat0.device)
+
+    cos = (f0 * f1).sum(dim=-1)  # (B, S)
+    loss = (cos.square() * overlap.float()).sum() / overlap.float().sum().clamp(min=1.0)
+    return loss

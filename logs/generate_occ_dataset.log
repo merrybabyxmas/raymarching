@@ -1,0 +1,68 @@
+Generating OCC benchmark data → toy/data_objaverse_occ
+Mode: LAYERED (entity0=front y=+0.45, entity1=back y=-0.45)
+Cameras: 4, Frames: 16, Seed: 43
+[pairs] available keywords: ['alligator', 'bear', 'cat', 'dog', 'fighter_jet', 'horse', 'lion', 'person', 'snake', 'sword', 'tiger', 'wolf']
+[gen] 14 pairs × 1 modes × 4 cameras = 56 sequences
+[0m[33m2026-04-15 11:58:40.879 (   0.843s) [    71F6BC8E8740]vtkXOpenGLRenderWindow.:1460  WARN| bad X server connection. DISPLAY=[0m
+[ok] cat_dog_layered_front_right
+[ok] cat_dog_layered_front_left
+[ok] cat_dog_layered_front
+[ok] cat_dog_layered_top
+[ok] wolf_dog_layered_front_right
+[ok] wolf_dog_layered_front_left
+[ok] wolf_dog_layered_front
+[ok] wolf_dog_layered_top
+[ok] lion_bear_layered_front_right
+[ok] lion_bear_layered_front_left
+[ok] lion_bear_layered_front
+[ok] lion_bear_layered_top
+[ok] tiger_wolf_layered_front_right
+[ok] tiger_wolf_layered_front_left
+[ok] tiger_wolf_layered_front
+[ok] tiger_wolf_layered_top
+[ok] snake_alligator_layered_front_right
+[ok] snake_alligator_layered_front_left
+[ok] snake_alligator_layered_front
+[ok] snake_alligator_layered_top
+[ok] sword_sword_layered_front_right
+[ok] sword_sword_layered_front_left
+[ok] sword_sword_layered_front
+[ok] sword_sword_layered_top
+[ok] cat_cat_layered_front_right
+[ok] cat_cat_layered_front_left
+[ok] cat_cat_layered_front
+[ok] cat_cat_layered_top
+[ok] person_person_layered_front_right
+[ok] person_person_layered_front_left
+[ok] person_person_layered_front
+[ok] person_person_layered_top
+[ok] cat_sword_layered_front_right
+[ok] cat_sword_layered_front_left
+[ok] cat_sword_layered_front
+[ok] cat_sword_layered_top
+[ok] dog_sword_layered_front_right
+[ok] dog_sword_layered_front_left
+[ok] dog_sword_layered_front
+[ok] dog_sword_layered_top
+[ok] person_snake_layered_front_right
+[ok] person_snake_layered_front_left
+[ok] person_snake_layered_front
+[ok] person_snake_layered_top
+[ok] snake_sword_layered_front_right
+[ok] snake_sword_layered_front_left
+[ok] snake_sword_layered_front
+[ok] snake_sword_layered_top
+[ok] cat_snake_layered_front_right
+[ok] cat_snake_layered_front_left
+[ok] cat_snake_layered_front
+[ok] cat_snake_layered_top
+[ok] lion_sword_layered_front_right
+[ok] lion_sword_layered_front_left
+[ok] lion_sword_layered_front
+[ok] lion_sword_layered_top
+
+[done] ok=56  fail=0
+
+[OCC gen done] ok=56  fail=0
+Output: toy/data_objaverse_occ/
+Next: run scripts/precompute_occ_volume_gt.py to build volume_gt files

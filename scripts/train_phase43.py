@@ -194,6 +194,10 @@ def extract_entity_prompt_ref(
         truncation=True,
     ).to(device)
     enc_hs_e = pipe.text_encoder(**tok).last_hidden_state.half()
+    if enc_hs_e.shape[0] == 1 and noisy.dim() == 5 and noisy.shape[2] > 1:
+        # Phase53 uses 8-frame video latents. Broadcast text conditioning to the
+        # frame axis so the ref forward matches the batch shape seen by UNet blocks.
+        enc_hs_e = enc_hs_e.expand(noisy.shape[2], -1, -1).contiguous()
 
     # 2. entity token positions in solo prompt
     solo_toks = _get_solo_entity_token_positions(pipe, entity_prompt)

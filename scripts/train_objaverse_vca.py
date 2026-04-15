@@ -34,6 +34,7 @@ from scripts.train_animatediff_vca import (
     compute_sigma_stats_train, save_sigma_gif,
 )
 from torch.nn.functional import layer_norm
+from scripts.prompt_identity import make_identity_prompts
 
 
 # ─── 데이터셋 품질 게이팅 ─────────────────────────────────────────────────────
@@ -73,12 +74,11 @@ _clip_cache: dict = {}
 
 def get_entity_context_from_meta(pipe, meta: dict, device: str) -> torch.Tensor:
     """
-    meta.json의 prompt_entity0/1 텍스트를 CLIP 평균 토큰 임베딩으로 인코딩.
+    meta.json의 entity prompt를 CLIP 평균 토큰 임베딩으로 인코딩.
     반환: (1, 2, 768) fp32
     캐싱: 같은 텍스트 쌍은 한 번만 인코딩.
     """
-    e0_text = meta.get("prompt_entity0", "an entity")
-    e1_text = meta.get("prompt_entity1", "an entity")
+    e0_text, e1_text, _, _, _ = make_identity_prompts(meta)
     cache_key = (e0_text, e1_text)
 
     if cache_key in _clip_cache:
@@ -295,8 +295,8 @@ def train(args):
     # 대표 샘플 선택 (BEFORE/AFTER 측정용)
     probe_frames, probe_depths, probe_orders, probe_meta = dataset[0]
     probe_entity_ctx = get_entity_context_from_meta(pipe, probe_meta, device)
-    print(f"[probe] entity_0='{probe_meta.get('prompt_entity0')}'  "
-          f"entity_1='{probe_meta.get('prompt_entity1')}'", flush=True)
+    probe_e0, probe_e1, _, _, _ = make_identity_prompts(probe_meta)
+    print(f"[probe] entity_0='{probe_e0}'  entity_1='{probe_e1}'", flush=True)
 
     # VCA 주입
     vca_layer, injected_keys, original_procs = inject_vca_train(pipe, probe_entity_ctx)
@@ -331,8 +331,7 @@ def train(args):
         latents = encode_frames_to_latents(pipe, frames_np, device)
 
         # encoder_hidden_states
-        full_prompt = (f"{meta.get('prompt_entity0','entity0')} and "
-                       f"{meta.get('prompt_entity1','entity1')}")
+        e0, e1, full_prompt, _, _ = make_identity_prompts(meta)
         tokens = pipe.tokenizer(
             full_prompt, return_tensors="pt",
             padding="max_length",

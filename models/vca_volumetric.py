@@ -211,7 +211,7 @@ def find_entity_token_positions(tokenizer, full_prompt: str, entity_text: str) -
     positions: List[int] = []
     for i in range(len(full_ids) - n + 1):
         if full_ids[i:i + n] == entity_ids:
-            positions.extend(range(i, i + n))
+            return list(range(i, i + n))
     return positions
 
 

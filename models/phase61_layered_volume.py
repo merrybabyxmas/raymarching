@@ -127,9 +127,10 @@ class VolumeCompositor(nn.Module):
     composed = sum_z (w0(z)*feat0(z) + w1(z)*feat1(z)) + w_bg * feat_bg
     """
 
-    def __init__(self, depth_bins: int = 2):
+    def __init__(self, depth_bins: int = 2, temperature: float = 0.1):
         super().__init__()
         self.depth_bins = depth_bins
+        self.temperature = max(float(temperature), 1e-6)
 
     def forward(
         self,
@@ -164,7 +165,7 @@ class VolumeCompositor(nn.Module):
 
         # Per-bin softmax competition: e0 vs e1 vs bg
         logits = torch.stack([l0, l1, l_bg], dim=-1)  # (B, S, K, 3)
-        probs = torch.softmax(logits, dim=-1)  # (B, S, K, 3)
+        probs = torch.softmax(logits / self.temperature, dim=-1)  # (B, S, K, 3)
         p0 = probs[..., 0]   # (B, S, K)
         p1 = probs[..., 1]   # (B, S, K)
         p_bg = probs[..., 2]  # (B, S, K)
@@ -222,6 +223,7 @@ class Phase61Processor(nn.Module):
         adapter_rank:        int  = 64,
         lora_rank:           int  = 4,
         depth_bins:          int  = 2,
+        temperature:         float = 0.1,
         cross_attention_dim: int  = CROSS_ATTN_DIM,
         is_primary:          bool = False,
     ):
@@ -245,7 +247,10 @@ class Phase61Processor(nn.Module):
                 feat_dim=inner_dim, depth_bins=depth_bins, hidden=128)
             self.e1_volume = DepthVolumeHead(
                 feat_dim=inner_dim, depth_bins=depth_bins, hidden=128)
-            self.compositor = VolumeCompositor(depth_bins=depth_bins)
+            self.compositor = VolumeCompositor(
+                depth_bins=depth_bins,
+                temperature=temperature,
+            )
 
         # Entity token indices (set externally)
         self._toks_e0: Optional[torch.Tensor] = None
@@ -259,6 +264,9 @@ class Phase61Processor(nn.Module):
         self._last_w0_bins:     Optional[torch.Tensor] = None
         self._last_w1_bins:     Optional[torch.Tensor] = None
         self._last_w_bg:        Optional[torch.Tensor] = None
+        self._last_Fg:          Optional[torch.Tensor] = None
+        self._last_F0:          Optional[torch.Tensor] = None
+        self._last_F1:          Optional[torch.Tensor] = None
 
     def set_entity_tokens(
         self, toks_e0: Optional[torch.Tensor], toks_e1: Optional[torch.Tensor],
@@ -274,6 +282,9 @@ class Phase61Processor(nn.Module):
         self._last_w0_bins     = None
         self._last_w1_bins     = None
         self._last_w_bg        = None
+        self._last_Fg          = None
+        self._last_F0          = None
+        self._last_F1          = None
 
     def _masked_attn(
         self,
@@ -371,6 +382,10 @@ class Phase61Processor(nn.Module):
             F_1 = self.slot1_adapter(F_1.float()).to(dtype)  # (B, S, inner_dim)
 
             if self.is_primary:
+                self._last_Fg = F_g
+                self._last_F0 = F_0
+                self._last_F1 = F_1
+
                 # Predict per-bin alpha + feature from entity features
                 alpha0_bins, feat0_bins = self.e0_volume(F_0.float())
                 # alpha0_bins: (B, S, K), feat0_bins: (B, S, K, D)
@@ -492,6 +507,16 @@ class Phase61Manager:
             p._last_w_bg,
         )
 
+    @property
+    def primary_features(
+        self,
+    ) -> Tuple[
+        Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor],
+    ]:
+        """Get primary block global/entity features before volumetric rendering."""
+        p = self.primary
+        return p._last_Fg, p._last_F0, p._last_F1
+
     def train(self):
         for p in self.procs:
             p.train()
@@ -541,6 +566,7 @@ def inject_phase61(
     adapter_rank: int = 64,
     lora_rank:    int = 4,
     depth_bins:   int = 2,
+    temperature:  float = 0.1,
     primary_key:  Optional[str] = None,
 ) -> Tuple[Phase61Manager, Dict]:
     """
@@ -573,6 +599,7 @@ def inject_phase61(
             adapter_rank=adapter_rank,
             lora_rank=lora_rank,
             depth_bins=depth_bins,
+            temperature=temperature,
             cross_attention_dim=CROSS_ATTN_DIM,
             is_primary=is_primary,
         )

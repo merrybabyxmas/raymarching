@@ -46,6 +46,7 @@ from models.phase61_losses import (
     loss_alpha_volume,
     loss_visible_ownership,
     loss_depth_expected,
+    loss_feature_orthogonality,
 )
 from models.entity_slot_phase40 import (
     compute_visible_iou_e0,
@@ -81,6 +82,7 @@ DEFAULT_LA_COMP         = 1.0
 DEFAULT_LA_ALPHA_VOL    = 1.0
 DEFAULT_LA_OWN          = 1.0
 DEFAULT_LA_DEPTH_EXP    = 0.5
+DEFAULT_LA_ORTHO        = 0.1
 
 # Collision augmentation
 DEFAULT_COLLISION_PROB_A = 0.5
@@ -404,6 +406,20 @@ def train_phase61(args):
     debug_dir.mkdir(parents=True, exist_ok=True)
     save_dir.mkdir(parents=True, exist_ok=True)
 
+    def _save_rollout_artifacts(prefix: str, comp_frames, overlay_frames):
+        comp_gif = None
+        ov_gif = None
+        ov_png = None
+        if comp_frames:
+            comp_gif = debug_dir / f"{prefix}_composite.gif"
+            iio2.mimwrite(str(comp_gif), comp_frames, fps=8, loop=0)
+        if overlay_frames:
+            ov_png = debug_dir / f"{prefix}_overlay.png"
+            Image.fromarray(overlay_frames[0]).save(str(ov_png))
+            ov_gif = debug_dir / f"{prefix}_overlay.gif"
+            iio2.mimwrite(str(ov_gif), overlay_frames, fps=8, loop=0)
+        return comp_gif, ov_gif, ov_png
+
     # Pipeline
     print("[Phase 61] Loading pipeline...", flush=True)
     pipe = load_pipeline(device=device)
@@ -432,6 +448,7 @@ def train_phase61(args):
         adapter_rank=args.adapter_rank,
         lora_rank=args.lora_rank,
         depth_bins=args.depth_bins,
+        temperature=args.softmax_temperature,
     )
 
     # Restore from checkpoint
@@ -471,6 +488,8 @@ def train_phase61(args):
     history = []
     best_val_score = -1.0
     best_epoch = -1
+    stage_best_scores = {"A": -1.0, "B": -1.0, "C": -1.0}
+    stage_best_epochs = {"A": -1, "B": -1, "C": -1}
     total_epochs = args.stage_a_epochs + args.stage_b_epochs + args.stage_c_epochs
     stage_a_end = args.stage_a_epochs
     stage_b_end = args.stage_a_epochs + args.stage_b_epochs
@@ -549,7 +568,7 @@ def train_phase61(args):
         manager.train()
         epoch_losses = {
             "total": [], "composite": [], "alpha_vol": [],
-            "ownership": [], "depth_exp": [],
+            "ownership": [], "depth_exp": [], "ortho": [],
         }
         n_collision_aug = 0
         n_collision_attempt = 0
@@ -658,6 +677,11 @@ def train_phase61(args):
             l_depth = loss_depth_expected(
                 alpha0_bins, alpha1_bins, depth_orders[:T_frames], masks_feat,
                 margin=args.depth_margin)
+            _, feat0_base, feat1_base = manager.primary_features
+            if feat0_base is not None and feat1_base is not None:
+                l_ortho = loss_feature_orthogonality(feat0_base, feat1_base, masks_feat)
+            else:
+                l_ortho = torch.tensor(0.0, device=device)
 
             # Weighted total loss
             if stage == "A":
@@ -666,6 +690,7 @@ def train_phase61(args):
                     + args.la_alpha_vol * l_alpha_vol
                     + args.la_own * l_own
                     + args.la_depth_exp * l_depth
+                    + args.la_ortho * l_ortho
                 )
             else:  # Stage B and C
                 loss = (
@@ -673,6 +698,7 @@ def train_phase61(args):
                     + args.la_alpha_vol * l_alpha_vol
                     + args.la_own * l_own
                     + args.la_depth_exp * l_depth
+                    + args.la_ortho * l_ortho
                 )
 
             if not torch.isfinite(loss):
@@ -699,6 +725,7 @@ def train_phase61(args):
             epoch_losses["alpha_vol"].append(float(l_alpha_vol.item()))
             epoch_losses["ownership"].append(float(l_own.item()))
             epoch_losses["depth_exp"].append(float(l_depth.item()))
+            epoch_losses["ortho"].append(float(l_ortho.item()))
 
         lr_scheduler.step()
 
@@ -709,7 +736,7 @@ def train_phase61(args):
             f"[Phase 61][Stage {stage}] epoch {epoch:03d}/{total_epochs-1}  "
             f"loss={avg['total']:.4f}  comp={avg['composite']:.4f}  "
             f"alpha_vol={avg['alpha_vol']:.4f}  own={avg['ownership']:.4f}  "
-            f"depth_exp={avg['depth_exp']:.4f}  "
+            f"depth_exp={avg['depth_exp']:.4f}  ortho={avg['ortho']:.4f}  "
             f"aug={n_collision_aug}/{n_collision_attempt}",
             flush=True)
 
@@ -796,13 +823,15 @@ def train_phase61(args):
                            ).astype(np.uint8)
                     comp_frames.append(img)
 
-                comp_gif = debug_dir / f"eval_epoch{epoch:03d}_composite.gif"
-                iio2.mimwrite(str(comp_gif), comp_frames, fps=8, loop=0)
+                overlay_frames = []
+                stage_prefix = f"stage{stage}"
+                epoch_prefix = f"eval_epoch{epoch:03d}"
+                comp_gif, _, _ = _save_rollout_artifacts(
+                    epoch_prefix, comp_frames, None)
                 print(f"  [gif] COMPOSITE rollout: {comp_gif}", flush=True)
 
                 # Overlay: ownership on generated frames
                 try:
-                    overlay_frames = []
                     T_ov = min(len(comp_frames), probe_masks.shape[0])
                     for fi in range(T_ov):
                         frame = comp_frames[fi].copy()
@@ -825,14 +854,16 @@ def train_phase61(args):
                         overlay_frames.append(overlay)
 
                     if overlay_frames:
-                        ov_png = debug_dir / f"eval_epoch{epoch:03d}_overlay.png"
-                        Image.fromarray(overlay_frames[0]).save(str(ov_png))
-                        ov_gif = debug_dir / f"eval_epoch{epoch:03d}_overlay.gif"
-                        iio2.mimwrite(str(ov_gif), overlay_frames,
-                                      fps=8, loop=0)
+                        _, ov_gif, _ = _save_rollout_artifacts(
+                            epoch_prefix, [], overlay_frames)
                         print(f"  [gif] OVERLAY: {ov_gif}", flush=True)
                 except Exception as e:
                     print(f"  [warn] overlay failed: {e}", flush=True)
+
+                # Stage-latest aliases: quick per-phase inspection
+                stage_latest_prefix = f"{stage_prefix}_latest"
+                _save_rollout_artifacts(
+                    stage_latest_prefix, comp_frames, overlay_frames)
 
                 # Probe rollout MSE
                 gt_probe = np.asarray(
@@ -911,6 +942,34 @@ def train_phase61(args):
                     f"selection={selection_score:.4f} "
                     f"-> {save_dir}/best.pt", flush=True)
 
+            if selection_score > stage_best_scores.get(stage, -1.0):
+                stage_best_scores[stage] = selection_score
+                stage_best_epochs[stage] = epoch
+                torch.save(ckpt_data, str(save_dir / f"best_stage_{stage}.pt"))
+                stage_best_prefix = f"stage{stage}_best"
+                try:
+                    _save_rollout_artifacts(
+                        stage_best_prefix,
+                        comp_frames if 'comp_frames' in locals() else [],
+                        overlay_frames if 'overlay_frames' in locals() else [],
+                    )
+                    with open(debug_dir / f"{stage_best_prefix}.json", "w") as f:
+                        json.dump({
+                            "epoch": epoch,
+                            "stage": stage,
+                            "val_score": vs,
+                            "selection_score": selection_score,
+                            **val_m,
+                        }, f, indent=2)
+                    print(
+                        f"  * stage-{stage} best epoch={epoch} "
+                        f"selection={selection_score:.4f} "
+                        f"-> {save_dir}/best_stage_{stage}.pt",
+                        flush=True,
+                    )
+                except Exception as e:
+                    print(f"  [warn] stage-best artifact save failed: {e}", flush=True)
+
             with open(save_dir / "history.json", "w") as f:
                 json.dump(history, f, indent=2)
 
@@ -949,6 +1008,8 @@ def main():
     p.add_argument("--adapter-rank", type=int, default=DEFAULT_ADAPTER_RANK)
     p.add_argument("--lora-rank",    type=int, default=DEFAULT_LORA_RANK)
     p.add_argument("--depth-bins",   type=int, default=DEFAULT_DEPTH_BINS)
+    p.add_argument("--softmax-temperature", type=float, default=0.1,
+                   help="Phase61 compositor temperature; lower is harder")
     p.add_argument("--inject-keys",  type=str, default="")
 
     # Loss weights
@@ -956,6 +1017,7 @@ def main():
     p.add_argument("--la-alpha-vol", type=float, default=DEFAULT_LA_ALPHA_VOL)
     p.add_argument("--la-own",       type=float, default=DEFAULT_LA_OWN)
     p.add_argument("--la-depth-exp", type=float, default=DEFAULT_LA_DEPTH_EXP)
+    p.add_argument("--la-ortho",     type=float, default=DEFAULT_LA_ORTHO)
     p.add_argument("--depth-margin", type=float, default=0.3)
 
     # Collision augmentation

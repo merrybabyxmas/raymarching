@@ -45,6 +45,7 @@ from scripts.train_objaverse_vca import (
 )
 from scripts.train_phase17 import adaptive_lambda_depth, RATIO_WARNING_THRESH
 from scripts.train_phase19 import l_depth_ranking_perframe, PROBE_T_VALUES
+from scripts.prompt_identity import make_color_prompts as shared_make_color_prompts
 
 # ─── 기본값 ───────────────────────────────────────────────────────────────────
 DEFAULT_LAMBDA_DEPTH  = 5.0    # Phase 24/25: depth 집중
@@ -89,26 +90,7 @@ def rgb_to_color_name(rgb: list) -> str:
 
 
 def make_color_prompts(meta: dict) -> tuple:
-    """
-    meta.json → color-qualified entity prompts.
-    반환: (e0_prompt, e1_prompt, full_prompt, color0_name, color1_name)
-    예) "a red cat", "a blue dog", "a red cat and a blue dog"
-    """
-    c0 = rgb_to_color_name(meta.get("color0", [0.85, 0.15, 0.1]))
-    c1 = rgb_to_color_name(meta.get("color1", [0.1,  0.25, 0.85]))
-    kw0 = meta.get("keyword0", meta.get("prompt_entity0", "entity0"))
-    kw1 = meta.get("keyword1", meta.get("prompt_entity1", "entity1"))
-    # keyword가 "a cat" 형식이면 그냥 사용, 아니면 "a {color} {keyword}" 생성
-    if kw0.startswith("a "):
-        e0 = f"a {c0} {kw0[2:]}"
-    else:
-        e0 = f"a {c0} {kw0}"
-    if kw1.startswith("a "):
-        e1 = f"a {c1} {kw1[2:]}"
-    else:
-        e1 = f"a {c1} {kw1}"
-    full = f"{e0} and {e1}"
-    return e0, e1, full, c0, c1
+    return shared_make_color_prompts(meta)
 
 
 def get_color_entity_context(pipe, meta: dict, device: str) -> torch.Tensor:
@@ -710,8 +692,7 @@ def debug_generation(pipe, vca_layer, orig_procs, train_procs,
     if orig_proc_ref is None:
         orig_proc_ref = AttnProcessor2_0()  # fallback (should not happen)
 
-    prompt = (f"{probe_meta.get('prompt_entity0','entity0')} and "
-              f"{probe_meta.get('prompt_entity1','entity1')}")
+    prompt = make_color_prompts(probe_meta)[2]
     kw = dict(num_frames=8, steps=20, height=height, width=width, seed=42)
 
     def _lbl(arr, text):
@@ -892,8 +873,7 @@ def debug_multiview(pipe, vca_layer, orig_procs, train_procs,
 
     P = height
     rows = []
-    prompt = (f"{probe_meta.get('prompt_entity0','entity0')} and "
-              f"{probe_meta.get('prompt_entity1','entity1')}")
+    prompt = make_color_prompts(probe_meta)[2]
 
     # VCA 생성 (probe entity ctx 사용, 여러 뷰 같은 프롬프트)
     infer_proc = AdditiveVCAInferProcessor(
@@ -1009,8 +989,7 @@ def debug_vca_internals(pipe, vca_layer, orig_procs, train_procs,
     if orig_proc_ref is None:
         orig_proc_ref = AttnProcessor2_0()
 
-    prompt = (f"{probe_meta.get('prompt_entity0','entity0')} and "
-              f"{probe_meta.get('prompt_entity1','entity1')}")
+    prompt = make_color_prompts(probe_meta)[2]
     P = height
 
     def _lbl(arr, text, fs=11):
@@ -1979,9 +1958,7 @@ def debug_multiangle_depth(pipe, vca_layer, dataset, train_procs,
         return scores
 
     def _enc_hs_for_meta(pipe, meta, device):
-        e0 = meta.get('prompt_entity0', f"a {meta.get('keyword0','entity0')}")
-        e1 = meta.get('prompt_entity1', f"a {meta.get('keyword1','entity1')}")
-        full_prompt = meta.get('prompt_full', f"{e0} and {e1}")
+        _, _, full_prompt, _, _ = make_color_prompts(meta)
         tokens = pipe.tokenizer(
             full_prompt, return_tensors='pt', padding='max_length',
             max_length=pipe.tokenizer.model_max_length, truncation=True,

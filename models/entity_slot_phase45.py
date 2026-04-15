@@ -124,6 +124,54 @@ def compute_base_blend_v2(
     return (0.05 + 0.25 * entity_proxy + 0.60 * overlap_proxy).clamp(0.05, 0.95)
 
 
+def reroute_entity_weights_with_occupancy(
+    w0:       torch.Tensor,
+    w1:       torch.Tensor,
+    o0:       torch.Tensor,
+    o1:       torch.Tensor,
+    e0_front: Optional[torch.Tensor] = None,
+    strength: float = 0.70,
+    overlap_strength: float = 0.0,
+    eps:      float = 1e-6,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Occupancy-aware routing for entity weights.
+
+    목적:
+      - exclusive 구간(|o0-o1|↑)에서는 w0/w1가 occupancy identity를 따르도록 유도
+      - overlap/background 구간(|o0-o1|≈0)에서는 원래 Porter-Duff/WeightHead를 유지
+
+    Returns:
+      routed_w0, routed_w1, mix_gate
+    """
+    w0f = w0.float()
+    w1f = w1.float()
+    o0f = o0.float().clamp(0.0, 1.0)
+    o1f = o1.float().clamp(0.0, 1.0)
+
+    entity_mass = (w0f + w1f).clamp(min=eps, max=1.0)
+    if e0_front is not None:
+        ef = e0_front.float().clamp(0.0, 1.0)
+        score0 = o0f * (0.5 + 0.5 * ef)
+        score1 = o1f * (0.5 + 0.5 * (1.0 - ef))
+    else:
+        score0 = o0f
+        score1 = o1f
+    occ_sum = (score0 + score1).clamp(min=eps)
+    occ_w0 = entity_mass * (score0 / occ_sum)
+    occ_w1 = entity_mass * (score1 / occ_sum)
+
+    # Exclusive confidence: one occupancy high, the other low.
+    # overlap_strength>0 이면 overlap(min(o0,o1)↑)에서도 occupancy-depth routing을 사용.
+    overlap_conf = torch.minimum(o0f, o1f)
+    route_score = (o0f - o1f).abs() + overlap_strength * overlap_conf
+    mix_gate = (strength * route_score.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+
+    routed_w0 = (1.0 - mix_gate) * w0f + mix_gate * occ_w0
+    routed_w1 = (1.0 - mix_gate) * w1f + mix_gate * occ_w1
+    return routed_w0, routed_w1, mix_gate
+
+
 # =============================================================================
 # Loss functions
 # =============================================================================
@@ -132,20 +180,136 @@ def l_occupancy(
     o0_for_loss: torch.Tensor,   # (B, S) — no detach
     o1_for_loss: torch.Tensor,   # (B, S)
     masks_BNS:   torch.Tensor,   # (B, 2, S) GT mask
+    neg_weight:  float = 0.25,
+    dice_weight: float = 0.5,
     eps:         float = 1e-6,
 ) -> torch.Tensor:
     """
-    BCE loss: occupancy vs GT mask.
+    Class-balanced occupancy loss: balanced BCE + soft Dice.
 
-    l_occ = BCE(o0, mask0) + BCE(o1, mask1)
+    배경이 대부분인 toy setup에서는 plain BCE가 occupancy를 전역적으로 낮추는
+    쉬운 해로 무너지기 쉬워서, foreground/background를 따로 normalize한 BCE와
+    Dice를 함께 사용한다.
+    """
+    m0 = masks_BNS[:, 0, :].float().to(o0_for_loss.device)
+    m1 = masks_BNS[:, 1, :].float().to(o1_for_loss.device)
+
+    def _balanced_occ(prob: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        prob = prob.float().clamp(eps, 1.0 - eps)
+        pos  = target
+        neg  = 1.0 - target
+
+        n_pos = pos.sum() + eps
+        n_neg = neg.sum() + eps
+
+        # Keep degenerate all-bg / all-fg cases aligned with the old BCE-based
+        # behavior so unit tests and logging remain comparable.
+        if pos.sum().item() < eps or neg.sum().item() < eps:
+            return F.binary_cross_entropy(prob, target, reduction='mean')
+
+        l_pos = -(torch.log(prob) * pos).sum() / n_pos
+        l_neg = -(torch.log(1.0 - prob) * neg).sum() / n_neg
+
+        inter = (prob * target).sum()
+        dice  = 1.0 - (2.0 * inter + eps) / (prob.sum() + target.sum() + eps)
+
+        return l_pos + neg_weight * l_neg + dice_weight * dice
+
+    l0 = _balanced_occ(o0_for_loss, m0)
+    l1 = _balanced_occ(o1_for_loss, m1)
+    return l0 + l1
+
+
+def l_occupancy_structure(
+    o0_for_loss: torch.Tensor,   # (B, S)
+    o1_for_loss: torch.Tensor,   # (B, S)
+    masks_BNS:   torch.Tensor,   # (B, 2, S)
+    w_overlap:   float = 1.5,
+    w_exclusive: float = 1.0,
+    w_bg:        float = 1.0,
+    eps:         float = 1e-6,
+) -> torch.Tensor:
+    """
+    Structured occupancy regularizer.
+
+    핵심 목표:
+      - overlap에서 o0*o1를 높이고
+      - exclusive에서 o0*o1 (co-activation)를 강하게 낮추고
+      - exclusive에서 |o0-o1|를 크게 유지 (identity separation)
+      - bg에서 any occupancy를 낮춤
     """
     m0 = masks_BNS[:, 0, :].float().to(o0_for_loss.device)
     m1 = masks_BNS[:, 1, :].float().to(o0_for_loss.device)
-    l0 = F.binary_cross_entropy(
-        o0_for_loss.float().clamp(eps, 1 - eps), m0, reduction='mean')
-    l1 = F.binary_cross_entropy(
-        o1_for_loss.float().clamp(eps, 1 - eps), m1, reduction='mean')
-    return l0 + l1
+    overlap = m0 * m1
+    union = (m0 + m1).clamp(0.0, 1.0)
+    exclusive = (union - overlap).clamp(0.0, 1.0)
+    bg = 1.0 - union
+
+    o0 = o0_for_loss.float().clamp(0.0, 1.0)
+    o1 = o1_for_loss.float().clamp(0.0, 1.0)
+    occ_prod = o0 * o1
+    occ_any = torch.maximum(o0, o1)
+    occ_gap = (o0 - o1).abs()
+
+    n_ov = overlap.sum() + eps
+    n_ex = exclusive.sum() + eps
+    n_bg = bg.sum() + eps
+
+    # overlap: both entities should be on
+    l_ov = ((1.0 - occ_prod) * overlap).sum() / n_ov
+    # exclusive: one should be off (co-activation suppression)
+    l_ex_prod = (occ_prod * exclusive).sum() / n_ex
+    # exclusive: one-hot style separation
+    l_ex_gap = ((1.0 - occ_gap) * exclusive).sum() / n_ex
+    # bg: suppress any entity activation
+    l_bg = (occ_any * bg).sum() / n_bg
+
+    return w_overlap * l_ov + w_exclusive * (l_ex_prod + l_ex_gap) + w_bg * l_bg
+
+
+def collect_occupancy_stats(
+    o0:               torch.Tensor,   # (B, S)
+    o1:               torch.Tensor,   # (B, S)
+    entity_masks_BNS: torch.Tensor,   # (B, 2, S)
+    eps:              float = 1e-6,
+) -> dict:
+    """
+    Occupancy diagnostics for debugging collapse.
+
+    occ_any  = max(o0, o1) — 어떤 entity라도 존재할 확률
+    occ_prod = o0 * o1     — 두 entity 동시 occupancy proxy
+    """
+    m0 = entity_masks_BNS[:, 0, :].float().to(o0.device)
+    m1 = entity_masks_BNS[:, 1, :].float().to(o0.device)
+
+    overlap   = m0 * m1
+    exclusive = (m0 + m1).clamp(0.0, 1.0) - overlap
+    bg        = 1.0 - (m0 + m1).clamp(0.0, 1.0)
+
+    occ_any  = torch.maximum(o0.float(), o1.float())
+    occ_prod = o0.float() * o1.float()
+
+    def _mean(x: torch.Tensor, mask: torch.Tensor) -> float:
+        return float(((x * mask).sum() / (mask.sum() + eps)).item())
+
+    any_ov  = _mean(occ_any, overlap)
+    any_ex  = _mean(occ_any, exclusive)
+    any_bg  = _mean(occ_any, bg)
+    prod_ov = _mean(occ_prod, overlap)
+    prod_ex = _mean(occ_prod, exclusive)
+    prod_bg = _mean(occ_prod, bg)
+
+    return {
+        "occ_any_overlap_mean": any_ov,
+        "occ_any_exclusive_mean": any_ex,
+        "occ_any_bg_mean": any_bg,
+        "occ_any_sep": any_ov - any_ex,
+        "occ_any_gap_bg": any_ex - any_bg,
+        "occ_prod_overlap_mean": prod_ov,
+        "occ_prod_exclusive_mean": prod_ex,
+        "occ_prod_bg_mean": prod_bg,
+        "occ_prod_sep": prod_ov - prod_ex,
+    }
 
 
 def l_blend_target_balanced(
@@ -189,6 +353,113 @@ def l_blend_target_balanced(
     return w_ov * l_ov + w_ex * l_ex + w_bg * l_bg
 
 
+def l_visible_weights_region_balanced(
+    w0:               torch.Tensor,   # (B, S)
+    w1:               torch.Tensor,   # (B, S)
+    entity_masks_BNS: torch.Tensor,   # (B, 2, S)
+    depth_orders_B:   list,
+    front_val:        float = 0.90,
+    back_val:         float = 0.05,
+    w_ov:             float = 1.0,
+    w_ex:             float = 1.5,
+    w_bg:             float = 0.5,
+    eps:              float = 1e-6,
+) -> torch.Tensor:
+    """
+    Region-balanced visible-weight loss.
+
+    기존 l_visible_weights_soft는 entity 전체 평균 기반이라 overlap/exclusive 불균형에
+    취약할 수 있다. 여기서는 overlap / exclusive / bg를 분리 normalize해서
+    exclusive one-hot 분리를 강하게 감독한다.
+    """
+    m0 = entity_masks_BNS[:, 0, :].float().to(w0.device)
+    m1 = entity_masks_BNS[:, 1, :].float().to(w1.device)
+    overlap = m0 * m1
+    excl_0 = m0 * (1.0 - m1)
+    excl_1 = m1 * (1.0 - m0)
+    exclusive = (excl_0 + excl_1).clamp(0.0, 1.0)
+    bg = 1.0 - (m0 + m1).clamp(0.0, 1.0)
+
+    # Soft visible targets on overlap, hard on exclusive/background.
+    w0_t = excl_0.clone()
+    w1_t = excl_1.clone()
+    B = min(w0.shape[0], len(depth_orders_B))
+    for b in range(B):
+        front = int(depth_orders_B[b][0])
+        ov_b = overlap[b]
+        if front == 0:
+            w0_t[b] = w0_t[b] + front_val * ov_b
+            w1_t[b] = w1_t[b] + back_val * ov_b
+        else:
+            w1_t[b] = w1_t[b] + front_val * ov_b
+            w0_t[b] = w0_t[b] + back_val * ov_b
+
+    mse0 = (w0.float() - w0_t).pow(2)
+    mse1 = (w1.float() - w1_t).pow(2)
+
+    n_ov = overlap.sum() + eps
+    n_ex = exclusive.sum() + eps
+    n_bg = bg.sum() + eps
+
+    l_ov = ((mse0 + mse1) * overlap).sum() / (2.0 * n_ov)
+    l_ex = ((mse0 + mse1) * exclusive).sum() / (2.0 * n_ex)
+    l_bg = ((w0.float().pow(2) + w1.float().pow(2)) * bg).sum() / (2.0 * n_bg)
+
+    # Exclusive one-hot regularizers
+    l_ex_prod = ((w0.float() * w1.float()) * exclusive).sum() / n_ex
+    l_ex_mass = (((w0.float() + w1.float() - 1.0).pow(2)) * exclusive).sum() / n_ex
+
+    return w_ov * l_ov + w_ex * (l_ex + 0.5 * l_ex_prod + 0.2 * l_ex_mass) + w_bg * l_bg
+
+
+def l_visible_iou_soft(
+    w0:               torch.Tensor,   # (B, S)
+    w1:               torch.Tensor,   # (B, S)
+    entity_masks_BNS: torch.Tensor,   # (B, 2, S)
+    depth_orders_B:   list,
+    front_val:        float = 0.90,
+    back_val:         float = 0.05,
+    eps:              float = 1e-6,
+) -> torch.Tensor:
+    """
+    Direct differentiable IoU loss for visible weights.
+
+    평가 지표(visible IoU)와 학습 목표를 직접 맞추기 위한 손실.
+    """
+    m0 = entity_masks_BNS[:, 0, :].float().to(w0.device)
+    m1 = entity_masks_BNS[:, 1, :].float().to(w1.device)
+    overlap = m0 * m1
+    excl_0 = m0 * (1.0 - m1)
+    excl_1 = m1 * (1.0 - m0)
+
+    t0 = excl_0.clone()
+    t1 = excl_1.clone()
+    B = min(w0.shape[0], len(depth_orders_B))
+    for b in range(B):
+        front = int(depth_orders_B[b][0])
+        ov_b = overlap[b]
+        if front == 0:
+            t0[b] = t0[b] + front_val * ov_b
+            t1[b] = t1[b] + back_val * ov_b
+        else:
+            t1[b] = t1[b] + front_val * ov_b
+            t0[b] = t0[b] + back_val * ov_b
+
+    p0 = w0.float().clamp(0.0, 1.0)
+    p1 = w1.float().clamp(0.0, 1.0)
+    t0 = t0.clamp(0.0, 1.0)
+    t1 = t1.clamp(0.0, 1.0)
+
+    inter0 = (p0 * t0).sum()
+    union0 = (p0 + t0 - p0 * t0).sum()
+    inter1 = (p1 * t1).sum()
+    union1 = (p1 + t1 - p1 * t1).sum()
+
+    iou0 = inter0 / (union0 + eps)
+    iou1 = inter1 / (union1 + eps)
+    return 1.0 - 0.5 * (iou0 + iou1)
+
+
 # =============================================================================
 # Phase45Processor
 # =============================================================================
@@ -203,6 +474,7 @@ class Phase45Processor(Phase44Processor):
       - feat_blend: [o0, o1, o0*o1, e0_front, w0, w1, w_bg, |o0-o1|]
       - last_o0_for_loss, last_o1_for_loss: grad path (l_occupancy용)
       - last_o0, last_o1: detached (diagnostics)
+      - occupancy-aware routing: exclusive 구간에서 w0/w1를 occupancy identity 쪽으로 보정
 
     w0/w1는 Porter-Duff compositing용으로 유지 (visibility ≠ occupancy).
     """
@@ -224,6 +496,8 @@ class Phase45Processor(Phase44Processor):
         obh_hidden:          int   = 32,
         occ_hidden:          int   = 64,
         use_occ_head:        bool  = True,
+        occ_route_strength:  float = 0.70,
+        occ_overlap_route:   float = 0.00,
     ):
         super().__init__(
             query_dim           = query_dim,
@@ -242,6 +516,8 @@ class Phase45Processor(Phase44Processor):
         )
         # OccupancyHead pair — F_0/F_1 → o0/o1
         self.use_occ_head = use_occ_head
+        self.occ_route_strength = float(occ_route_strength)
+        self.occ_overlap_route = float(occ_overlap_route)
         eff_dim = inner_dim if inner_dim is not None else query_dim
         if use_occ_head:
             self.occ_head_e0 = OccupancyHead(in_dim=eff_dim, hidden=occ_hidden)
@@ -255,6 +531,7 @@ class Phase45Processor(Phase44Processor):
         self.last_o1_for_loss: Optional[torch.Tensor] = None
         self.last_o0:          Optional[torch.Tensor] = None
         self.last_o1:          Optional[torch.Tensor] = None
+        self.last_route_mix:   Optional[torch.Tensor] = None
 
     def reset_slot_store(self):
         super().reset_slot_store()
@@ -262,6 +539,7 @@ class Phase45Processor(Phase44Processor):
         self.last_o1_for_loss = None
         self.last_o0          = None
         self.last_o1          = None
+        self.last_route_mix   = None
 
     def occupancy_head_params(self) -> List[torch.nn.Parameter]:
         params = []
@@ -393,14 +671,28 @@ class Phase45Processor(Phase44Processor):
 
             self.last_w_delta = delta
 
+            # ── Phase 45: OccupancyHead 기반 base_blend ──────────────────
+            o0 = o0_for_loss   # grad path intact
+            o1 = o1_for_loss
+
+            # Occupancy-aware routing:
+            # exclusive confidence가 높은 위치에서 w0/w1를 occupancy identity로 보정.
+            w0, w1, route_mix = reroute_entity_weights_with_occupancy(
+                w0, w1, o0, o1,
+                e0_front=e0_front,
+                strength=self.occ_route_strength,
+                overlap_strength=self.occ_overlap_route,
+            )
+            w_bg = (1.0 - w0 - w1).clamp(min=0.0)
+            norm = (w0 + w1 + w_bg).clamp(min=1e-6)
+            w0, w1, w_bg = w0 / norm, w1 / norm, w_bg / norm
+            self.last_route_mix = route_mix.detach()
+
             w0_f  = w0.unsqueeze(-1).to(dtype=F_g.dtype)
             w1_f  = w1.unsqueeze(-1).to(dtype=F_g.dtype)
             wbg_f = w_bg.unsqueeze(-1).to(dtype=F_g.dtype)
             composed = w0_f * F_0 + w1_f * F_1 + wbg_f * F_g
 
-            # ── Phase 45: OccupancyHead 기반 base_blend ──────────────────
-            o0 = o0_for_loss   # grad path intact
-            o1 = o1_for_loss
             overlap_proxy_occ = o0 * o1
             base_blend = compute_base_blend_v2(o0, o1)  # occupancy 기반
 
@@ -437,6 +729,7 @@ class Phase45Processor(Phase44Processor):
             self.last_blend_map_for_loss = None
             self.last_blend_map          = None
             self.last_blend              = None
+            self.last_route_mix          = None
 
         # ── Blend ────────────────────────────────────────────────────────
         blended = blend_map_f * composed + (1.0 - blend_map_f) * F_g
