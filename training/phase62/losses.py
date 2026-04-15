@@ -185,6 +185,101 @@ def loss_rendered_dice(
     return _dice(visible_e0, gt_visible[:, 0]) + _dice(visible_e1, gt_visible[:, 1])
 
 
+def loss_spatial_coherence(
+    entity_probs: torch.Tensor,  # (B, 2, K, H, W)
+) -> torch.Tensor:
+    """
+    Total-Variation regularization on the spatial (H, W) dimensions of entity_probs.
+
+    Penalises rapid changes in entity assignment between neighbouring voxels.
+    Encourages compact, connected entity regions → higher LCC.
+
+    TV loss = mean |p_n[k,h+1,w] - p_n[k,h,w]| + mean |p_n[k,h,w+1] - p_n[k,h,w]|
+    summed over both entities.
+
+    Activation: set lambda_spatial_coherence > 0 in config.
+    """
+    ep = entity_probs.float()  # (B, 2, K, H, W)
+    diff_h = (ep[:, :, :, 1:, :] - ep[:, :, :, :-1, :]).abs()
+    diff_w = (ep[:, :, :, :, 1:] - ep[:, :, :, :, :-1]).abs()
+    return diff_h.mean() + diff_w.mean()
+
+
+def loss_fg_coverage_prior(
+    entity_probs: torch.Tensor,   # (B, 2, K, H, W)
+    min_fg_fraction: float = 0.05,
+) -> torch.Tensor:
+    """
+    Foreground coverage prior: prevent all-background collapse.
+
+    If the total foreground probability per sample falls below min_fg_fraction,
+    penalise with a hinge loss to push it back up.
+
+    fg_fraction = mean over (K, H, W) of max_over_entities entity_probs
+    L_prior = relu(min_fg_fraction - fg_fraction)^2
+
+    Without this, the model can reduce all structural losses by zeroing out
+    entity_probs entirely (predicting 100% background).
+
+    Priority 4 from analysis.md: "fg prior" to prevent entity collapse.
+    """
+    ep = entity_probs.float()
+    # Max over entities → scalar fg probability per voxel
+    fg_max = ep.max(dim=1).values  # (B, K, H, W)
+    fg_fraction = fg_max.mean(dim=(1, 2, 3))  # (B,)
+    # Hinge: penalise if fraction is below floor
+    shortfall = (min_fg_fraction - fg_fraction).clamp(min=0.0)
+    return (shortfall ** 2).mean()
+
+
+def loss_permutation_consistency(
+    entity_probs: torch.Tensor,   # (B, 2, K, H, W) for current frame
+    entity_probs_prev: torch.Tensor,   # (B, 2, K, H, W) for previous frame
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """
+    Cross-frame entity permutation consistency.
+
+    If entity0 in frame t corresponds to entity0 in frame t+1 (no flip),
+    the spatial overlap of entity0 between frames should be high.
+    If the model randomly flips entity labels between frames, this loss fires.
+
+    For each entity n:
+      overlap(n, n) = sum(p_n_t * p_n_{t-1}) / (sum(p_n_t) + sum(p_n_{t-1}) + eps)
+
+    The loss compares:
+      - Direct overlap: entity0_t with entity0_{t-1}  (should be HIGH)
+      - Flipped overlap: entity0_t with entity1_{t-1}  (should be LOW)
+
+    L_perm = relu(flip_overlap - direct_overlap + margin)
+    where margin ensures direct_overlap >> flip_overlap.
+
+    Priority 4 from analysis.md: "permutation consistency" for temporal label stability.
+    """
+    margin = 0.05
+    ep = entity_probs.float()        # (B, 2, K, H, W)
+    ep_prev = entity_probs_prev.float()  # (B, 2, K, H, W)
+
+    def _overlap(a, b):
+        """Dice-like overlap between two (B, K, H, W) volumes."""
+        num = (a * b).sum(dim=(1, 2, 3))         # (B,)
+        denom = a.sum(dim=(1, 2, 3)) + b.sum(dim=(1, 2, 3)) + eps
+        return num / denom  # (B,) in [0, 1]
+
+    # Direct: entity0_t vs entity0_{t-1}, entity1_t vs entity1_{t-1}
+    direct_0 = _overlap(ep[:, 0], ep_prev[:, 0])
+    direct_1 = _overlap(ep[:, 1], ep_prev[:, 1])
+    direct = (direct_0 + direct_1) / 2.0
+
+    # Flipped: entity0_t vs entity1_{t-1}, entity1_t vs entity0_{t-1}
+    flip_0 = _overlap(ep[:, 0], ep_prev[:, 1])
+    flip_1 = _overlap(ep[:, 1], ep_prev[:, 0])
+    flip = (flip_0 + flip_1) / 2.0
+
+    # Hinge: penalise when flip ≥ direct (i.e., labels are inconsistent)
+    return torch.relu(flip - direct + margin).mean()
+
+
 def compute_volume_accuracy(
     V_logits: torch.Tensor,  # (B, C, K, H, W)
     V_gt: torch.Tensor,      # (B, K, H, W)

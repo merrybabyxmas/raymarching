@@ -25,7 +25,10 @@ from PIL import Image
 
 from training.phase62.objectives import build_objective
 from training.phase62.objectives.base import VolumeOutputs
-from training.phase62.losses import loss_diffusion, loss_feature_separation, compute_volume_accuracy
+from training.phase62.losses import (
+    loss_diffusion, loss_feature_separation, compute_volume_accuracy,
+    loss_spatial_coherence, loss_fg_coverage_prior, loss_permutation_consistency,
+)
 from training.phase62.evaluator import Phase62Evaluator, _encode_text, _get_entity_tokens_with_fallback
 from training.phase62.rollout import Phase62RolloutRunner
 from training.phase62.metrics import compute_projected_class_iou
@@ -488,6 +491,33 @@ class AblationTrainer:
         if la_sep > 0:
             l_sep = loss_feature_separation(F_0, F_1)
             l_struct = l_struct + la_sep * l_sep
+
+        # ── Priority 4 losses ─────────────────────────────────────────────────
+        # Spatial coherence: TV regularization to encourage connected entity regions
+        la_sc = float(getattr(self.train_cfg, "lambda_spatial_coherence", 0.0))
+        if la_sc > 0 and vol_outputs.entity_probs is not None:
+            l_sc = loss_spatial_coherence(vol_outputs.entity_probs)
+            l_struct = l_struct + la_sc * l_sc
+
+        # FG coverage prior: prevent all-background collapse
+        la_fg_prior = float(getattr(self.train_cfg, "lambda_fg_prior", 0.0))
+        if la_fg_prior > 0 and vol_outputs.entity_probs is not None:
+            _min_fg = float(getattr(self.train_cfg, "min_fg_fraction", 0.05))
+            l_fg_prior = loss_fg_coverage_prior(vol_outputs.entity_probs, _min_fg)
+            l_struct = l_struct + la_fg_prior * l_fg_prior
+
+        # Permutation consistency: penalise frame-to-frame entity label flips
+        # Requires storing entity_probs from previous training step
+        la_perm = float(getattr(self.train_cfg, "lambda_perm_consist", 0.0))
+        if la_perm > 0 and vol_outputs.entity_probs is not None:
+            if not hasattr(self, "_prev_entity_probs") or self._prev_entity_probs is None:
+                self._prev_entity_probs = vol_outputs.entity_probs.detach().clone()
+            else:
+                if self._prev_entity_probs.shape == vol_outputs.entity_probs.shape:
+                    l_perm = loss_permutation_consistency(
+                        vol_outputs.entity_probs, self._prev_entity_probs)
+                    l_struct = l_struct + la_perm * l_perm
+                self._prev_entity_probs = vol_outputs.entity_probs.detach().clone()
 
         if use_diffusion:
             self.system.set_guides(guides)
