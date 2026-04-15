@@ -305,7 +305,12 @@ class AblationTrainer:
                 elif name == "assembler":
                     group["lr"] = 0.0 if freeze_guide_s3 else group["initial_lr"]
                 else:
-                    group["lr"] = group["initial_lr"]
+                    # v40i: adapter_lr_scale_stage3 slows LoRA/adapters in stage3.
+                    # Full LR → entity_probs oscillate (backbone drifts, frozen vol input changes).
+                    # 0.1× LR → slower adaptation → stable entity_probs → less balance/LCC oscillation.
+                    # Requires more epochs for diff_mse convergence (set epochs=260+).
+                    _lr_scale_s3 = float(getattr(self.config, "adapter_lr_scale_stage3", 1.0))
+                    group["lr"] = group["initial_lr"] * _lr_scale_s3
 
             # v35: Activate overlay-preserving loss in stage3.
             # Rendered fg-coverage Dice(front_probs[:, 1:].sum, GT_fg_any) supervises

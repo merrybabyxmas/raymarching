@@ -1,0 +1,100 @@
+# B1 v40i: spatial_h=32 + adapter_lr_scale_stage3=0.1 + 260 epochs (2026-04-16)
+#
+# ROOT CAUSE: entity_probs oscillation in stage3 causing balance/LCC to alternate
+# between passing (0.891) and failing (0.582) across eval epochs.
+# Mechanism: frozen volume weights + evolving LoRA at FULL LR →
+#   backbone features change → entity_probs (vol output) changes →
+#   balance/LCC oscillate → C_robust impossible (need 5 consecutive passes)
+#
+# FIX: adapter_lr_scale_stage3=0.1 — LoRA+adapters train at 10× slower LR in stage3.
+#   - Slower backbone evolution → stable entity_probs → stable balance/LCC
+#   - Requires more epochs for diff_mse to converge → use epochs=260
+#   - Stage1: ep0-99 (100ep), stage2: ep100-194 (95ep), stage3: ep195-259 (65ep)
+#   - 13 eval opportunities in stage3 → C_robust (5 consecutive) achievable
+#
+# Other improvements: entity_masked_sep + la_feature_sep=2.0 for cosF convergence.
+# Run on GPU 0 (v40g killed).
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: four_stream
+guide_max_ratio: 0.20
+feat_dim: 320
+backbone_primary_idx: 2
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 32
+spatial_w: 32
+n_classes: 3
+inject_config: multiscale
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+freeze_guide_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+adapter_lr_scale_stage3: 0.1           # KEY: 10× slower LR → stable entity_probs in stage3
+
+scene_type: col
+gate_warm_start: 0.10
+
+training:
+  epochs: 260                          # Extended: 195→259 stage3 = 65ep, 13 evals
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 2.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 2.0                  # safe (not 5.0 which caused collapse)
+  use_entity_sep_mask: true            # entity-focused gradient
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 1.5
+  min_gate_stage3: 0.10
+  max_gate: 0.45
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  lambda_spatial_coherence: 0.3
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+  lambda_amodal_coverage: 0.5
+  min_amodal_coverage: 0.02
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
