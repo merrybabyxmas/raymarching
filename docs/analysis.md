@@ -1341,13 +1341,41 @@ UNet에 전달 → post-contact에서도 entity1이 살아있을 수 있음.
 **diagnostic script:**
 - `scripts/diagnose_guide_viability.py`: guide_feature_norm, amodal_coverage, amodal_spatial_cosine 측정
 
-### v40 실험 예측
+### v40 실험 결과 (2026-04-16)
 
-| 실험 | 핵심 변경 | 기대 변화 |
-|------|----------|---------|
-| v40a | four_stream, max_ratio=0.15 | guide_cosine < 0.7, back_e1 > 0.01 |
-| v40b | four_stream, max_ratio=0.30, centroid_loss | render IoU > 0.10 (random 탈출) |
+| 실험 | 핵심 변경 | 최종 결과 | 실패 원인 |
+|------|----------|---------|---------|
+| v40a | four_stream, max_ratio=0.15, spatial_h=16 | ALL:FAIL (ep219) | LCC=0.525 < 0.55 (recalib 필요), render IoU=0.041 |
+| v40b | four_stream, max_ratio=0.30, max_gate=0.50 | ALL:FAIL (ep219) | gate=0.50 > old CGUIDE_GATE_HI=0.40, overlay 붕괴 |
+| v40c | multiscale inject (4 blocks), spatial_h=16 | ALL:FAIL (ep219) | overlay drift 0.364→0.341, diff_mse=0.0493(✓ 하지만 overlay<0.35) |
+| v40d | aggressive gate (max_gate=0.70), spatial_h=16 | ALL:FAIL (ep219) | gate=0.70 > old contract range [0.1,0.5], diff_mse=0.0498(✓) |
+| **v40e** | **spatial_h=32, feat_dim=320, freeze_guide_s3** | **running (GPU 2)** | — |
+| **v40f** | **spatial_h=32, feat_dim=320, la_diff=2.0, freeze_guide_s3** | **running (GPU 3)** | — |
 
-render IoU > 0.10이 달성되면 guide가 entity 공간 위치를 실제로 제어하는 것.
-이것이 chimera 없는 cat+dog rolling shot을 향한 핵심 step.
-  new contract.py 기반 재실행 시 consec=5+ 확인 예정.
+### v40c/d 핵심 발견 (2026-04-16)
+
+**render IoU 근본 한계**: 16×16 spatial volume에서는 entity mask 투영이 2픽셀 미만 분리 → random level(0.055)에서 탈출 불가.
+- v40c: multiscale inject (4 blocks, up3=32×32) 추가에도 render IoU=0.056 — injection resolution이 아니라 **volume resolution**이 병목.
+- v40d: gate 강화(0.70)에도 render IoU=0.057 — gate strength로는 해결 불가.
+
+**Stage3 overlay drift**: `freeze_vol_stage3=true` + `freeze_fg_spatial_stage3=true` 조합 시 `lambda_overlay_preserve_s3` 가 no-op.
+- 이유: overlay preserve loss gradient가 frozen volume (fg_spatial_head) 에 흐를 수 없음.
+- 결과: guide assembler (block_projectors, guide_gates)가 stage3에서 계속 훈련 → overlay 0.364→0.341 drift
+- 수정: `freeze_guide_stage3: true` — guide assembler도 stage3에 동결 (ablation_trainer.py에 구현)
+
+**diff_mse plateau**: v40c ep199-219 구간 0.0503-0.0493 (threshold 0.050). ep219에서 겨우 통과.
+- 원인: la_diff=1.0 vs la_vol=3.0 경쟁. v40f에서 la_diff=2.0으로 조기 통과 기대.
+
+### v40e/f 설계 근거 (spatial_h=32)
+
+**feat_dim 변경**: system.py `feat_dim` config-driven 화 (기존: hardcoded 640)
+- v40e/f: `feat_dim=320` (up_blocks.3 출력), `backbone_primary_idx=2`
+- run_phase62_ablations.py: `backbone_primary_idx` config 반영
+
+**inject_config: multiscale** 사용 시 up3 (32×32) 직접 injection → volume resolution과 정확히 일치
+- 기대: render IoU가 random level(0.055)을 벗어나 >0.10 달성
+
+**코드 변경 요약:**
+- `system.py`: `feat_dim = int(getattr(config, "feat_dim", 640))`
+- `scripts/run_phase62_ablations.py`: `backbone_primary_idx = int(getattr(config, "backbone_primary_idx", 1))`
+- `training/phase62/ablation_trainer.py`: `freeze_guide_stage3` 지원 추가 (stage3에서 guide assembler freeze)

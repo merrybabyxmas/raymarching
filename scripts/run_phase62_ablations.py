@@ -77,7 +77,8 @@ def run_ablation(config_path: str, pipe, dataset, device: str, ckpt_path: str = 
     )
     for ext in extractors:
         ext.to(device)
-    backbone_mgr = BackboneManager(extractors, DEFAULT_INJECT_KEYS, primary_idx=1)
+    backbone_primary_idx = int(getattr(config, "backbone_primary_idx", 1))
+    backbone_mgr = BackboneManager(extractors, DEFAULT_INJECT_KEYS, primary_idx=backbone_primary_idx)
 
     system = Phase62System(config).to(device)
     system.injection_mgr.register_hooks(pipe.unet)

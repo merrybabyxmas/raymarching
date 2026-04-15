@@ -26,7 +26,7 @@ class Phase62System(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        feat_dim = 640
+        feat_dim = int(getattr(config, "feat_dim", 640))
         representation = getattr(config, "representation", "independent")
         guide_family = getattr(config, "guide_family", "dual") or "none"
 

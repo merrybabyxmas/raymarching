@@ -286,7 +286,14 @@ class AblationTrainer:
                 p.requires_grad_(not freeze_vol_s3)
             for p in self.param_groups["fg_spatial"]:
                 p.requires_grad_(not freeze_fg_s3)
-            for p in self.param_groups["assembler"] + self.param_groups["adapter"] + self.param_groups["lora"]:
+            # v40e: optional guide assembler freeze in stage3.
+            # When both vol and fg_spatial are frozen, the guide assembler can drift
+            # (gate/block_projectors) and cause overlay decay.  freeze_guide_stage3=true
+            # locks the assembler to prevent this — leaves only LoRA+adapters training.
+            freeze_guide_s3 = bool(getattr(self.config, "freeze_guide_stage3", False))
+            for p in self.param_groups["assembler"]:
+                p.requires_grad_(not freeze_guide_s3)
+            for p in self.param_groups["adapter"] + self.param_groups["lora"]:
                 p.requires_grad_(True)
             for group in self.optimizer.param_groups:
                 name = group.get("name", "")
@@ -295,6 +302,8 @@ class AblationTrainer:
                     group["lr"] = 0.0 if freeze_vol_s3 else group["initial_lr"] * 0.10
                 elif name == "fg_spatial":
                     group["lr"] = 0.0 if freeze_fg_s3 else group["initial_lr"] * 0.10
+                elif name == "assembler":
+                    group["lr"] = 0.0 if freeze_guide_s3 else group["initial_lr"]
                 else:
                     group["lr"] = group["initial_lr"]
 
