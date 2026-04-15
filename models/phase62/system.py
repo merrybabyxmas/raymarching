@@ -183,8 +183,13 @@ class Phase63System(nn.Module):
         F_e0: torch.Tensor,
         F_e1: torch.Tensor,
         depth_hint: "Optional[torch.Tensor]" = None,
+        img_hint_e0: "Optional[torch.Tensor]" = None,  # (B,1,H,W) color routing map
+        img_hint_e1: "Optional[torch.Tensor]" = None,
     ) -> "Tuple[EntityFieldOutputs, RendererOutputs]":
-        field_out = self.field(F_g, F_e0, F_e1, depth_hint=depth_hint)
+        field_out = self.field(
+            F_g, F_e0, F_e1, depth_hint=depth_hint,
+            img_hint_e0=img_hint_e0, img_hint_e1=img_hint_e1,
+        )
         render_out = self.renderer(field_out.density_e0, field_out.density_e1)
         return field_out, render_out
 

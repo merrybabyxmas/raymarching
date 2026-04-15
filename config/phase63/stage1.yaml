@@ -1,0 +1,71 @@
+# Phase 63 — Stage 1: Entity Field + Transmittance Renderer Pretrain
+# analysis.md Stage 1: diffusion 없이 field + renderer만 먼저 학습
+# GPU: CUDA_VISIBLE_DEVICES=3
+
+run_name: p63_stage1
+
+# ── Model ──────────────────────────────────────────────────────────────────
+depth_bins: 8
+hidden_dim: 64
+app_dim: 32
+spatial_h: 32          # 32x32 = 1024 tokens, matching up_blocks.3 at 256x256 input
+spatial_w: 32
+feat_dim: 320          # up_blocks.3 inner_dim=320 (vs 640 for up_blocks.2)
+inject_config: multiscale
+guide_max_ratio: 0.1
+gate_warm_start: 0.0
+
+# ── Training ───────────────────────────────────────────────────────────────
+training:
+  epochs: 60
+  steps_per_epoch: 30
+  eval_every: 5
+  lr_field: 5.0e-4
+  lr_adapter: 1.0e-4
+  lr_lora: 5.0e-5
+
+  # Loss weights (Stage 1: field-only)
+  lambda_vis:      2.0   # visible Dice loss
+  lambda_amo:      1.0   # amodal Dice loss
+  lambda_occ:      0.5   # V_i <= A_i consistency
+  lambda_survival: 10.0  # entity survival hinge (strong: prevent zero-density collapse)
+  lambda_id:       0.5   # identity separation
+  lambda_temp:     0.0   # temporal slot consistency (disabled: n_frames=1 in Stage 1)
+  lambda_iso:      0.0   # isolation loss (requires solo frames, activate later)
+  lambda_color:    3.0   # color routing prior: amodal should match entity color region (Stage 1 only)
+
+  grad_clip: 0.5
+  t_max: 20          # Stage 1: low-noise timesteps → clean image features (t=0..19, noise ~0-10%)
+  n_frames: 1        # Stage 1: single frame per step — avoids AnimateDiff temporal attn shape bug (T*S=8*1024=8192 vs S=1024)
+  height: 256
+  width: 256
+  seed: 42
+  collision_prob: 0.5
+
+  # Stage schedule (analysis.md)
+  #   stage1 (ep 0-59): field + renderer only, NO diffusion
+  #   stage2 (future): guide encoder pretrain
+  #   stage3 (future): diffusion coupling
+  stage1_epochs: 60   # all epochs = stage1 for this run
+
+# ── Eval ───────────────────────────────────────────────────────────────────
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+  visible_survival_thresh: 0.02
+  min_survival: 0.03    # min mean visibility (hinge floor) — below GT coverage (~7-8%) to avoid conflict
+
+# ── Data ───────────────────────────────────────────────────────────────────
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+# ── Backbone ───────────────────────────────────────────────────────────────
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+  feat_dim: 640

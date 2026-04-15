@@ -147,10 +147,13 @@ class EntityFieldDecoder(nn.Module):
         self._init_weights()
 
     def _init_weights(self) -> None:
-        # Zero-init density head so that at step 0 density is sigmoid(0)=0.5
-        # everywhere — neutral starting point, no dead entity.
-        nn.init.zeros_(self.density_head.weight)
-        nn.init.zeros_(self.density_head.bias)
+        # Init density head bias to +1.0 so that at step 0 density is
+        # sigmoid(1) ≈ 0.73 everywhere — starts above the IoU threshold of 0.5,
+        # giving the Dice loss a clear gradient to reduce FPs while keeping TPs high.
+        # Small random weight (not zero) so that gradient flows to upstream features
+        # (img_proj) from the very first step.  Zero-weight kills the gradient path.
+        nn.init.normal_(self.density_head.weight, std=0.01)
+        nn.init.constant_(self.density_head.bias, 0.0)  # zero bias: routing prior dominates
         # Appearance head small random — needs SOMETHING to break symmetry.
         nn.init.normal_(self.appearance_head.weight, std=0.01)
         nn.init.zeros_(self.appearance_head.bias)
@@ -175,7 +178,8 @@ class EntityFieldDecoder(nn.Module):
     def forward(
         self,
         feat_2d: torch.Tensor,        # (B, hidden*2, H, W)
-        depth_feat: Optional[torch.Tensor] = None,  # (B, hidden, K, H, W)
+        depth_feat: Optional[torch.Tensor] = None,   # (B, hidden, K, H, W)
+        routing_hint: Optional[torch.Tensor] = None, # (B, 1, H, W) color routing [0,1]
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Returns:
@@ -201,10 +205,24 @@ class EntityFieldDecoder(nn.Module):
         # Refinement.
         h3d = self.refine_3d(h3d)                                      # (B, hidden, K, H, W)
 
-        # Density head — NO softmax across entity dim, NO softmax across K.
-        # Sigmoid gives each voxel an independent "is this entity here?" prob.
+        # Density head refines spatial features.  Bias=0 so output is centered.
         density_logit = self.density_head(h3d.float())                 # (B, 1, K, H, W)
-        density = torch.sigmoid(density_logit).squeeze(1)              # (B, K, H, W)
+
+        # Routing-prior injection: use color routing map as a logit-space prior.
+        # logit(routing) is high where entity color matches, low elsewhere.
+        # The density head learns RESIDUALS on top of this spatial prior.
+        # Effect at init: density ≈ routing_hint → immediate non-zero IoU.
+        if routing_hint is not None:
+            if routing_hint.shape[-2:] != (H, W):
+                routing_hint = F.interpolate(
+                    routing_hint.float(), size=(H, W),
+                    mode="bilinear", align_corners=False)
+            rh = routing_hint.float().clamp(0.02, 0.98)               # (B, 1, H, W)
+            routing_logit = torch.log(rh / (1.0 - rh))                # logit transform
+            # Broadcast over depth bins K: (B, 1, H, W) → (B, 1, 1, H, W)
+            density_logit = density_logit + routing_logit.unsqueeze(2) # (B, 1, K, H, W)
+
+        density = torch.sigmoid(density_logit.clamp(-5.0, 5.0)).squeeze(1)  # (B, K, H, W)
 
         # Appearance in voxel form.  Collapse to 2D by weighting by density
         # (so that appearance is concentrated wherever the entity actually
@@ -268,6 +286,25 @@ class EntityField(nn.Module):
         # Per-entity identity bias — breaks symmetry between e0 and e1.
         self.entity_id_e0 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
         self.entity_id_e1 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
+
+        # Direct image pathway — provides spatially-varying color features to
+        # break the spatial uniformity of cross-attention outputs.  Each entity
+        # gets a 1-channel color routing map (similarity to entity color).
+        # Stage 1 needs this to learn localization before UNet features improve.
+        self.img_proj_e0 = nn.Sequential(
+            nn.Conv2d(1, hidden, kernel_size=3, padding=1, bias=True),
+            nn.GELU(),
+        )
+        self.img_proj_e1 = nn.Sequential(
+            nn.Conv2d(1, hidden, kernel_size=3, padding=1, bias=True),
+            nn.GELU(),
+        )
+        # Small init so image pathway starts as a weak signal;
+        # gradient will amplify it where useful.
+        nn.init.normal_(self.img_proj_e0[0].weight, std=0.01)
+        nn.init.zeros_(self.img_proj_e0[0].bias)
+        nn.init.normal_(self.img_proj_e1[0].weight, std=0.01)
+        nn.init.zeros_(self.img_proj_e1[0].bias)
 
         # Two INDEPENDENT decoders.  Important: no weight sharing.
         self.decoder_e0 = EntityFieldDecoder(
@@ -349,6 +386,8 @@ class EntityField(nn.Module):
         F_e0: torch.Tensor,                                     # (B, S, feat_dim)
         F_e1: torch.Tensor,                                     # (B, S, feat_dim)
         depth_hint: Optional[torch.Tensor] = None,              # (B, H, W) in [0,1]
+        img_hint_e0: Optional[torch.Tensor] = None,             # (B, 1, H, W) color routing map
+        img_hint_e1: Optional[torch.Tensor] = None,             # (B, 1, H, W) color routing map
     ) -> EntityFieldOutputs:
         assert F_g.dim() == 3, f"F_g must be (B, S, D), got {F_g.shape}"
         assert F_g.shape[:2] == F_e0.shape[:2] == F_e1.shape[:2], \
@@ -358,6 +397,22 @@ class EntityField(nn.Module):
         h_g = self._tokens_to_2d(F_g, self.proj_g)                     # (B, hidden, H, W)
         h_e0 = self._tokens_to_2d(F_e0, self.proj_e0) + self.entity_id_e0
         h_e1 = self._tokens_to_2d(F_e1, self.proj_e1) + self.entity_id_e1
+
+        # Inject direct image color hints — provides spatially-varying signal
+        # that the cross-attention features lack at early training.
+        # img_hint is a 1-ch routing map: 1.0 = entity color present, 0.0 = absent.
+        if img_hint_e0 is not None:
+            if img_hint_e0.shape[-2:] != (self.spatial_h, self.spatial_w):
+                img_hint_e0 = F.interpolate(
+                    img_hint_e0.float(), size=(self.spatial_h, self.spatial_w),
+                    mode="bilinear", align_corners=False)
+            h_e0 = h_e0 + self.img_proj_e0(img_hint_e0.float())
+        if img_hint_e1 is not None:
+            if img_hint_e1.shape[-2:] != (self.spatial_h, self.spatial_w):
+                img_hint_e1 = F.interpolate(
+                    img_hint_e1.float(), size=(self.spatial_h, self.spatial_w),
+                    mode="bilinear", align_corners=False)
+            h_e1 = h_e1 + self.img_proj_e1(img_hint_e1.float())
 
         # Concat per entity with global — each decoder sees the full scene
         # context and its own entity signal.
@@ -377,8 +432,8 @@ class EntityField(nn.Module):
             depth_feat = self._depth_hint_feat(depth_hint)              # (B, hidden, K, H, W)
 
         # Independent decoding — no competition between entities.
-        density_e0, appearance_e0 = self.decoder_e0(feat_e0, depth_feat)
-        density_e1, appearance_e1 = self.decoder_e1(feat_e1, depth_feat)
+        density_e0, appearance_e0 = self.decoder_e0(feat_e0, depth_feat, routing_hint=img_hint_e0)
+        density_e1, appearance_e1 = self.decoder_e1(feat_e1, depth_feat, routing_hint=img_hint_e1)
 
         # Backwards-compat stacked tensor for Phase 62 losses that still expect
         # a (B, 2, K, H, W) entity_probs.
