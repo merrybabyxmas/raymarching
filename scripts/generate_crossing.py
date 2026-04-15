@@ -41,6 +41,7 @@ class CrossingMode(Enum):
     ORBIT   = "orbit"
     SQUEEZE = "squeeze"
     ROTATE  = "rotate"
+    LAYERED = "layered"   # depth-separated: entity0 front, entity1 back (occ benchmark)
 
 
 # ─── mesh 로드 ────────────────────────────────────────────────────────────────
@@ -117,6 +118,18 @@ def compute_frame_transforms(
         trans1 = np.array([ 0.3, 0.0, 0.0])
         rot0 =  frame_idx * (360.0 / n_frames)
         rot1 = -frame_idx * (360.0 / n_frames)
+
+    elif mode == CrossingMode.LAYERED:
+        # Depth-separated (occ benchmark): entity0 front (y=+0.45), entity1 back (y=-0.45)
+        # Camera looks from +Y direction at origin, so +Y = closer to camera.
+        # entity0 slowly sweeps left→right (x: -0.4 → +0.4) while staying in front.
+        # entity1 slowly rotates in-place at back.
+        # Overlap region mid-animation creates genuine front-back occlusion.
+        x_sweep = -0.4 + 0.8 * t          # -0.4 → +0.4
+        trans0 = np.array([x_sweep, 0.45, 0.0])   # front entity
+        trans1 = np.array([  0.0,  -0.45, 0.0])   # back entity (occluded)
+        rot0 = frame_idx * (180.0 / n_frames)      # slow rotation
+        rot1 = frame_idx * (360.0 / n_frames)      # full rotation
 
     else:
         raise ValueError(f"Unknown mode: {mode}")
@@ -258,11 +271,14 @@ def render_pair(
     iio2.mimsave(str(out_dir / 'video.gif'), frames_rgb, duration=125)
 
     # meta.json
+    # scene_type: "occ" for depth-separated layered mode, "col" for same-depth modes
+    scene_type = "occ" if mode == CrossingMode.LAYERED else "col"
     meta = {
         **pair,
         'mode': mode.value,
         'camera': cam['name'],
         'n_frames': n_frames,
+        'scene_type': scene_type,
     }
     with open(out_dir / 'meta.json', 'w') as f:
         json.dump(meta, f, indent=2)
@@ -332,7 +348,7 @@ def parse_args():
     p.add_argument('--n-frames',   type=int, default=16,    dest='n_frames')
     p.add_argument('--resolution', type=int, default=256)
     p.add_argument('--modes',      default='',
-                   help='comma-separated: orbit,squeeze,rotate (default: all)')
+                   help='comma-separated: orbit,squeeze,rotate,layered (default: all)')
     p.add_argument('--pairs',      default='',
                    help='comma-separated keyword pairs, e.g. cat_dog,knight_ninja')
     p.add_argument('--seed',       type=int, default=42)

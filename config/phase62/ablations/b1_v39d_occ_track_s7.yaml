@@ -1,0 +1,106 @@
+# B1 v39d: OCC benchmark track — depth-separated data, compact/D_amo enforced
+#
+# GOAL: Priority 3 from analysis.md — establish occ capability baseline
+#       to separate "what the model can do in occlusion" from "collision".
+#
+# Problem (analysis.md §12, Priority 3):
+#   - All previous runs use col (same-depth) data → compact/D_amo are oracle-impossible
+#   - Cannot measure true occlusion capability of first-hit volume model
+#   - "occ track" needs depth-separated data where compact/D_amo make sense
+#
+# This run (v39d):
+#   - data_root: toy/data_objaverse_occ (LAYERED mode: entity0 front, entity1 back)
+#   - scene_type: occ → C_topo enforces compact≥0.60 AND D_amo≥0.40 AND D_vis≥0.25
+#   - gate_warm_start: 0.1 (from v39b — bind path alive from stage2 start)
+#   - la_feature_sep: 0.0 (baseline — separate from v39c feature sep effect)
+#
+# Expected outcome:
+#   - compact metric becomes meaningful (depth-separated data allows true separation)
+#   - D_amo_min can be measured properly (entity1 partially occluded behind entity0)
+#   - C_topo_occ: D_vis_min≥0.25, D_amo_min≥0.40, compact≥0.60
+#   - If occ passes where col fails → confirms architecture suits occlusion > collision
+#   - If occ also fails → depth separation still insufficient (architectural fix needed)
+#
+# Comparison matrix:
+#   v39a (col, no gate)   → col baseline
+#   v39b (col, gate)      → col + bind repair
+#   v39c (col, feature_sep) → col + feature sep
+#   v39d (occ, gate)      → occ baseline (THIS RUN) ← Priority 3
+#
+# Generate data first: python scripts/generate_occ_dataset.py
+# Then precompute GT:  python scripts/precompute_occ_volume_gt.py
+#
+# Priority analysis document: docs/analysis.md (Experiment Group 3 / v39.3 Track-O)
+# Priority: 3 (data split + occ benchmark)
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+# v39d: occ track — depth-separated data + bind warm-start
+scene_type: occ              # ENFORCES compact≥0.60 + D_amo≥0.40 in C_topo
+gate_warm_start: 0.1         # bind warm-start from v39b
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0      # baseline: not activated (separate from v39c)
+  scene_type: occ
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.5
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse_occ    # OCC depth-separated dataset
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0

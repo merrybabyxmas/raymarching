@@ -481,8 +481,10 @@ class DebugContract:
             )
 
         # C_guide: entity_balance replaces winner; cosF gated on feature_sep_active (v2)
-        gate_in_range = CGUIDE_GATE_LO <= m.gate_open <= CGUIDE_GATE_HI
-        overlay_ok    = m.pred_overlay_match >= CGUIDE_OVERLAY_MIN
+        # Note: add 1e-6 tolerance on gate_hi to handle floating-point boundary when
+        # gate exactly hits max_gate ceiling (e.g. tanh(x) == 0.35000000000000003).
+        gate_in_range = CGUIDE_GATE_LO <= m.gate_open <= CGUIDE_GATE_HI + 1e-6
+        overlay_ok    = m.pred_overlay_match >= CGUIDE_OVERLAY_MIN - 1e-6
         balance_ok    = m.entity_balance >= CGUIDE_BALANCE_MIN
         cosF_ok       = (not m.feature_sep_active) or (m.cos_F_overlap <= CGUIDE_COS_MAX)
         m.c_guide_pass = gate_in_range and overlay_ok and balance_ok and cosF_ok
