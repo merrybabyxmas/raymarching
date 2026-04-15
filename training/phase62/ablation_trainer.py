@@ -326,10 +326,18 @@ class AblationTrainer:
         else:
             return sample[0], sample[1], sample[2], sample[3], None, sample[4], None
 
+    def _unpack_solo_frames(self, sample):
+        """Return (frames_solo0, frames_solo1) or (None, None) if unavailable."""
+        if isinstance(sample, dict):
+            return sample.get("frames_solo0"), sample.get("frames_solo1")
+        # Tuple-style samples don't carry solo frames
+        return None, None
+
     def _train_step(self, sample, data_idx: int, epoch: int, current_epoch: int = 0,
                     debug_step: bool = False, step_idx: int = 0) -> Optional[Dict]:
         frames_np, depth_np, depth_orders, meta, sample_dir, entity_masks, visible_masks = \
             self._unpack_sample(sample)
+        frames_solo0, frames_solo1 = self._unpack_solo_frames(sample)
 
         toks_e0_t, toks_e1_t, full_prompt = _get_entity_tokens_with_fallback(
             self.pipe, meta, self.device)
@@ -469,6 +477,80 @@ class AblationTrainer:
             self.system.clear_guides()
             l_diff = torch.tensor(0.0, device=self.device)
 
+        # v38: Entity-isolated diffusion loss (L_iso)
+        # Forces UNet to generate each entity separately when solo frames are available.
+        # Only active in stage2/3 when use_diffusion=True and lambda_iso > 0.
+        # Run every 4 steps to limit additional compute (~25% overhead vs full every step).
+        l_iso = torch.tensor(0.0, device=self.device)
+        lambda_iso = float(getattr(self.train_cfg, "lambda_iso", 0.0))
+        _iso_run = (
+            lambda_iso > 0.0 and
+            use_diffusion and
+            stage in ("stage2", "stage3") and
+            (step_idx % 4 == 0) and  # every 4 steps to limit overhead
+            vol_outputs.entity_probs is not None
+        )
+        if _iso_run:
+            _iso_losses = []
+            _solo_frames_list = [frames_solo0, frames_solo1]
+            for _ent_idx in range(2):
+                _solo_frames = _solo_frames_list[_ent_idx]
+                if _solo_frames is None:
+                    continue
+                try:
+                    # Encode solo frames as latents (entity rendered alone)
+                    with torch.no_grad():
+                        _solo_latents = encode_frames_to_latents(
+                            self.pipe, _solo_frames, self.device)
+                    _solo_noise = torch.randn_like(_solo_latents)
+                    _solo_noisy = self.pipe.scheduler.add_noise(_solo_latents, _solo_noise, t)
+
+                    # Build masked entity_probs: zero out the OTHER entity
+                    # entity_probs shape: (B, 2, K, H, W)
+                    _ep_masked = vol_outputs.entity_probs.clone()
+                    _other_idx = 1 - _ent_idx
+                    _ep_masked[:, _other_idx] = 0.0  # mask out the other entity
+
+                    # Build masked VolumeOutputs for the isolated pass
+                    from training.phase62.objectives.base import VolumeOutputs as _VO
+                    _vol_masked = _VO(
+                        entity_probs=_ep_masked,
+                        entity_logits=vol_outputs.entity_logits,
+                        fg_logit=vol_outputs.fg_logit,
+                        fg_spatial_logit=vol_outputs.fg_spatial_logit,
+                        id_logits=vol_outputs.id_logits,
+                        visible_class=vol_outputs.visible_class,
+                        visible=vol_outputs.visible,
+                        amodal=vol_outputs.amodal,
+                        front_probs=vol_outputs.front_probs,
+                        back_probs=vol_outputs.back_probs,
+                    )
+
+                    # Re-project and assemble guide with masked entity_probs
+                    _vol_masked_proj, _guides_iso = self.system.project_and_assemble(
+                        _vol_masked, F_g, F_0, F_1)
+
+                    # Run isolated diffusion pass
+                    self.system.set_guides(_guides_iso)
+                    self.backbone_mgr.reset_slot_store()
+                    _T_solo = min(_solo_frames.shape[0], T_frames)
+                    with torch.autocast(device_type="cuda", dtype=torch.float16):
+                        _solo_pred = self.pipe.unet(
+                            _solo_noisy, t, encoder_hidden_states=enc_full).sample
+
+                    _solo_noise_t = _solo_noise[:, :, :_T_solo].float()
+                    _solo_pred_t = _solo_pred[:, :, :_T_solo].float()
+                    _l_iso_e = loss_diffusion(_solo_pred_t, _solo_noise_t)
+                    _iso_losses.append(_l_iso_e)
+
+                    self.system.clear_guides()
+                except Exception as _iso_e:
+                    self.system.clear_guides()
+                    continue  # non-fatal: skip this entity's isolated pass
+
+            if _iso_losses:
+                l_iso = torch.stack(_iso_losses).mean()
+
         # Total loss
         la_vol = float(getattr(self.train_cfg, "la_vol", 2.0))
         la_diff = float(getattr(self.train_cfg, "la_diff", 1.0))
@@ -495,6 +577,10 @@ class AblationTrainer:
             gate_open, _ = self.contract._gate_open(self.system.assembler)
             diff_weight = self.contract.adaptive_diff_weight(diff_weight, gate_open)
             loss = diff_weight * la_diff * l_diff + la_vol * 0.25 * l_struct
+
+        # v38: Add entity-isolated loss (L_iso) — only in stage2/3 when l_iso > 0
+        if lambda_iso > 0.0 and l_iso.item() > 0.0:
+            loss = loss + lambda_iso * l_iso
 
         # v18: Gate push loss — directly maximises tanh(gate_param) to bypass the
         # std-normalisation in inject_guide_into_unet_features which cancels the gate
@@ -588,6 +674,7 @@ class AblationTrainer:
             "loss": float(loss.item()),
             "l_diff": float(l_diff.item()),
             "l_struct": float(l_struct.item()),
+            "l_iso": float(l_iso.item()),
             "stage": stage,
             "acc_overall": acc_overall,
             "acc_entity": acc_entity,
@@ -635,6 +722,7 @@ class AblationTrainer:
         amo_dice_e0, amo_dice_e1 = [], []  # v25: amodal Dice per entity
         compacts_e0, compacts_e1 = [], []  # per-sample compact for averaged metric
         lcc_e0_vals, lcc_e1_vals = [], []  # v26: LCC per sample for stable averaged metric
+        cos_F_list: list = []             # v38: cos(F_0, F_1) at entity overlap region
 
         for vi in self.val_idx:
             try:
@@ -794,6 +882,33 @@ class AblationTrainer:
                                 amo_dice_e0.append(d0)
                                 amo_dice_e1.append(d1)
 
+                # v38: cos(F_0, F_1) at entity overlap region
+                # overlap = pixels where BOTH entity GT masks are nonzero.
+                # Low value = good feature separation; high = model conflates entities.
+                if F_0 is not None and F_1 is not None and entity_masks.shape[0] > 0:
+                    try:
+                        B_cos = min(F_0.shape[0], entity_masks.shape[0])
+                        if B_cos > 0:
+                            # F_0, F_1: (B, S, D) — spatial features per frame
+                            f0 = F.normalize(F_0[:B_cos].float(), dim=-1, eps=1e-6)
+                            f1 = F.normalize(F_1[:B_cos].float(), dim=-1, eps=1e-6)
+                            cos_all = (f0 * f1).sum(dim=-1)  # (B, S)
+
+                            # Build overlap mask from entity_masks (T, 2, S)
+                            m0_cos = torch.from_numpy(
+                                entity_masks[:B_cos, 0].astype(np.float32)).to(self.device)
+                            m1_cos = torch.from_numpy(
+                                entity_masks[:B_cos, 1].astype(np.float32)).to(self.device)
+                            overlap_cos = (m0_cos > 0.5) & (m1_cos > 0.5)  # (B, S)
+
+                            if overlap_cos.any():
+                                cos_at_overlap = cos_all[overlap_cos]
+                                cos_F_list.append(float(cos_at_overlap.mean().clamp(0, 1).item()))
+                            else:
+                                cos_F_list.append(float(cos_all.mean().clamp(0, 1).item()))
+                    except Exception:
+                        pass  # non-fatal
+
             except Exception as e:
                 print(f"  [val warn] idx={vi}: {e}", flush=True)
                 continue
@@ -825,6 +940,8 @@ class AblationTrainer:
         # v26: store averaged LCC for contract (more stable than single-sample)
         self._val_lcc_e0 = _avg(lcc_e0_vals)
         self._val_lcc_e1 = _avg(lcc_e1_vals)
+        # v38: store averaged cos_F_overlap (computed inline above, not via Phase62Evaluator)
+        self._val_cos_F_overlap = _avg(cos_F_list)
 
         # ── Compute last vol_outputs for contract (reuse last val sample)
         _contract_vol = getattr(self, "_last_val_vol_outputs", None)
@@ -841,7 +958,7 @@ class AblationTrainer:
                     "val_iou_e1":    val_iou_e1,
                     "val_diff_mse":  _avg(diff_losses),
                     "val_compact":   val_compact,
-                    # v22 new metrics (computed by Phase62Evaluator or set to 0 if not available)
+                    # v22/v38 new metrics
                     "val_amo_dice_e0": getattr(self, "_val_amo_dice_e0", 0.0),
                     "val_amo_dice_e1": getattr(self, "_val_amo_dice_e1", 0.0),
                     "val_cos_F_overlap": getattr(self, "_val_cos_F_overlap", 0.0),
@@ -879,13 +996,19 @@ class AblationTrainer:
             f"n={len(diff_losses)}",
             flush=True)
 
-        # GIF
+        # GIF + isolated rollouts (v38: C_render metrics)
+        render_metrics = None
         try:
             probe = self.dataset[self.val_idx[0]]
             if isinstance(probe, dict):
-                probe_meta, probe_masks, probe_frames = probe["meta"], probe["entity_masks"], probe["frames"]
+                probe_meta = probe["meta"]
+                probe_masks = probe["entity_masks"]
+                probe_frames = probe["frames"]
+                probe_solo0 = probe.get("frames_solo0")
+                probe_solo1 = probe.get("frames_solo1")
             else:
                 probe_meta, probe_masks, probe_frames = probe[3], probe[4], probe[0]
+                probe_solo0 = probe_solo1 = None
 
             toks_e0_pt, toks_e1_pt, probe_prompt = \
                 _get_entity_tokens_with_fallback(self.pipe, probe_meta, self.device)
@@ -902,8 +1025,92 @@ class AblationTrainer:
                 rollout_result, eval_out_dir, prefix=f"eval_epoch{epoch:03d}")
             for name, path in paths.items():
                 print(f"  [gif] {name}: {path}", flush=True)
+
+            # v38: Isolated rollouts for C_render evaluation
+            # Only run if solo frames are available (to compute render_iou_min)
+            train_cfg = self.train_cfg
+            height = getattr(train_cfg, 'height', 256)
+            width = getattr(train_cfg, 'width', 256)
+            iso_result_e0 = None
+            iso_result_e1 = None
+            try:
+                iso_result_e0 = self.rollout_runner.generate_isolated_rollout(
+                    self.pipe, self.system, self.backbone_mgr,
+                    probe_prompt, entity_idx=0, config=self.config, device=self.device,
+                    toks_e0=toks_e0_pt, toks_e1=toks_e1_pt)
+                # Save isolated rollout GIF
+                if iso_result_e0 and iso_result_e0.get("frames"):
+                    import imageio.v2 as _iio2
+                    iso_gif = eval_out_dir / f"eval_epoch{epoch:03d}_iso_e0.gif"
+                    _iio2.mimwrite(str(iso_gif), iso_result_e0["frames"], fps=8, loop=0)
+                    print(f"  [gif] iso_e0: {iso_gif}", flush=True)
+            except Exception as _ie:
+                print(f"  [warn] isolated rollout e0 failed: {_ie}", flush=True)
+            try:
+                iso_result_e1 = self.rollout_runner.generate_isolated_rollout(
+                    self.pipe, self.system, self.backbone_mgr,
+                    probe_prompt, entity_idx=1, config=self.config, device=self.device,
+                    toks_e0=toks_e0_pt, toks_e1=toks_e1_pt)
+                if iso_result_e1 and iso_result_e1.get("frames"):
+                    import imageio.v2 as _iio2
+                    iso_gif = eval_out_dir / f"eval_epoch{epoch:03d}_iso_e1.gif"
+                    _iio2.mimwrite(str(iso_gif), iso_result_e1["frames"], fps=8, loop=0)
+                    print(f"  [gif] iso_e1: {iso_gif}", flush=True)
+            except Exception as _ie:
+                print(f"  [warn] isolated rollout e1 failed: {_ie}", flush=True)
+
+            # Compute C_render metrics if any rollout succeeded
+            if iso_result_e0 is not None or iso_result_e1 is not None:
+                render_metrics = self.rollout_runner.compute_render_metrics(
+                    composite_result=rollout_result,
+                    iso_result_e0=iso_result_e0,
+                    iso_result_e1=iso_result_e1,
+                    solo_frames_e0=probe_solo0,
+                    solo_frames_e1=probe_solo1,
+                    entity_masks=probe_masks,
+                    height=height,
+                    width=width,
+                )
+                print(
+                    f"  [render] P_2obj={render_metrics['P_2obj']:.3f}  "
+                    f"chimera={render_metrics['R_chimera']:.3f}  "
+                    f"M_id={render_metrics['M_id_min']:.3f}  "
+                    f"iou_min={render_metrics['render_iou_min']:.3f}",
+                    flush=True)
+
         except Exception as e:
             print(f"  [warn] GIF failed: {e}", flush=True)
+
+        # Re-compute contract with render_metrics if available
+        if render_metrics is not None:
+            _contract_vol = getattr(self, "_last_val_vol_outputs", None)
+            _contract_gt_vis = getattr(self, "_last_val_gt_visible", None)
+            if _contract_vol is not None and _contract_gt_vis is not None:
+                _cstage = self._get_stage(epoch)
+                _contract_metrics = self.contract.compute(
+                    vol_outputs=_contract_vol,
+                    assembler=self.system.assembler,
+                    gt_visible=_contract_gt_vis,
+                    val_metrics={
+                        "val_iou_min":   val_iou_min,
+                        "val_iou_e0":    val_iou_e0,
+                        "val_iou_e1":    val_iou_e1,
+                        "val_diff_mse":  _avg(diff_losses),
+                        "val_compact":   val_compact,
+                        "val_amo_dice_e0": getattr(self, "_val_amo_dice_e0", 0.0),
+                        "val_amo_dice_e1": getattr(self, "_val_amo_dice_e1", 0.0),
+                        "val_cos_F_overlap": getattr(self, "_val_cos_F_overlap", 0.0),
+                        "val_lcc_e0": getattr(self, "_val_lcc_e0", 1.0),
+                        "val_lcc_e1": getattr(self, "_val_lcc_e1", 1.0),
+                        "val_pass_rate_clips": getattr(self, "_val_pass_rate_clips", 0.0),
+                    },
+                    epoch=epoch,
+                    stage=_cstage,
+                    render_metrics=render_metrics,
+                )
+                self._last_contract_metrics = _contract_metrics
+                print(f"  [contract+render] recomputed with C_render metrics", flush=True)
+                self.contract.log(_contract_metrics)
 
         return result
 

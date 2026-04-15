@@ -45,8 +45,10 @@ class Phase62DatasetAdapter:
             meta:          dict with keyword0, keyword1, prompt etc.
             entity_masks:  (T, 2, S) float32  where S = H_mask * W_mask
             visible_masks: (T, 2, S) float32
-            solo_e0:       (T, H, W, 3) uint8 or None
-            solo_e1:       (T, H, W, 3) uint8 or None
+            solo_e0:       (T, H, W, 3) uint8 or None  — entity 0 rendered alone (legacy key)
+            solo_e1:       (T, H, W, 3) uint8 or None  — entity 1 rendered alone (legacy key)
+            frames_solo0:  (T, H, W, 3) uint8 or None  — entity 0 solo frames (v38 key)
+            frames_solo1:  (T, H, W, 3) uint8 or None  — entity 1 solo frames (v38 key)
         """
         sample = self.dataset[idx]
 
@@ -62,6 +64,12 @@ class Phase62DatasetAdapter:
             solo_e0 = None
             solo_e1 = None
 
+        # frames_solo0/1: aliases for solo_e0/e1 using new naming convention.
+        # These are loaded from solo_entity0/ and solo_entity1/ subdirectories.
+        # When the directories don't exist, ObjaverseDatasetPhase40 sets them to None.
+        frames_solo0 = solo_e0  # (T, H, W, 3) uint8 or None
+        frames_solo1 = solo_e1  # (T, H, W, 3) uint8 or None
+
         return {
             "frames": frames_np,
             "depth": depth_np,
@@ -72,6 +80,8 @@ class Phase62DatasetAdapter:
             "visible_masks": visible_masks,
             "solo_e0": solo_e0,
             "solo_e1": solo_e1,
+            "frames_solo0": frames_solo0,  # List[PIL.Image] equivalent: (T, H, W, 3) uint8 or None
+            "frames_solo1": frames_solo1,  # List[PIL.Image] equivalent: (T, H, W, 3) uint8 or None
         }
 
     @property

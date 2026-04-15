@@ -1,0 +1,86 @@
+# B1 v38: Entity-isolated training — real success criteria
+# lambda_iso activates in stage2/3: forces UNet to generate isolated entities
+#
+# Key changes from v37:
+#   1. lambda_iso = 1.0: entity-isolated diffusion loss (solo_entity0/1 as targets)
+#      - Run every 4 steps to limit overhead (~25% extra compute)
+#      - Forces UNet to generate each entity without the other interfering
+#   2. Thresholds restored to REAL SPEC (not calibrated relaxed values):
+#      - CTOPO_DVIS_MIN = 0.25 (was 0.22)
+#      - CTOPO_DAMO_MIN = 0.40 (was 0.15)
+#      - CTOPO_COMPACT_MIN = 0.60 (was 0.40)
+#      - CTOPO_LCC_MIN = 0.85 (was 0.50)
+#      - CGUIDE_WINNER_MAX = 0.45 (was 0.58)
+#   3. C_render now computed via isolated rollouts (no CLIP, IoU-based proxy)
+#   4. cosF overlap computed in ablation_trainer eval loop (inline, not via evaluator.py)
+#
+# Hypothesis: L_iso teaches the UNet to separate entity-specific regions,
+# improving LCC (more compact per-entity blobs) and D_vis (better visible separation).
+# The entity isolation signal is stronger than pure structural losses when entities overlap.
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+  lambda_iso: 1.0  # entity-isolated diffusion loss weight (v38)
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0

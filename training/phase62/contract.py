@@ -1,24 +1,24 @@
 """
-Phase 62 — Full 5-Contract System (v22, 2026-04-14; thresholds calibrated 2026-04-14)
-======================================================================================
+Phase 62 — Full 5-Contract System (v22, 2026-04-14; thresholds restored to real spec 2026-04-14)
+=================================================================================================
 
 Success ⟺ C_topo ∧ C_guide ∧ C_diff ∧ C_render ∧ C_robust
 
 C_topo  (3D volume shape quality):
-  - D_vis_min  ≥ 0.22   min(D_vis_e0, D_vis_e1): projected visible Dice per entity
-                         [was 0.25; model achieves 0.21-0.24]
-  - D_amo_min  ≥ 0.15   min(D_amo_e0, D_amo_e1): amodal Dice per entity
-                         [was 0.40; oracle shows cat-cat entities at SAME depth → D_amo≈0 in GT]
-  - compactness ≥ 0.40  depth entropy concentration
-                         [was 0.60; oracle GT max=0.33 — threshold was provably impossible.
-                          Model achieves 0.40-0.47 due to depth prior initialization.]
-  - LCC_min    ≥ 0.60   largest connected component ratio per entity
-                         [was 0.85; model achieves 0.60-0.63 in stage2; 0.85 is unachievable]
+  - D_vis_min  ≥ 0.25   min(D_vis_e0, D_vis_e1): projected visible Dice per entity
+                         [real spec; was temporarily lowered to 0.22 for calibration]
+  - D_amo_min  ≥ 0.40   min(D_amo_e0, D_amo_e1): amodal Dice per entity
+                         [real spec; was temporarily lowered to 0.15 for calibration]
+  - compactness ≥ 0.60  depth entropy concentration
+                         [real spec; was temporarily lowered to 0.40 for calibration]
+  - LCC_min    ≥ 0.85   largest connected component ratio per entity
+                         [real spec; was temporarily lowered to 0.50/0.60 for calibration]
 
 C_guide (guide injection quality):
   - 0.10 ≤ gate ≤ 0.35  guide gate in useful range (not clamped floor, not exploding)
   - overlay_iou ≥ 0.35  pred fg aligns with GT fg
   - winner_ratio ≤ 0.45 no entity dominates > 55% of fg pixels
+                         [real spec; was temporarily raised to 0.58 for calibration]
   - cos_F_overlap ≤ 0.10 F_0/F_1 feature separation at overlap region
 
 C_diff  (diffusion stability):
@@ -55,30 +55,20 @@ except ImportError:
 
 # ─── Thresholds ──────────────────────────────────────────────────────────────
 
-# C_topo
-# Thresholds calibrated 2026-04-14 via oracle GT analysis:
-#   - compact: oracle max=0.33 (cats at same depth; depth spread over all 8 bins)
-#     0.60 was impossible. 0.40 matches depth-prior initialization floor (model consistently meets).
-#   - D_amo: oracle shows cat-cat entities peak at same depth bin → D_amo≈0 in GT.
-#     0.40 was impossible. 0.15 requires partial learned separation.
-#   - D_vis: model achieves 0.21-0.24; 0.25 was just above reach. 0.22 is achievable.
-#   - LCC: v36 empirical analysis (2026-04-15) shows that with proper entity separation
-#     (overlay≥0.35, winner≤0.55), LCC is structurally at 0.52-0.58 due to depth spread.
-#     When entities ARE well-separated, each entity's 3D blob occupies small spatial regions
-#     (~15-17% of 16x16 grid) spread across depth bins → fragmentation.
-#     LCC≥0.60 was ONLY achieved in stage2 before entity separation was established.
-#     v36 consistently: LCC=0.527-0.584 with healthy entity balance. 0.50 is achievable.
-#     Same calibration issue as compact (oracle max didn't match original threshold).
-CTOPO_DVIS_MIN       = 0.22   # was 0.25
-CTOPO_DAMO_MIN       = 0.15   # was 0.40
-CTOPO_COMPACT_MIN    = 0.40   # was 0.60
-CTOPO_LCC_MIN        = 0.50   # was 0.60; lowered 2026-04-15 (v36 empirical: 0.527-0.584 with good entity separation)
+# C_topo — REAL SPEC (restored 2026-04-14, not calibrated/relaxed values)
+# These are the target thresholds the model must genuinely achieve.
+# Previous calibrated values are noted in comments; do not lower these again
+# without a concrete architectural reason.
+CTOPO_DVIS_MIN       = 0.25   # real spec (was temporarily 0.22 during calibration)
+CTOPO_DAMO_MIN       = 0.40   # real spec (was temporarily 0.15 during calibration)
+CTOPO_COMPACT_MIN    = 0.60   # real spec (was temporarily 0.40 during calibration)
+CTOPO_LCC_MIN        = 0.85   # real spec (was temporarily 0.50/0.60 during calibration)
 
-# C_guide
+# C_guide — REAL SPEC
 CGUIDE_GATE_LO       = 0.10
 CGUIDE_GATE_HI       = 0.35
 CGUIDE_OVERLAY_MIN   = 0.35
-CGUIDE_WINNER_MAX    = 0.58  # was 0.55; v36 empirical: healthy balance=0.50-0.56, collapse=0.66+; 0.55 was too tight (margin 0.014 from healthy max)
+CGUIDE_WINNER_MAX    = 0.45   # real spec (was temporarily 0.58 during calibration)
 CGUIDE_COS_MAX       = 0.10
 
 # C_diff
@@ -432,9 +422,13 @@ class DebugContract:
         else:
             m.consecutive_pass = 0
 
+        # pass_rate_clips == 0.0 means not yet computed (no clips evaluated).
+        # Only enforce CROBUST_CLIPS_MIN when we have actual clip evaluation data.
+        # When pass_rate_clips > 0.0, it must meet the threshold (real enforcement).
+        clips_ok = (m.pass_rate_clips == 0.0) or (m.pass_rate_clips >= CROBUST_CLIPS_MIN)
         m.c_robust_pass = (
             m.consecutive_pass   >= CROBUST_CONSEC_MIN and
-            (m.pass_rate_clips   >= CROBUST_CLIPS_MIN or m.pass_rate_clips == 0.0)
+            clips_ok
         )
 
         m.all_pass = m.c_topo_pass and m.c_guide_pass and m.c_diff_pass and m.c_render_pass
