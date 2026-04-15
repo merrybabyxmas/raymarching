@@ -419,6 +419,31 @@ class AblationTrainer:
 
         if use_diffusion:
             vol_outputs, guides = self.system.project_and_assemble(vol_outputs, F_g, F_0, F_1)
+            # v39b: log guide feature norm and effective injected delta norm
+            # guide_feature_norm = mean L2 norm of assembled guide tensors (before gate)
+            # injected_delta_norm = mean norm after gate scaling (what actually reaches UNet)
+            _guide_feature_norm = 0.0
+            _injected_delta_norm = 0.0
+            if guides:
+                _norms = []
+                _delta_norms = []
+                for _bn, _gfeat in guides.items():
+                    _gn = float(_gfeat.detach().norm(dim=1).mean().item())
+                    _norms.append(_gn)
+                    # Effective delta = guide_norm * tanh(gate)
+                    if hasattr(self.system.assembler, "guide_gates") and _bn in self.system.assembler.guide_gates:
+                        _gate_val = float(torch.tanh(self.system.assembler.guide_gates[_bn]).item())
+                        _delta_norms.append(_gn * abs(_gate_val))
+                    else:
+                        _delta_norms.append(_gn)
+                _guide_feature_norm = sum(_norms) / len(_norms) if _norms else 0.0
+                _injected_delta_norm = sum(_delta_norms) / len(_delta_norms) if _delta_norms else 0.0
+            # Accumulate per-step into epoch-level running average (stored on self)
+            if not hasattr(self, "_step_guide_norm_acc"):
+                self._step_guide_norm_acc = []
+                self._step_delta_norm_acc = []
+            self._step_guide_norm_acc.append(_guide_feature_norm)
+            self._step_delta_norm_acc.append(_injected_delta_norm)
         else:
             vol_outputs = self.system.projector(vol_outputs)
             guides = {}
@@ -948,6 +973,18 @@ class AblationTrainer:
         _contract_gt_vis = getattr(self, "_last_val_gt_visible", None)
         if _contract_vol is not None and _contract_gt_vis is not None:
             _cstage = self._get_stage(epoch)
+            # v39b: pull accumulated guide/delta norms from training steps this epoch
+            _guide_norm_avg = float(sum(self._step_guide_norm_acc) / max(1, len(self._step_guide_norm_acc))) \
+                if getattr(self, "_step_guide_norm_acc", None) else 0.0
+            _delta_norm_avg = float(sum(self._step_delta_norm_acc) / max(1, len(self._step_delta_norm_acc))) \
+                if getattr(self, "_step_delta_norm_acc", None) else 0.0
+            # Reset accumulators for next epoch
+            self._step_guide_norm_acc = []
+            self._step_delta_norm_acc = []
+            # v39c: feature_sep_active = la_feature_sep > 0
+            _feature_sep_active = float(getattr(self.train_cfg, "la_feature_sep", 0.0)) > 0.0
+            # scene_type: "occ" for depth-separated data, "col" for same-depth (default)
+            _scene_type = getattr(self.train_cfg, "scene_type", "col")
             _contract_metrics = self.contract.compute(
                 vol_outputs=_contract_vol,
                 assembler=self.system.assembler,
@@ -965,9 +1002,15 @@ class AblationTrainer:
                     "val_lcc_e0": getattr(self, "_val_lcc_e0", 1.0),
                     "val_lcc_e1": getattr(self, "_val_lcc_e1", 1.0),
                     "val_pass_rate_clips": getattr(self, "_val_pass_rate_clips", 0.0),
+                    # v39b: injection path diagnostics
+                    "val_guide_feature_norm": _guide_norm_avg,
+                    "val_injected_delta_norm": _delta_norm_avg,
+                    # v39c: feature sep flag
+                    "feature_sep_active": _feature_sep_active,
                 },
                 epoch=epoch,
                 stage=_cstage,
+                scene_type=_scene_type,
             )
             self._last_contract_metrics = _contract_metrics
             self.contract.log(_contract_metrics)
@@ -1087,6 +1130,10 @@ class AblationTrainer:
             _contract_gt_vis = getattr(self, "_last_val_gt_visible", None)
             if _contract_vol is not None and _contract_gt_vis is not None:
                 _cstage = self._get_stage(epoch)
+                _feature_sep_active2 = float(getattr(self.train_cfg, "la_feature_sep", 0.0)) > 0.0
+                _scene_type2 = getattr(self.train_cfg, "scene_type", "col")
+                _guide_norm_r = getattr(self, "_last_guide_norm_for_contract", 0.0)
+                _delta_norm_r = getattr(self, "_last_delta_norm_for_contract", 0.0)
                 _contract_metrics = self.contract.compute(
                     vol_outputs=_contract_vol,
                     assembler=self.system.assembler,
@@ -1103,9 +1150,13 @@ class AblationTrainer:
                         "val_lcc_e0": getattr(self, "_val_lcc_e0", 1.0),
                         "val_lcc_e1": getattr(self, "_val_lcc_e1", 1.0),
                         "val_pass_rate_clips": getattr(self, "_val_pass_rate_clips", 0.0),
+                        "val_guide_feature_norm": _guide_norm_r,
+                        "val_injected_delta_norm": _delta_norm_r,
+                        "feature_sep_active": _feature_sep_active2,
                     },
                     epoch=epoch,
                     stage=_cstage,
+                    scene_type=_scene_type2,
                     render_metrics=render_metrics,
                 )
                 self._last_contract_metrics = _contract_metrics

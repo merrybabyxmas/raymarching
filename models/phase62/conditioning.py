@@ -26,6 +26,7 @@ Guide families:
 """
 from __future__ import annotations
 
+import math
 from typing import Callable, Dict, List, Optional
 
 import torch
@@ -76,6 +77,7 @@ class GuideFeatureAssembler(nn.Module):
         n_classes: int = 3,
         inject_config: str = "mid_up2",
         guide_family: str = "dual",
+        gate_warm_start: float = 0.0,
     ):
         super().__init__()
         self.feat_dim = feat_dim
@@ -110,12 +112,16 @@ class GuideFeatureAssembler(nn.Module):
                 nn.Conv2d(in_ch, block_dim, kernel_size=1, bias=True),
             )
 
-        # Learnable scale gate initialised to 0.
-        # gate=0 → tanh(0)=0 → guide=0 at init, UNet unperturbed.
-        # v22: gate is applied AFTER amplitude normalisation (not inside forward),
-        # so the normalisation cannot cancel gate from the gradient.
+        # Learnable scale gate.
+        # gate_warm_start=0.0: tanh(0)=0 → guide=0 at init (conservative, default).
+        # gate_warm_start>0: atanh(warm_start) → gate starts at warm_start value.
+        # v22: gate applied AFTER amplitude normalisation → clean gradient path.
+        # v39b: gate_warm_start support — prevents gate from being stuck near 0 in stage2.
+        _ws = float(gate_warm_start)
+        _ws = max(0.0, min(_ws, 0.95))   # clamp to valid tanh range
+        _gate_init = math.atanh(_ws) if _ws > 0.0 else 0.0
         self.guide_gates = nn.ParameterDict({
-            bn: nn.Parameter(torch.zeros(1)) for bn in block_names
+            bn: nn.Parameter(torch.full((1,), _gate_init)) for bn in block_names
         })
 
         # Current-batch gate values (set during forward, read by injection hooks).

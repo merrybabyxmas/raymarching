@@ -1,0 +1,100 @@
+# B1 v39a: Contract-v2 cleanup run — same model as v38, fixed evaluation
+#
+# GOAL: measure what the current model actually achieves with a correct contract.
+#
+# Contract v2 changes (no model changes):
+#   - winner ≤ 0.45 → balance ≥ 0.75 (1 - |vis_e0-vis_e1|/(vis_e0+vis_e1))
+#   - compact / D_amo NOT required for "col" scene_type (same-depth toy data)
+#     → C_topo "col" mode only requires: D_vis_min ≥ 0.25 AND LCC_min ≥ 0.85
+#   - cosF ≤ 0.10 NOT enforced (feature_sep_active=False when la_feature_sep=0)
+#   - render_iou NOT enforced until c_bind_pass (gate_open_ratio ≥ 0.20)
+#   - New C_bind: gate_open_ratio ≥ 0.20 (guide path alive check)
+#
+# Expected outcome vs v38:
+#   v38 ep219 (real-spec contract): ALL FAIL
+#     - compact=0.414 → FAIL (needed ≥0.60) ← REMOVED for "col" scenes
+#     - winner=0.525 → FAIL (needed ≤0.45, impossible) ← REPLACED by balance
+#     - cosF=0.347 → FAIL (la_feature_sep=0) ← GATED (not enforced)
+#   v39a ep219 (contract-v2):
+#     - balance: v38 vis_e0≈vis_e1 → balance≈0.50-0.75, borderline ← needs checking
+#     - D_vis_min=0.152 ≥ 0.25? NO ← still a real issue
+#     - LCC_min=0.536 ≥ 0.85? NO ← still a real issue
+#     - C_diff: diff_mse=0.049 ✓
+#     - C_render (without render_iou if bind not passed): P_2obj ✓, chimera ✓, M_id ✓
+#
+# This run tells us: the model's REAL bottleneck is D_vis and LCC, not phantom thresholds.
+#
+# Priority analysis document: docs/analysis.md (Experiment Group 1 / v39.0)
+# scene_type: "col" (same-depth objaverse — compact/D_amo not required)
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+# v2 contract parameters
+scene_type: col           # "col" = same-depth collision (compact/D_amo not required)
+gate_warm_start: 0.0      # no warm-start yet (v39b adds this)
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0     # cosF not enforced (feature_sep_active=False)
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0

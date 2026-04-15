@@ -45,6 +45,7 @@ class Phase62System(nn.Module):
             bg_class=0,
         )
 
+        gate_warm_start = float(getattr(config, "gate_warm_start", 0.0))
         self.assembler = GuideFeatureAssembler(
             feat_dim=feat_dim,
             hidden=config.hidden_dim,
@@ -53,6 +54,7 @@ class Phase62System(nn.Module):
             n_classes=config.n_classes,
             inject_config=config.inject_config,
             guide_family=guide_family,
+            gate_warm_start=gate_warm_start,
         )
 
         self.injection_mgr = GuideInjectionManager(

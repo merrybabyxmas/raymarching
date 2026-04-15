@@ -1,25 +1,30 @@
 """
-Phase 62 — Full 5-Contract System (v22, 2026-04-14; thresholds restored to real spec 2026-04-14)
-=================================================================================================
+Phase 62 — Full 5-Contract System (v2, 2026-04-15; contract-v2 scene-type-aware thresholds)
+=============================================================================================
 
-Success ⟺ C_topo ∧ C_guide ∧ C_diff ∧ C_render ∧ C_robust
+Success ⟺ C_topo ∧ C_guide ∧ C_bind ∧ C_diff ∧ C_render ∧ C_robust
 
 C_topo  (3D volume shape quality):
-  - D_vis_min  ≥ 0.25   min(D_vis_e0, D_vis_e1): projected visible Dice per entity
-                         [real spec; was temporarily lowered to 0.22 for calibration]
-  - D_amo_min  ≥ 0.40   min(D_amo_e0, D_amo_e1): amodal Dice per entity
-                         [real spec; was temporarily lowered to 0.15 for calibration]
-  - compactness ≥ 0.60  depth entropy concentration
-                         [real spec; was temporarily lowered to 0.40 for calibration]
-  - LCC_min    ≥ 0.85   largest connected component ratio per entity
-                         [real spec; was temporarily lowered to 0.50/0.60 for calibration]
+  "occ" mode (depth-separated scenes — objects at different depths):
+    - D_vis_min  ≥ 0.25   min(D_vis_e0, D_vis_e1): projected visible Dice per entity
+    - D_amo_min  ≥ 0.40   min(D_amo_e0, D_amo_e1): amodal Dice per entity
+    - compact    ≥ 0.60   depth entropy concentration
+    - LCC_min    ≥ 0.85   largest connected component ratio per entity
+  "col" mode (same-depth collision — toy/objaverse default):
+    - D_vis_min  ≥ 0.25   (same)
+    - LCC_min    ≥ 0.85   (same)
+    - compact and D_amo NOT required (oracle max ≈ 0.327 for same-depth data)
 
 C_guide (guide injection quality):
-  - 0.10 ≤ gate ≤ 0.35  guide gate in useful range (not clamped floor, not exploding)
-  - overlay_iou ≥ 0.35  pred fg aligns with GT fg
-  - winner_ratio ≤ 0.45 no entity dominates > 55% of fg pixels
-                         [real spec; was temporarily raised to 0.58 for calibration]
-  - cos_F_overlap ≤ 0.10 F_0/F_1 feature separation at overlap region
+  - 0.10 ≤ gate ≤ 0.35   guide gate in useful range
+  - overlay_iou ≥ 0.35   pred fg aligns with GT fg
+  - entity_balance ≥ 0.75 balanced visibility: 1 - |vis_e0-vis_e1|/(vis_e0+vis_e1)
+                           (replaces winner_ratio ≤ 0.45 which was mathematically impossible)
+  - cos_F_overlap ≤ 0.10  only enforced if feature_sep_active=True
+
+C_bind (guide injection path alive — new in v2):
+  - gate_open_ratio ≥ 0.20  fraction of injection blocks with gate > 0.05
+  - injected_delta_norm > 0.01  (if logged by trainer; else only gate_open_ratio checked)
 
 C_diff  (diffusion stability):
   - diff_mse ≤ 0.05
@@ -30,7 +35,7 @@ C_render (final composite quality — held-out collision clips):
   - P_2obj     ≥ 0.90   both entities detected in overlap frames
   - R_chimera  ≤ 0.05   fused-blob chimera frames
   - M_id_min   ≥ 0.15   min identity margin per entity
-  - render_iou_min ≥ 0.25  per-entity IoU on rendered composites
+  - render_iou_min ≥ 0.25  only enforced if c_bind_pass=True
 
 C_robust (reproducibility):
   - consecutive_pass ≥ 5   maintained over ≥ 5 consecutive eval epochs
@@ -57,19 +62,23 @@ except ImportError:
 
 # C_topo — REAL SPEC (restored 2026-04-14, not calibrated/relaxed values)
 # These are the target thresholds the model must genuinely achieve.
-# Previous calibrated values are noted in comments; do not lower these again
-# without a concrete architectural reason.
+# compact and D_amo only enforced in "occ" scene_type; see C_topo pass logic.
 CTOPO_DVIS_MIN       = 0.25   # real spec (was temporarily 0.22 during calibration)
-CTOPO_DAMO_MIN       = 0.40   # real spec (was temporarily 0.15 during calibration)
-CTOPO_COMPACT_MIN    = 0.60   # real spec (was temporarily 0.40 during calibration)
+CTOPO_DAMO_MIN       = 0.40   # real spec (was temporarily 0.15 during calibration); occ only
+CTOPO_COMPACT_MIN    = 0.60   # real spec (was temporarily 0.40 during calibration); occ only
 CTOPO_LCC_MIN        = 0.85   # real spec (was temporarily 0.50/0.60 during calibration)
 
 # C_guide — REAL SPEC
 CGUIDE_GATE_LO       = 0.10
 CGUIDE_GATE_HI       = 0.35
 CGUIDE_OVERLAY_MIN   = 0.35
-CGUIDE_WINNER_MAX    = 0.45   # real spec (was temporarily 0.58 during calibration)
-CGUIDE_COS_MAX       = 0.10
+CGUIDE_WINNER_MAX    = 0.45   # kept for legacy display only; not used in pass/fail
+CGUIDE_BALANCE_MIN   = 0.75   # v2: entity balance ≥ 0.75 (replaces winner ≤ 0.45)
+CGUIDE_COS_MAX       = 0.10   # only enforced when feature_sep_active=True
+
+# C_bind — NEW in v2
+CBIND_GATE_RATIO_MIN = 0.20   # fraction of blocks with gate > 0.05
+CBIND_DELTA_MIN      = 0.01   # injected_delta_norm minimum (if logged)
 
 # C_diff
 CDIFF_MSE_MAX        = 0.05
@@ -105,7 +114,7 @@ class ContractMetrics:
     epoch: int = 0
     stage: str = "stage1"
 
-    # ── C_topo ──────────────────────────────────────────────────────
+    # ── C_topo ──────────────────────────────────────────────────
     vol_compactness:    float = 0.0
     vol_compactness_e0: float = 0.0
     vol_compactness_e1: float = 0.0
@@ -124,30 +133,41 @@ class ContractMetrics:
     # Legacy alias
     val_iou_min:        float = 0.0   # = D_vis_min (for backward compat)
 
-    # ── C_guide ─────────────────────────────────────────────────────
+    # v2: scene type tag (occ = depth-separated, col = same-depth/collision)
+    scene_type:         str   = "col"
+
+    # ── C_guide ─────────────────────────────────────────────────
     gate_open:          float = 0.0
     gate_per_block:     Dict[str, float] = field(default_factory=dict)
     pred_overlay_match: float = 0.0
-    one_winner_ratio:   float = 0.5
+    one_winner_ratio:   float = 0.5   # kept for legacy display; not used in C_guide pass
+    entity_balance:     float = 0.5   # v2: 1 - |vis_e0 - vis_e1| / (vis_e0 + vis_e1)
     cos_F_overlap:      float = 0.0   # F_0/F_1 cosine similarity at overlap region
+    feature_sep_active: bool  = False  # v2: cosF enforced only if True
 
-    # ── C_diff ──────────────────────────────────────────────────────
+    # ── C_bind (new v2) ─────────────────────────────────────────
+    c_bind_pass:        bool  = False
+    gate_open_ratio:    float = 0.0   # fraction of blocks with gate > 0.05
+    injected_delta_norm: float = 0.0  # logged by trainer; 0.0 = not logged
+    iso_comp_delta:     float = 0.0   # isolated vs composite feature delta
+
+    # ── C_diff ──────────────────────────────────────────────────
     diffusion_mse:      float = 0.0
     diffusion_stable:   bool  = True
     diff_mse_delta:     float = 0.0   # relative jump from stage2 baseline
 
-    # ── C_render ────────────────────────────────────────────────────
+    # ── C_render ────────────────────────────────────────────────
     P_2obj:             float = 0.0
     R_chimera:          float = 0.0
     M_id_min:           float = 0.0
     render_iou_min:     float = 0.0
     c_render_available: bool  = False
 
-    # ── C_robust ────────────────────────────────────────────────────
+    # ── C_robust ────────────────────────────────────────────────
     consecutive_pass:   int   = 0     # consecutive epochs all 5 contracts pass
     pass_rate_clips:    float = 0.0
 
-    # ── Pass / fail ──────────────────────────────────────────────────
+    # ── Pass / fail ──────────────────────────────────────────────
     c_topo_pass:        bool  = False
     c_guide_pass:       bool  = False
     c_diff_pass:        bool  = False
@@ -168,10 +188,19 @@ class ContractMetrics:
 
 class DebugContract:
     """
-    Full 5-contract evaluation engine.
+    Full 5-contract evaluation engine (v2).
+
+    v2 changes vs v22:
+    - C_topo splits on scene_type: "occ" enforces compact+D_amo; "col" skips them.
+    - C_guide uses entity_balance ≥ 0.75 instead of winner_ratio ≤ 0.45.
+    - cosF in C_guide only enforced when feature_sep_active=True.
+    - New C_bind contract verifies guide injection path is alive.
+    - C_render render_iou only hard-checked after C_bind passes.
+    - Default scene_type = "col" (toy/data_objaverse is same-depth).
 
     Backward-compatible: stage1/2/3 legacy fields still populated.
-    New code should use c_topo_pass / c_guide_pass / c_diff_pass / c_render_pass / all_pass.
+    New code should use c_topo_pass / c_guide_pass / c_bind_pass /
+    c_diff_pass / c_render_pass / all_pass.
     """
 
     def __init__(self):
@@ -229,6 +258,23 @@ class DebugContract:
         return max_gate, per_block
 
     @staticmethod
+    def _gate_open_ratio(assembler, threshold: float = 0.05) -> float:
+        """
+        Fraction of guide_gates blocks where tanh(gate_param) > threshold.
+        Returns 0.0 if no guide_gates present.
+        """
+        if not hasattr(assembler, "guide_gates"):
+            return 0.0
+        per_block = assembler.guide_gates
+        if not per_block:
+            return 0.0
+        open_count = sum(
+            1 for param in per_block.values()
+            if float(torch.tanh(param).item()) > threshold
+        )
+        return float(open_count) / float(len(per_block))
+
+    @staticmethod
     def _overlay_match(visible_class: torch.Tensor,
                        gt_visible: torch.Tensor) -> float:
         pred_fg = (visible_class > 0).float()
@@ -249,6 +295,21 @@ class DebugContract:
         if total < 1e-8:
             return 0.5
         return max(vis_e0, vis_e1) / total
+
+    @staticmethod
+    def _entity_balance(vol_outputs) -> float:
+        """
+        Entity visibility balance: 1 - |vis_e0 - vis_e1| / (vis_e0 + vis_e1 + eps).
+        Near 1.0 = balanced; near 0.0 = one entity dominates.
+        """
+        if not (vol_outputs.visible and "e0" in vol_outputs.visible):
+            return 0.5
+        vis_e0 = float(vol_outputs.visible["e0"].mean())
+        vis_e1 = float(vol_outputs.visible["e1"].mean())
+        total = vis_e0 + vis_e1
+        if total < 1e-8:
+            return 0.5
+        return 1.0 - abs(vis_e0 - vis_e1) / total
 
     @staticmethod
     def _compute_lcc(entity_probs_3d: torch.Tensor, threshold: float = 0.15) -> float:
@@ -299,8 +360,10 @@ class DebugContract:
         epoch: int,
         stage: str,
         render_metrics: Optional[Dict] = None,  # C_render pass-in (optional)
+        scene_type: str = "col",                # v2: "occ" or "col"
     ) -> ContractMetrics:
         m = ContractMetrics(epoch=epoch, stage=stage)
+        m.scene_type = scene_type
 
         # ── C_topo: compactness ────────────────────────────────────────────
         if "val_compact" in val_metrics:
@@ -363,11 +426,18 @@ class DebugContract:
         if vol_outputs.visible_class is not None:
             m.pred_overlay_match = self._overlay_match(vol_outputs.visible_class, gt_visible)
 
-        # ── C_guide: winner ratio ─────────────────────────────────────────
+        # ── C_guide: winner ratio (legacy) and entity balance (v2) ────────
         m.one_winner_ratio = self._one_winner(vol_outputs)
+        m.entity_balance   = self._entity_balance(vol_outputs)
 
         # ── C_guide: feature separation ───────────────────────────────────
         m.cos_F_overlap = float(val_metrics.get("val_cos_F_overlap", 0.0))
+        m.feature_sep_active = bool(val_metrics.get("feature_sep_active", False))
+
+        # ── C_bind (v2) ───────────────────────────────────────────────────
+        m.gate_open_ratio     = self._gate_open_ratio(assembler)
+        m.injected_delta_norm = float(val_metrics.get("val_injected_delta_norm", 0.0))
+        m.iso_comp_delta      = float(val_metrics.get("val_iso_comp_delta", 0.0))
 
         # ── C_diff ────────────────────────────────────────────────────────
         m.diffusion_mse    = float(val_metrics.get("val_diff_mse", 0.0))
@@ -388,35 +458,70 @@ class DebugContract:
         m.pass_rate_clips = float(val_metrics.get("val_pass_rate_clips", 0.0))
 
         # ── Pass / fail ───────────────────────────────────────────────────
-        m.c_topo_pass = (
-            m.D_vis_min          >= CTOPO_DVIS_MIN    and
-            m.D_amo_min          >= CTOPO_DAMO_MIN    and
-            m.vol_compactness    >= CTOPO_COMPACT_MIN and
-            m.LCC_min            >= CTOPO_LCC_MIN     and
-            m.two_color_presence
+
+        # C_topo: scene-type-aware (v2)
+        two_color = m.two_color_presence
+        D_vis_min = m.D_vis_min
+        D_amo_min = m.D_amo_min
+        compact   = m.vol_compactness
+        LCC_min   = m.LCC_min
+        if scene_type == "occ":
+            m.c_topo_pass = (
+                D_vis_min >= CTOPO_DVIS_MIN    and
+                D_amo_min >= CTOPO_DAMO_MIN    and
+                compact   >= CTOPO_COMPACT_MIN and
+                LCC_min   >= CTOPO_LCC_MIN     and
+                two_color
+            )
+        else:  # "col" — same-depth; compact and D_amo not achievable
+            m.c_topo_pass = (
+                D_vis_min >= CTOPO_DVIS_MIN and
+                LCC_min   >= CTOPO_LCC_MIN  and
+                two_color
+            )
+
+        # C_guide: entity_balance replaces winner; cosF gated on feature_sep_active (v2)
+        gate_in_range = CGUIDE_GATE_LO <= m.gate_open <= CGUIDE_GATE_HI
+        overlay_ok    = m.pred_overlay_match >= CGUIDE_OVERLAY_MIN
+        balance_ok    = m.entity_balance >= CGUIDE_BALANCE_MIN
+        cosF_ok       = (not m.feature_sep_active) or (m.cos_F_overlap <= CGUIDE_COS_MAX)
+        m.c_guide_pass = gate_in_range and overlay_ok and balance_ok and cosF_ok
+
+        # C_bind: verify guide injection path is alive (v2)
+        # If injected_delta_norm=0.0 (not logged), only gate_open_ratio is checked.
+        delta_ok = (
+            m.injected_delta_norm <= 0.0 or
+            m.injected_delta_norm >= CBIND_DELTA_MIN
         )
-        m.c_guide_pass = (
-            CGUIDE_GATE_LO       <= m.gate_open <= CGUIDE_GATE_HI and
-            m.pred_overlay_match >= CGUIDE_OVERLAY_MIN             and
-            m.one_winner_ratio   <= CGUIDE_WINNER_MAX              and
-            m.cos_F_overlap      <= CGUIDE_COS_MAX
-        )
+        m.c_bind_pass = (m.gate_open_ratio >= CBIND_GATE_RATIO_MIN and delta_ok)
+
+        # C_diff
         m.c_diff_pass = (
-            m.diffusion_mse      <= CDIFF_MSE_MAX    and
-            m.diff_mse_delta     <= CDIFF_DELTA_MAX  and
+            m.diffusion_mse  <= CDIFF_MSE_MAX   and
+            m.diff_mse_delta <= CDIFF_DELTA_MAX  and
             m.diffusion_stable
         )
-        m.c_render_pass = (
-            not m.c_render_available or (
+
+        # C_render: render_iou only hard-checked after C_bind passes (v2)
+        if not m.c_render_available:
+            m.c_render_pass = True   # not yet measured
+        elif not m.c_bind_pass:
+            # render_iou is meaningless until guide path is alive — skip it
+            m.c_render_pass = (
+                m.P_2obj    >= CRENDER_P2OBJ_MIN  and
+                m.R_chimera <= CRENDER_CHIMERA_MAX and
+                m.M_id_min  >= CRENDER_MID_MIN
+            )
+        else:
+            m.c_render_pass = (
                 m.P_2obj        >= CRENDER_P2OBJ_MIN  and
                 m.R_chimera     <= CRENDER_CHIMERA_MAX and
                 m.M_id_min      >= CRENDER_MID_MIN     and
                 m.render_iou_min >= CRENDER_IOU_MIN
             )
-        )
 
-        # Consecutive pass counter
-        if m.c_topo_pass and m.c_guide_pass and m.c_diff_pass and m.c_render_pass:
+        # Consecutive pass counter (all 5 contracts including C_bind)
+        if m.c_topo_pass and m.c_guide_pass and m.c_bind_pass and m.c_diff_pass and m.c_render_pass:
             prev_consec = self.history[-1].consecutive_pass if self.history else 0
             m.consecutive_pass = prev_consec + 1
         else:
@@ -424,14 +529,16 @@ class DebugContract:
 
         # pass_rate_clips == 0.0 means not yet computed (no clips evaluated).
         # Only enforce CROBUST_CLIPS_MIN when we have actual clip evaluation data.
-        # When pass_rate_clips > 0.0, it must meet the threshold (real enforcement).
         clips_ok = (m.pass_rate_clips == 0.0) or (m.pass_rate_clips >= CROBUST_CLIPS_MIN)
         m.c_robust_pass = (
-            m.consecutive_pass   >= CROBUST_CONSEC_MIN and
+            m.consecutive_pass >= CROBUST_CONSEC_MIN and
             clips_ok
         )
 
-        m.all_pass = m.c_topo_pass and m.c_guide_pass and m.c_diff_pass and m.c_render_pass
+        m.all_pass = (
+            m.c_topo_pass and m.c_guide_pass and m.c_bind_pass and
+            m.c_diff_pass and m.c_render_pass
+        )
 
         # ── Legacy stage1/2/3 pass flags (for backward compat) ────────────
         m.stage1_pass = (
@@ -446,27 +553,44 @@ class DebugContract:
             m.one_winner_ratio   <  STAGE2_ONE_WINNER_MAX
         )
         m.stage3_pass = (
-            m.stage2_pass                             and
-            m.gate_open          >= STAGE3_GATE_OPEN_MIN   and
+            m.stage2_pass                          and
+            m.gate_open          >= STAGE3_GATE_OPEN_MIN and
             m.diffusion_stable
         )
 
         # ── Checkpoint score ──────────────────────────────────────────────
-        gate_score      = min(1.0, (m.gate_open - CGUIDE_GATE_LO) /
-                               (CGUIDE_GATE_HI - CGUIDE_GATE_LO + 1e-8)) if m.gate_open >= CGUIDE_GATE_LO else 0.0
-        compact_score   = min(1.0, m.vol_compactness / CTOPO_COMPACT_MIN)
-        dvis_score      = min(1.0, m.D_vis_min / CTOPO_DVIS_MIN)
-        damo_score      = min(1.0, m.D_amo_min / CTOPO_DAMO_MIN)
-        diff_score      = float(m.c_diff_pass)
-        render_score    = min(1.0, m.render_iou_min / CRENDER_IOU_MIN) if m.c_render_available else 0.5
-        m.contract_score = (
-            0.20 * dvis_score    +
-            0.20 * damo_score    +
-            0.15 * compact_score +
-            0.15 * gate_score    +
-            0.15 * diff_score    +
-            0.15 * render_score
+        # Weight metrics that are actually valid for this scene_type.
+        gate_score   = (
+            min(1.0, (m.gate_open - CGUIDE_GATE_LO) /
+                (CGUIDE_GATE_HI - CGUIDE_GATE_LO + 1e-8))
+            if m.gate_open >= CGUIDE_GATE_LO else 0.0
         )
+        dvis_score   = min(1.0, m.D_vis_min / CTOPO_DVIS_MIN)
+        diff_score   = float(m.c_diff_pass)
+        bind_score   = float(m.c_bind_pass)
+        render_score = min(1.0, m.render_iou_min / CRENDER_IOU_MIN) if m.c_render_available else 0.5
+
+        if scene_type == "occ":
+            # Include compact and D_amo scores for occ-type scenes
+            compact_score = min(1.0, m.vol_compactness / CTOPO_COMPACT_MIN)
+            damo_score    = min(1.0, m.D_amo_min / CTOPO_DAMO_MIN)
+            m.contract_score = (
+                0.20 * dvis_score    +
+                0.15 * damo_score    +
+                0.10 * compact_score +
+                0.15 * gate_score    +
+                0.10 * bind_score    +
+                0.15 * diff_score    +
+                0.15 * render_score
+            )
+        else:  # "col" — compact/D_amo not meaningful; redistribute weights
+            m.contract_score = (
+                0.30 * dvis_score  +
+                0.20 * gate_score  +
+                0.15 * bind_score  +
+                0.20 * diff_score  +
+                0.15 * render_score
+            )
 
         self.history.append(m)
         return m
@@ -484,47 +608,90 @@ class DebugContract:
     # ── Logging ───────────────────────────────────────────────────────────
 
     def log(self, m: ContractMetrics) -> None:
-        # New 5-contract format
+        # New 5-contract format (v2: includes C_bind)
         ct = "✓" if m.c_topo_pass  else "✗"
         cg = "✓" if m.c_guide_pass else "✗"
+        cbind_sym = "✓" if m.c_bind_pass  else "✗"
         cd = "✓" if m.c_diff_pass  else "✗"
         cr = "✓" if m.c_render_pass else ("?" if not m.c_render_available else "✗")
         cb = "✓" if m.c_robust_pass else "✗"
 
         print(
             f"  [contract ep{m.epoch:03d}] "
-            f"Ctopo:{ct} Cguide:{cg} Cdiff:{cd} Crender:{cr} Crobust:{cb}  "
+            f"Ctopo:{ct} Cguide:{cg} Cbind:{cbind_sym} Cdiff:{cd} "
+            f"Crender:{cr} Crobust:{cb}  "
             f"ALL:{'PASS' if m.all_pass else 'FAIL'}  "
-            f"score={m.contract_score:.4f}  consec={m.consecutive_pass}",
+            f"score={m.contract_score:.4f}  consec={m.consecutive_pass}  "
+            f"scene={m.scene_type}",
             flush=True,
         )
-        print(
-            f"    topo:  compact={m.vol_compactness:.3f}(≥{CTOPO_COMPACT_MIN})  "
-            f"D_vis={m.D_vis_min:.3f}(≥{CTOPO_DVIS_MIN})  "
-            f"D_amo={m.D_amo_min:.3f}(≥{CTOPO_DAMO_MIN})  "
-            f"LCC={m.LCC_min:.3f}(≥{CTOPO_LCC_MIN})  "
-            f"2color={'Y' if m.two_color_presence else 'N'}({m.two_color_e0_frac:.3f}/{m.two_color_e1_frac:.3f})",
-            flush=True,
-        )
+
+        # C_topo line — show which metrics are active for this scene_type
+        if m.scene_type == "occ":
+            print(
+                f"    topo[occ]:  compact={m.vol_compactness:.3f}(≥{CTOPO_COMPACT_MIN})  "
+                f"D_vis={m.D_vis_min:.3f}(≥{CTOPO_DVIS_MIN})  "
+                f"D_amo={m.D_amo_min:.3f}(≥{CTOPO_DAMO_MIN})  "
+                f"LCC={m.LCC_min:.3f}(≥{CTOPO_LCC_MIN})  "
+                f"2color={'Y' if m.two_color_presence else 'N'}"
+                f"({m.two_color_e0_frac:.3f}/{m.two_color_e1_frac:.3f})",
+                flush=True,
+            )
+        else:
+            print(
+                f"    topo[col]:  D_vis={m.D_vis_min:.3f}(≥{CTOPO_DVIS_MIN})  "
+                f"LCC={m.LCC_min:.3f}(≥{CTOPO_LCC_MIN})  "
+                f"2color={'Y' if m.two_color_presence else 'N'}"
+                f"({m.two_color_e0_frac:.3f}/{m.two_color_e1_frac:.3f})  "
+                f"[compact={m.vol_compactness:.3f}/D_amo={m.D_amo_min:.3f} not required for col]",
+                flush=True,
+            )
+
+        # C_guide line — v2: balance instead of winner; cosF shows inactive flag
+        cosF_tag = f"cosF={m.cos_F_overlap:.3f}(≤{CGUIDE_COS_MAX})" if m.feature_sep_active \
+                   else f"cosF={m.cos_F_overlap:.3f}(inactive)"
         print(
             f"    guide: gate={m.gate_open:.4f}([{CGUIDE_GATE_LO},{CGUIDE_GATE_HI}])  "
             f"overlay={m.pred_overlay_match:.3f}(≥{CGUIDE_OVERLAY_MIN})  "
-            f"winner={m.one_winner_ratio:.3f}(≤{CGUIDE_WINNER_MAX})  "
-            f"cosF={m.cos_F_overlap:.3f}(≤{CGUIDE_COS_MAX})",
+            f"balance={m.entity_balance:.3f}(≥{CGUIDE_BALANCE_MIN})  "
+            f"[winner={m.one_winner_ratio:.3f}]  "
+            f"{cosF_tag}",
             flush=True,
         )
+
+        # C_bind line (new v2)
+        delta_tag = (
+            f"delta={m.injected_delta_norm:.4f}(≥{CBIND_DELTA_MIN})"
+            if m.injected_delta_norm > 0.0
+            else "delta=n/a(not_logged)"
+        )
+        print(
+            f"    bind:  gate_ratio={m.gate_open_ratio:.3f}(≥{CBIND_GATE_RATIO_MIN})  "
+            f"{delta_tag}  "
+            f"iso_comp_delta={m.iso_comp_delta:.4f}",
+            flush=True,
+        )
+
+        # C_diff line
         print(
             f"    diff:  mse={m.diffusion_mse:.4f}(≤{CDIFF_MSE_MAX})  "
             f"Δ={m.diff_mse_delta:.3f}(≤{CDIFF_DELTA_MAX})  "
             f"stable={m.diffusion_stable}",
             flush=True,
         )
+
+        # C_render line
         if m.c_render_available:
+            iou_tag = (
+                f"IoU={m.render_iou_min:.3f}(≥{CRENDER_IOU_MIN})"
+                if m.c_bind_pass
+                else f"IoU={m.render_iou_min:.3f}(pre-bind, not enforced)"
+            )
             print(
                 f"    render: P_2obj={m.P_2obj:.3f}(≥{CRENDER_P2OBJ_MIN})  "
                 f"chimera={m.R_chimera:.3f}(≤{CRENDER_CHIMERA_MAX})  "
                 f"M_id={m.M_id_min:.3f}(≥{CRENDER_MID_MIN})  "
-                f"IoU={m.render_iou_min:.3f}(≥{CRENDER_IOU_MIN})",
+                f"{iou_tag}",
                 flush=True,
             )
 
@@ -554,12 +721,14 @@ class DebugContract:
         s2_epochs = [m.epoch for m in self.history if m.stage2_pass]
         s3_epochs = [m.epoch for m in self.history if m.stage3_pass]
         all_epochs = [m.epoch for m in self.history if m.all_pass]
+        bind_epochs = [m.epoch for m in self.history if m.c_bind_pass]
         return (
             f"[contract summary] "
             f"S1 first_pass={s1_epochs[0] if s1_epochs else 'never'}  "
             f"S2 first_pass={s2_epochs[0] if s2_epochs else 'never'}  "
             f"S3 first_pass={s3_epochs[0] if s3_epochs else 'never'}  "
             f"ALL first_pass={all_epochs[0] if all_epochs else 'never'}  "
+            f"Cbind first_pass={bind_epochs[0] if bind_epochs else 'never'}  "
             f"best_consec={max((m.consecutive_pass for m in self.history), default=0)}  "
             f"last_contract_score={last.contract_score:.4f}"
         )

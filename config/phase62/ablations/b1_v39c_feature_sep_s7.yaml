@@ -1,0 +1,102 @@
+# B1 v39c: Feature separation recovery — la_feature_sep=1.0 + bind warm-start
+#
+# GOAL: convert cosF from "measurement invalid (la_feature_sep=0)" to
+# "real performance measurement" so C_guide cosF check is meaningful.
+#
+# Problem (from v38/v39a/v39b):
+#   - la_feature_sep: 0.0 in all runs → L_feature_sep never computed
+#   - cosF=0.497 → 0.342 over 220 epochs (barely decreasing, only passive pressure)
+#   - C_guide cosF check gated (feature_sep_active=False) → cosF never fails contract
+#   - Real entity identity disentanglement not being trained
+#
+# Fix (v39c):
+#   - la_feature_sep: 1.0 → ACTIVATE feature separation loss
+#     L_sep = cosine_similarity(F_0, F_1, dim=1).mean() at overlap pixels
+#     Gradient pushes F_0 and F_1 features apart in entity-specific directions
+#   - feature_sep_active=True → cosF IS NOW ENFORCED in C_guide
+#   - gate_warm_start: 0.1 (from v39b) → bind path alive
+#
+# Expected outcome:
+#   - cosF decreases faster: from 0.497 at ep0 → targeting ≤ 0.20 by ep100
+#   - entity identity margin improves (more separated UNet feature representations)
+#   - C_guide cosF passes when cosF ≤ 0.10 (challenging but measurable)
+#   - May cause overlay instability if F_0/F_1 drift too far → monitor overlay metric
+#
+# Analysis note: This is the first run where cosF is actually a valid contract metric.
+# If cosF doesn't reach 0.10, it means identity separation requires architectural changes
+# (entity latent field head, contrastive loss with hard negatives, etc.) — analysis.md §8.3
+#
+# Priority analysis document: docs/analysis.md (Experiment Group 3 / v39.2)
+# Priority: 3 (feature separation recovery)
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+# v39c: feature separation + bind repair
+scene_type: col
+gate_warm_start: 0.1      # bind warm-start from v39b
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 1.0     # ACTIVATED: feature separation loss (cosF enforced in contract)
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.5
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0

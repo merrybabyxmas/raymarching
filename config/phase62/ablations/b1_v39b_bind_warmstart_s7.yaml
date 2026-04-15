@@ -1,0 +1,104 @@
+# B1 v39b: Bind-path repair — gate warm-start + injection delta logging
+#
+# GOAL: fix the guide injection "dead path" problem identified in analysis.md §7
+#
+# Problem (from v38):
+#   - gate starts at 0 (tanh(0)=0 → guide=0 at init)
+#   - In stage1 (ep0-99): guide not used, gate never trained
+#   - In stage2 (ep100-164): gate starts to open but very slowly
+#   - render_iou stuck at 0.040-0.057: isolated rollout ≈ composite (guide barely active)
+#   - C_bind would fail: gate_open_ratio < 0.20 for much of stage2
+#
+# Fix (v39b):
+#   - gate_warm_start: 0.1 → gates initialised to tanh⁻¹(0.1) ≈ 0.100
+#     → stage2 starts with gate=0.1 instead of 0 → guide immediately active
+#   - lambda_gate_push: 0.5 → auxiliary loss −λ*tanh(gate) to explicitly push gate open
+#     (addresses stage2 dead-path concern from analysis.md §7.1)
+#   - injection delta logging now active (val_injected_delta_norm in contract logs)
+#
+# Contract v2 (same as v39a):
+#   - scene_type: col
+#   - balance replaces winner
+#   - cosF not enforced (la_feature_sep=0)
+#   - render_iou enforced only after C_bind pass (gate_open_ratio ≥ 0.20)
+#
+# Expected outcome vs v39a:
+#   - gate opens faster in stage2 → render_iou starts improving earlier
+#   - C_bind passes when gate_open_ratio ≥ 0.20
+#   - isolated rollout shows actual entity separation signal
+#   - injected_delta_norm > 0.01 logged in contract
+#
+# Priority analysis document: docs/analysis.md (Experiment Group 2 / v39.1)
+# Priority: 2 (bind path repair)
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+# v39b: bind-path repair parameters
+scene_type: col
+gate_warm_start: 0.1      # initialize gates to tanh=0.1 (not 0) → guide active from stage2
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0     # cosF not enforced yet (v39c adds this)
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.5   # push gates open in stage2/3 (analysis.md §7.1)
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
