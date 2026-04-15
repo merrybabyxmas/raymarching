@@ -966,6 +966,11 @@ class AblationTrainer:
                             if hw_amo * hw_amo == S_amo:
                                 amo_gt0 = amo_gt0.reshape(n_amo, hw_amo, hw_amo)
                                 amo_gt1 = amo_gt1.reshape(n_amo, hw_amo, hw_amo)
+                                # Resize GT to match volume spatial resolution (handles spatial_h≠hw_amo)
+                                H_amo, W_amo = amo_e0.shape[1], amo_e0.shape[2]
+                                if hw_amo != H_amo:
+                                    amo_gt0 = F.interpolate(amo_gt0.unsqueeze(1), size=(H_amo, W_amo), mode='nearest').squeeze(1)
+                                    amo_gt1 = F.interpolate(amo_gt1.unsqueeze(1), size=(H_amo, W_amo), mode='nearest').squeeze(1)
                                 # Dice: 2*inter / (pred_sum + gt_sum)
                                 eps = 1e-6
                                 inter0 = (amo_e0.float() * amo_gt0).sum(dim=(1, 2))
@@ -989,12 +994,21 @@ class AblationTrainer:
                             f1 = F.normalize(F_1[:B_cos].float(), dim=-1, eps=1e-6)
                             cos_all = (f0 * f1).sum(dim=-1)  # (B, S)
 
-                            # Build overlap mask from entity_masks (T, 2, S)
+                            # Build overlap mask from entity_masks (T, 2, S_mask)
+                            # S_mask may differ from S_feat (e.g. 16×16 vs 32×32 backbone)
                             m0_cos = torch.from_numpy(
                                 entity_masks[:B_cos, 0].astype(np.float32)).to(self.device)
                             m1_cos = torch.from_numpy(
                                 entity_masks[:B_cos, 1].astype(np.float32)).to(self.device)
-                            overlap_cos = (m0_cos > 0.5) & (m1_cos > 0.5)  # (B, S)
+                            S_feat = cos_all.shape[1]
+                            S_mask = m0_cos.shape[1]
+                            if S_feat != S_mask:
+                                hw_m = int(round(S_mask ** 0.5))
+                                hw_f = int(round(S_feat ** 0.5))
+                                if hw_m * hw_m == S_mask and hw_f * hw_f == S_feat:
+                                    m0_cos = F.interpolate(m0_cos.reshape(B_cos, 1, hw_m, hw_m), size=(hw_f, hw_f), mode='nearest').reshape(B_cos, S_feat)
+                                    m1_cos = F.interpolate(m1_cos.reshape(B_cos, 1, hw_m, hw_m), size=(hw_f, hw_f), mode='nearest').reshape(B_cos, S_feat)
+                            overlap_cos = (m0_cos > 0.5) & (m1_cos > 0.5)  # (B, S_feat)
 
                             if overlap_cos.any():
                                 cos_at_overlap = cos_all[overlap_cos]
