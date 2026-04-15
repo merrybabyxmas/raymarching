@@ -1,0 +1,103 @@
+# B1 v40k: compact-aggressive LCC fix (2026-04-16)
+#
+# HYPOTHESIS: v40j's lambda_compact=5.0 (from 3.0) may not be enough to maintain
+# LCC ≥ 0.45 in stage3 at spatial_h=32. v40h stage3 showed LCC=0.394-0.407 even
+# with compact=3.0 and entity_masked_sep. The LCC drop correlates with balance
+# collapse — but we need to test if stronger compaction alone helps LCC.
+#
+# DESIGN: Same as v40j but push compaction+coherence harder:
+#   - lambda_compact: 8.0 (vs v40j's 5.0, v40h's 3.0)
+#   - lambda_spatial_coherence: 1.0 (vs 0.3 everywhere else)
+#   Expected: entity voxels cluster more tightly → higher LCC → easier C_topo pass
+#   Risk: over-compaction may hurt D_vis (too concentrated) but col scene doesn't check D_amo
+#
+# Compare with v40j (lambda_compact=5.0, lambda_spatial_coherence=0.3):
+#   v40j: all-fixes baseline
+#   v40k: all-fixes + aggressive compaction
+#
+# GPU: 1 (after v40h completed)
+# Seed: 7
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: four_stream
+guide_max_ratio: 0.20
+feat_dim: 320
+backbone_primary_idx: 2
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 32
+spatial_w: 32
+n_classes: 3
+inject_config: multiscale
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+freeze_guide_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+adapter_lr_scale_stage3: 0.1           # stable entity_probs in stage3
+
+scene_type: col
+gate_warm_start: 0.10
+
+training:
+  epochs: 260                          # 13 stage3 evals for C_robust
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 2.5                         # stronger diff gradient (same as v40j)
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 2.0
+  use_entity_sep_mask: true
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 8.0                  # KEY: aggressive compaction → high LCC
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 1.5
+  min_gate_stage3: 0.10
+  max_gate: 0.45
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  lambda_spatial_coherence: 1.0        # KEY: stronger spatial coherence (was 0.3)
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+  lambda_amodal_coverage: 0.5
+  min_amodal_coverage: 0.02
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
