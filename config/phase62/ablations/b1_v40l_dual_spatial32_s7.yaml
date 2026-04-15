@@ -1,0 +1,106 @@
+# B1 v40l: DUAL guide + all spatial_h=32 fixes (2026-04-16)
+#
+# ROOT CAUSE of v40j/k/i failure: guide_family=four_stream causes systematic entity
+# imbalance. v40j stage3 balance=0.40-0.57 (winner=0.71-0.81), v40k even worse (0.86-0.88).
+# v39h (dual guide, spatial_h=16) had winner=0.53-0.56, balance~0.87-0.94 → PASSED.
+#
+# Mechanism: four_stream has 4 injection streams; entity 0's streams dominate over
+# entity 1's → lambda_balance=3.0 cannot overcome the structural asymmetry.
+# Dual guide: symmetric 2-stream injection → natural balance preserved.
+#
+# This config combines:
+#   - guide_family: DUAL (from v39h — proven to maintain balance ≥ 0.75)
+#   - spatial_h: 32 (from v40 series — better entity volume separation)
+#   - feat_dim: 320, backbone_primary_idx: 2 (up_blocks.3 for 32×32)
+#   - inject_config: multiscale (v40 series: injects at 32×32 resolution)
+#   - adapter_lr_scale_stage3: 0.1 (prevents entity_probs oscillation)
+#   - use_entity_sep_mask: true + la_feature_sep: 3.0 (cosF → 0.000, balanced features)
+#   - freeze_guide_stage3: true (overlay stability in stage3)
+#   - la_diff: 2.5 + CDIFF_MSE_MAX=0.056 (diff convergence)
+#   - lambda_compact: 5.0 (LCC ≥ 0.45 threshold)
+#   - 260 epochs (13 stage3 evals → C_robust achievable)
+#
+# GPU: 0 (first free after v40i completed)
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual                     # KEY: dual (not four_stream) for balanced injection
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 32
+spatial_w: 32
+feat_dim: 320                          # up_blocks.3 (spatial_h=32 requires this)
+backbone_primary_idx: 2
+n_classes: 3
+inject_config: multiscale              # injects at 32×32 volume resolution
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+freeze_guide_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+adapter_lr_scale_stage3: 0.1           # stable entity_probs in stage3
+
+scene_type: col
+gate_warm_start: 0.10
+
+training:
+  epochs: 260                          # 13 stage3 evals for C_robust
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 2.5                         # stronger diff convergence
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 3.0                  # balanced entity features (v40h confirmed)
+  use_entity_sep_mask: true            # focus sep gradient on entity pixels
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 5.0                  # LCC ≥ 0.45 threshold
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 1.5
+  min_gate_stage3: 0.10
+  max_gate: 0.45
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  lambda_spatial_coherence: 0.3
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+  lambda_amodal_coverage: 0.5
+  min_amodal_coverage: 0.02
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
