@@ -1,0 +1,92 @@
+# B1 v39g: Priority 4 — aggressive spatial coherence (lambda=3.0)
+#
+# GOAL: Fix LCC decline observed in v39e stage1 (upper bracket).
+#
+# Problem (from v39e ep9-89):
+#   - LCC declines from 0.877 (ep9) to 0.663 (ep89) — can't sustain ≥0.85
+#   - TV λ=0.3 is not strong enough
+#
+# Fix (v39g):
+#   - lambda_spatial_coherence: 0.3 → 3.0  (10× increase, upper bracket)
+#     v39f (λ=1.5) and v39g (λ=3.0) bracket the optimal TV strength.
+#     If λ=3.0 is too strong (hurts entity identity), v39f should suffice.
+#     If λ=3.0 still doesn't hold LCC, a structural fix is needed instead.
+#
+# Run on GPU 2 (free). Same seed=7 as v39e/f for direct comparison.
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: false
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+scene_type: col
+gate_warm_start: 0.1
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 1.0
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.5
+  min_gate_stage3: 0.10
+  max_gate: 0.40
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  # Priority 4: spatial coherence AGGRESSIVE (v39g: 0.3 → 3.0, upper bracket)
+  lambda_spatial_coherence: 3.0
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
