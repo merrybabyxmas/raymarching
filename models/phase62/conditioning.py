@@ -165,11 +165,29 @@ class GuideFeatureAssembler(nn.Module):
             vis_e1 = vol_outputs.visible["e1"].unsqueeze(1)
             amo_e0 = vol_outputs.amodal["e0"].unsqueeze(1)
             amo_e1 = vol_outputs.amodal["e1"].unsqueeze(1)
-            front_e0 = vis_e0 * h_e0
-            front_e1 = vis_e1 * h_e1
-            back_e0 = (amo_e0 - vis_e0).clamp(min=0) * h_e0
-            back_e1 = (amo_e1 - vis_e1).clamp(min=0) * h_e1
+
+            # Per-stream L2 normalisation — prevents entity-0 scale dominance.
+            # Without this, if vis_e0 >> vis_e1, front_e0 >> front_e1 in absolute
+            # magnitude, causing the guide to be e0-dominated. UNet then amplifies
+            # e0 further, creating a positive-feedback collapse spiral (winner→0.86+).
+            # Normalise each stream independently so both entities contribute equally
+            # regardless of their current visible/amodal field magnitudes.
+            def _norm_stream(x: torch.Tensor) -> torch.Tensor:
+                return x / x.norm(dim=1, keepdim=True).clamp(min=1e-6)
+
+            front_e0 = _norm_stream(vis_e0 * h_e0)
+            front_e1 = _norm_stream(vis_e1 * h_e1)
+            back_e0  = _norm_stream((amo_e0 - vis_e0).clamp(min=0) * h_e0)
+            back_e1  = _norm_stream((amo_e1 - vis_e1).clamp(min=0) * h_e1)
             guide_base = torch.cat([front_e0, front_e1, back_e0, back_e1], dim=1)
+
+            # Store stream norms for diagnostics (detached, no-grad)
+            self._diag_stream_norms = {
+                "front_e0": (vis_e0 * h_e0).norm(dim=1).mean().item(),
+                "front_e1": (vis_e1 * h_e1).norm(dim=1).mean().item(),
+                "back_e0":  ((amo_e0 - vis_e0).clamp(0) * h_e0).norm(dim=1).mean().item(),
+                "back_e1":  ((amo_e1 - vis_e1).clamp(0) * h_e1).norm(dim=1).mean().item(),
+            }
 
         else:
             raise ValueError(f"Unknown guide_family: {self.guide_family}")

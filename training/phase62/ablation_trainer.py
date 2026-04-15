@@ -413,6 +413,18 @@ class AblationTrainer:
         vol_outputs = self.system.predict_volume(F_g, F_0, F_1,
                                                   depth_hint=depth_hint_train)
 
+        # Diag-A: Volume entity mass balance (volume collapse detection)
+        # mass_ratio < 0.3 → single-entity collapse already at volume level (before projection)
+        with torch.no_grad():
+            if vol_outputs.entity_probs is not None:
+                ep = vol_outputs.entity_probs  # (B, 2, K, H, W)
+                _mass_e0 = ep[:, 0].mean().item()
+                _mass_e1 = ep[:, 1].mean().item()
+                _mass_ratio = min(_mass_e0, _mass_e1) / (max(_mass_e0, _mass_e1) + 1e-6)
+                if not hasattr(self, "_diag_mass_acc"):
+                    self._diag_mass_acc = []
+                self._diag_mass_acc.append((_mass_e0, _mass_e1, _mass_ratio))
+
         # Build V_gt
         depth_maps = depth_np[:T_frames] if depth_np is not None else None
         if depth_maps is not None:
@@ -437,6 +449,26 @@ class AblationTrainer:
 
         if use_diffusion:
             vol_outputs, guides = self.system.project_and_assemble(vol_outputs, F_g, F_0, F_1)
+
+            # Diag-B: Amodal/visible mismatch diagnostic
+            # vis_ratio < 0.5 → visible_e1 << visible_e0 → four_stream back_e1 dead
+            # hidden_frac near 0 → amodal ≈ visible (no occlusion detected, back streams silent)
+            with torch.no_grad():
+                if vol_outputs.amodal and vol_outputs.visible:
+                    _amo_e0 = vol_outputs.amodal.get("e0")
+                    _amo_e1 = vol_outputs.amodal.get("e1")
+                    _vis_e0 = vol_outputs.visible.get("e0")
+                    _vis_e1 = vol_outputs.visible.get("e1")
+                    if all(x is not None for x in [_amo_e0, _amo_e1, _vis_e0, _vis_e1]):
+                        _hf_e0 = ((_amo_e0 - _vis_e0).clamp(0).mean() /
+                                  _amo_e0.mean().clamp(min=1e-6)).item()
+                        _hf_e1 = ((_amo_e1 - _vis_e1).clamp(0).mean() /
+                                  _amo_e1.mean().clamp(min=1e-6)).item()
+                        _vis_ratio = (_vis_e1.mean() / _vis_e0.mean().clamp(min=1e-6)).item()
+                        if not hasattr(self, "_diag_amodal_acc"):
+                            self._diag_amodal_acc = []
+                        self._diag_amodal_acc.append((_hf_e0, _hf_e1, _vis_ratio))
+
             # v39b: log guide feature norm and effective injected delta norm
             # guide_feature_norm = mean L2 norm of assembled guide tensors (before gate)
             # injected_delta_norm = mean norm after gate scaling (what actually reaches UNet)
@@ -595,6 +627,22 @@ class AblationTrainer:
             noise_t = noise[:, :, :T_frames].float()
             noise_pred_t = noise_pred[:, :, :T_frames].float()
             l_diff = loss_diffusion(noise_pred_t, noise_t)
+
+            # Diag-C: Guide dead-path check (every 20 steps)
+            # guide_impact < 0.01 → guide not reaching UNet (hook broken or gate=0)
+            if step_idx % 20 == 0 and guides:
+                with torch.no_grad():
+                    self.system.clear_guides()
+                    self.backbone_mgr.reset_slot_store()
+                    with torch.autocast(device_type="cuda", dtype=torch.float16):
+                        _pred_no_guide = self.pipe.unet(
+                            noisy, t, encoder_hidden_states=enc_full).sample
+                    _guide_impact = (noise_pred.float() - _pred_no_guide.float()).norm().item()
+                    if not hasattr(self, "_diag_guide_impact_acc"):
+                        self._diag_guide_impact_acc = []
+                    self._diag_guide_impact_acc.append(_guide_impact)
+                    # Re-set guides for subsequent steps
+                    self.system.set_guides(guides)
         else:
             self.system.clear_guides()
             l_diff = torch.tensor(0.0, device=self.device)
@@ -802,6 +850,15 @@ class AblationTrainer:
             "acc_entity": acc_entity,
             "diff_weight": float(diff_weight),
         }
+        # Diag-B: amodal/visible mismatch (last observed, if available)
+        if hasattr(self, "_diag_amodal_acc") and self._diag_amodal_acc:
+            _hf0, _hf1, _vr = self._diag_amodal_acc[-1]
+            result["diag_hidden_frac_e0"] = _hf0
+            result["diag_hidden_frac_e1"] = _hf1
+            result["diag_vis_ratio"] = _vr
+        # Diag-C: guide dead-path (last observed, if available)
+        if hasattr(self, "_diag_guide_impact_acc") and self._diag_guide_impact_acc:
+            result["diag_guide_impact"] = self._diag_guide_impact_acc[-1]
         for k, v in obj_result.items():
             if k != "total" and isinstance(v, torch.Tensor):
                 result[k] = float(v.item())
