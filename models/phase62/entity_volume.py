@@ -77,19 +77,8 @@ class EntityVolumePredictor(nn.Module):
         self.proj_e0 = nn.Linear(feat_dim, hidden)
         self.proj_e1 = nn.Linear(feat_dim, hidden)
 
-        # Symmetric entity init (v40r patch):
-        # Independent proj_e0/e1 randn init causes seed-dependent magnitude asymmetry:
-        #   seed=42: |proj_e0(F)| ≈ |proj_e1(F)| → entity competition balanced
-        #   seed=7:  |proj_e0(F)| >> |proj_e1(F)| → entity 0 dominates from ep0
-        # Fix: tie proj_e1 weights to proj_e0 at init → same extraction strength.
-        # Anti-symmetric entity_id: entity_id_e1 = -entity_id_e0 → both start with
-        #   equal magnitude, differentiated only by sign → no init-level dominance.
-        # Nets can diverge freely after init via backprop.
-        with torch.no_grad():
-            self.proj_e1.weight.copy_(self.proj_e0.weight)
-            self.proj_e1.bias.copy_(self.proj_e0.bias)
         self.entity_id_e0 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
-        self.entity_id_e1 = nn.Parameter(-self.entity_id_e0.data.clone())
+        self.entity_id_e1 = nn.Parameter(torch.randn(1, hidden, 1, 1) * 0.1)
 
         self.shared_2d = nn.Sequential(
             nn.Conv2d(hidden * 3, hidden * 2, kernel_size=3, padding=1, bias=True),

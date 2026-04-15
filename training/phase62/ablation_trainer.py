@@ -525,6 +525,32 @@ class AblationTrainer:
             if hasattr(self.objective, "lambda_balance"):
                 self.objective.lambda_balance = 0.0
 
+        # v40s: Balance pre-freeze anneal — ramp up lambda_balance in the final
+        # balance_anneal_epochs of stage2 to force winner toward 0.5 before vol freeze.
+        #
+        # Root cause of seed=7 failure: winner oscillates in stage2 (0.50-0.73).
+        # Stage3 freeze captures whichever phase occurs at stage2_end → if unlucky (winner≈0.72),
+        # balance locked in bad state forever.
+        # Fix: in the last N stage2 epochs, multiply lambda_balance by up to K× so that
+        # the winner is strongly pushed to ≤0.55 just before the freeze.
+        #
+        # balance_anneal_epochs: number of final stage2 epochs for ramp (default 0 = disabled)
+        # balance_anneal_strength: max multiplier at stage3 entry (default 1.0 = no effect)
+        _balance_anneal_epochs = int(getattr(self.train_cfg, "balance_anneal_epochs", 0))
+        _balance_anneal_strength = float(getattr(self.train_cfg, "balance_anneal_strength", 1.0))
+        if (
+            _balance_anneal_epochs > 0
+            and _balance_anneal_strength > 1.0
+            and stage == "stage2"
+            and hasattr(self.objective, "lambda_balance")
+        ):
+            _epochs_to_s3 = self.stage2_end - current_epoch  # > 0 means before stage3
+            if 0 <= _epochs_to_s3 < _balance_anneal_epochs:
+                # anneal_t: 0 at start of window → 1 at stage3 entry
+                _anneal_t = 1.0 - _epochs_to_s3 / _balance_anneal_epochs
+                _anneal_factor = 1.0 + _anneal_t * (_balance_anneal_strength - 1.0)
+                self.objective.lambda_balance = saved_lambda_balance * _anneal_factor
+
         obj_result = self.objective(vol_outputs, V_gt, gt_visible=gt_visible, gt_amodal=gt_amodal)
         l_struct = obj_result["total"].clamp(max=50.0)
 
