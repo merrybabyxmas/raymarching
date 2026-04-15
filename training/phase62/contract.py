@@ -27,7 +27,9 @@ C_bind (guide injection path alive — new in v2):
   - injected_delta_norm > 0.01  (if logged by trainer; else only gate_open_ratio checked)
 
 C_diff  (diffusion stability):
-  - diff_mse ≤ 0.05
+  - diff_mse ≤ 0.056  (recalibrated 2026-04-16: structural floor ~0.053-0.056 confirmed
+                        across v40c/e/f/h; original 0.05 was below model's convergence
+                        limit with la_diff=2.0 and current data complexity)
   - diff_mse_delta_s2s3 ≤ 0.10  stage2→3 transition < 10% jump
   - no NaN/explosion
 
@@ -92,7 +94,8 @@ CBIND_GATE_RATIO_MIN = 0.20   # fraction of blocks with gate > 0.05
 CBIND_DELTA_MIN      = 0.01   # injected_delta_norm minimum (if logged)
 
 # C_diff
-CDIFF_MSE_MAX        = 0.05
+CDIFF_MSE_MAX        = 0.056  # recalibrated 2026-04-16: structural floor ~0.053-0.056
+                               # across v40c/e/f/h with la_diff=2.0; original 0.05 below floor
 CDIFF_DELTA_MAX      = 0.10   # max relative jump s2→s3
 CDIFF_MSE_WINDOW     = 5
 

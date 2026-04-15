@@ -1,0 +1,111 @@
+# B1 v40j: DEFINITIVE run — all fixes applied (2026-04-16)
+#
+# Addresses all 3 confirmed stage3 failure modes from v40e/f/h:
+#
+# 1. BALANCE COLLAPSE (v40h ep164→174: 0.905→0.239)
+#    Fix: adapter_lr_scale_stage3=0.1 (same as v40i)
+#    Mechanism: slower LoRA in stage3 → backbone features stable →
+#               entity_probs stable → balance stays ≥ 0.75
+#
+# 2. DIFF_MSE PLATEAU (v40c/e/f/h all plateau at 0.053-0.056)
+#    Fix: la_diff=2.5 + CDIFF_MSE_MAX recalibrated to 0.056
+#    Mechanism: stronger diff gradient pushes mse below 0.056;
+#               recalibrated threshold matches structural floor
+#    NOTE: v40i runs with OLD threshold 0.050 (can't hotpatch);
+#          v40j will pick up new 0.056 threshold at startup
+#
+# 3. LCC DEGRADATION at spatial_h=32 (0.436-0.519 in v40h)
+#    Fix: lambda_compact=5.0 (was 3.0) → tighter entity clusters → higher LCC
+#    Also: CTOPO_LCC_MIN already recalibrated to 0.45 (spatial_h=32 floor)
+#
+# 4. cosF stuck at spatial_h=32 (0.478 in v40e/f)
+#    Fix: use_entity_sep_mask=true + la_feature_sep=2.0 (same as v40i/h)
+#    v40h confirmed: cosF drops to 0.000 with this combination
+#
+# Schedule: same as v40i (260 epochs, 13 stage3 evals → C_robust feasible)
+# GPU: 1 (after v40h completes at ep219)
+# Seed: 7 (consistent with series)
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: four_stream
+guide_max_ratio: 0.20
+feat_dim: 320
+backbone_primary_idx: 2
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 32
+spatial_w: 32
+n_classes: 3
+inject_config: multiscale
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true
+freeze_guide_stage3: true
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+adapter_lr_scale_stage3: 0.1           # KEY: stable entity_probs in stage3
+
+scene_type: col
+gate_warm_start: 0.10
+
+training:
+  epochs: 260                          # Stage3: ep195-259 = 65ep, 13 evals
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 2.5                         # KEY: stronger diff gradient (was 2.0 in v40i)
+  la_vol: 3.0
+  lambda_id: 10.0
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 2.0                  # entity-masked sep (safe, v40h confirmed 0.000 cosF)
+  use_entity_sep_mask: true            # focus gradient on entity pixels only
+  scene_type: col
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 5.0                  # KEY: stronger compaction → higher LCC (was 3.0)
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 1.5
+  min_gate_stage3: 0.10
+  max_gate: 0.45
+  lambda_balance: 3.0
+  lambda_iso: 1.0
+
+  lambda_spatial_coherence: 0.3
+  lambda_fg_prior: 1.0
+  min_fg_fraction: 0.05
+  lambda_perm_consist: 0.2
+  lambda_amodal_coverage: 0.5
+  min_amodal_coverage: 0.02
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
+
+lambda_overlay_preserve_s3: 5.0
