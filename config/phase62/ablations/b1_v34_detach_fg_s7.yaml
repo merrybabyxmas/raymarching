@@ -1,0 +1,112 @@
+# B1 v34: detach_fg_from_entity_losses=True — architectural fix for overlay/winner coupling
+#
+# ROOT CAUSE ANALYSIS (2026-04-15, definitive):
+#
+# v28-v33 all failed because L_vis (Dice) flows gradient to fg_magnitude through:
+#   entity_probs = fg_magnitude × depth_attn × q
+#   vis_e0 = alpha_composite(entity_probs[0])
+#   L_vis = Dice(vis_e0, gt_vis_0) + Dice(vis_e1, gt_vis_1)
+#
+# With BALANCED entities (lambda_id=10, sharp q):
+#   - q[0]≈1 at entity 0, q[1]≈1 at entity 1 (good separation)
+#   - But Dice denominator includes ALL predicted pixels: vis_e0.sum() + gt_vis_0.sum()
+#   - At entity 1 pixels: vis_e0 > 0 (small but nonzero due to boundary q ambiguity)
+#   - Dice gradient pushes vis_e0 DOWN at entity 1 pixels → pushes fg_magnitude DOWN there
+#   - Net: fg_magnitude learns to suppress entity 1 pixels → overlay drops
+#
+# With COLLAPSED entity (lambda_id=3):
+#   - entity 1 covers full fg region → gt_vis_1 ≈ GT_fg_union
+#   - L_vis_e1 pushes fg_magnitude toward GT_fg_union → overlay HIGH
+#   - Entity collapse (winner=0.73) makes overlay accidentally correct
+#
+# THE COUPLING: higher lambda_id → sharper q → stronger entity-suppression gradient
+#   on fg_magnitude → lower overlay. This is why lambda_id=3→overlay=0.37 but
+#   lambda_id=10→overlay=0.22 in stage3.
+#
+# FIX (v34): detach_fg_from_entity_losses=True
+#   L_vis, L_depth_vis, L_balance use entity_probs recomputed with p_fg.detach()
+#   → gradient of these losses flows to q (id_logits) and depth_attn only
+#   → fg_magnitude trained SOLELY by L_fg_spatial (BCE toward GT fg union)
+#   → overlay preserved regardless of lambda_id
+#   → lambda_id=10 can maintain entity balance WITHOUT hurting overlay
+#
+# Expected:
+#   winner: 0.51-0.58 (lambda_id=10, same as v28/v33) ✓
+#   overlay: 0.35-0.39 (restored to lambda_id=3 level, no longer suppressed) ✓
+#   compact: 0.40-0.43 (unchanged, depth_prior_scale floor) ✓
+#   diff_mse: ≤0.05 by ep200-210 (same diffusion training) ✓
+#
+# freeze_fg_spatial_stage3=True: vol and fg_spatial frozen in stage3
+#   (fg_spatial no longer needs to adapt because L_vis doesn't corrupt it)
+#   (frozen fg_spatial at stage2 quality should hold since feature drift from
+#    LoRA/adapters no longer pulls fg_magnitude in wrong direction)
+#
+# Note: freeze_fg_spatial_stage3=True preferred over False in v34:
+#   With detach, fg_magnitude is trained by L_fg_spatial only → slow drift under
+#   feature changes. Freezing preserves the stage2 overlay quality.
+
+objective: factorized_fg_id
+schedule: S3
+representation: factorized_fg_id
+guide_family: dual
+
+depth_bins: 8
+hidden_dim: 64
+spatial_h: 16
+spatial_w: 16
+n_classes: 3
+inject_config: mid_up2
+update_schedule: hybrid
+freeze_vol_stage3: true
+freeze_fg_spatial_stage3: true   # frozen: detach makes fg_magnitude stable (no entity-specific corruption)
+stage1_epochs_override: 100
+vol_stage2_lr_factor: 0.01
+
+training:
+  epochs: 220
+  steps_per_epoch: 20
+  eval_every: 5
+  lr_volume: 5e-4
+  lr_guide: 6e-4
+  lr_lora: 5e-5
+  lr_adapter: 5e-5
+  la_diff: 1.0
+  la_vol: 3.0
+  lambda_id: 10.0             # restored: maintains entity balance (winner~0.51-0.58)
+  fg_pos_weight: 10.0
+  lambda_vis: 0.5
+  t_max: 300
+  n_frames: 8
+  height: 256
+  width: 256
+  seed: 7
+  la_feature_sep: 0.0
+  temp_start: 1.0
+  temp_end: 0.3
+  diff_warmup_epochs: 5
+  lambda_compact: 3.0
+  lambda_depth_ce: 3.0
+  lambda_depth_vis: 2.0
+  compact_warmup_epoch: 0
+  balance_warmup_epoch: 100
+  lambda_gate_push: 0.0
+  min_gate_stage3: 0.10
+  max_gate: 0.35
+  lambda_balance: 3.0
+  detach_fg_from_entity_losses: true   # v34 KEY: stops L_vis/L_depth_vis/L_balance gradient to fg_magnitude
+
+eval:
+  n_steps: 20
+  guidance_scale: 7.5
+  eval_seed: 42
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  volume_gt_render_resolution: 128
+
+model:
+  adapter_rank: 64
+  lora_rank: 4
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

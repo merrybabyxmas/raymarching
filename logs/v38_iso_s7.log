@@ -1,0 +1,1367 @@
+[Ablation] Loading pipeline...
+Loading MotionAdapter...
+Loading base model (emilianJR/epiCRealism)...
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]`torch_dtype` is deprecated! Use `dtype` instead!
+Loading pipeline components...:  17%|█▋        | 1/6 [00:00<00:00,  5.24it/s]/home/dongwoo44/miniconda3/lib/python3.13/site-packages/transformers/models/clip/feature_extraction_clip.py:30: FutureWarning: The class CLIPFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please use CLIPImageProcessor instead.
+  warnings.warn(
+Loading pipeline components...: 100%|██████████| 6/6 [00:00<00:00, 14.63it/s]Loading pipeline components...: 100%|██████████| 6/6 [00:00<00:00, 13.42it/s]
+Pipeline on cuda, dtype=torch.float16
+[Ablation] Loading dataset...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  dataset size: 180
+
+============================================================
+[Ablation] b1_v38_iso_s7
+  objective=factorized_fg_id  schedule=S3  guide=dual  repr=factorized_fg_id
+============================================================
+/home/dongwoo44/papers/raymarching/data/phase62/volume_gt_builder.py:53: PyVistaDeprecationWarning: This function is deprecated and will be removed in future version of PyVista. Use vtk with osmesa instead.
+  pv.start_xvfb()
+[Ablation] factorized_fg_id / S3 / guide=dual
+  epochs=220 steps/ep=20 train=144 val=36
+  [ep   0] stage1  loss=82.7067  acc_ent=0.0000  diff_w=0.00  steps=15/20
+  [ep   1] stage1  loss=77.1760  acc_ent=0.0470  diff_w=0.00  steps=17/20
+  [ep   2] stage1  loss=81.0840  acc_ent=0.1232  diff_w=0.00  steps=18/20
+  [ep   3] stage1  loss=79.2229  acc_ent=0.1812  diff_w=0.00  steps=16/20
+  [ep   4] stage1  loss=76.1999  acc_ent=0.2448  diff_w=0.00  steps=14/20
+  [contract ep004] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2045  consec=0
+    topo:  compact=0.343(≥0.6)  D_vis=0.023(≥0.25)  D_amo=0.051(≥0.4)  LCC=0.826(≥0.85)  2color=Y(0.533/0.467)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.089(≥0.35)  winner=0.510(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0693(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep004] S1:FAIL  S2:----  S3:----  compact=0.343  2color=Y(0.533/0.467)  iou_min=0.012  gate=0.0000  overlay=0.089  winner=0.51  diff_mse=0.0693  contract_score=0.2045
+  [val] score=0.1430  struct=28.8177  acc_ent=0.1621  iou_e0=0.0560  iou_e1=0.0117  iou_min=0.0117  compact=0.343  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 10%|█         | 2/20 [00:00<00:01, 16.38it/s] 25%|██▌       | 5/20 [00:00<00:00, 20.27it/s] 40%|████      | 8/20 [00:00<00:00, 21.30it/s] 55%|█████▌    | 11/20 [00:00<00:00, 22.13it/s] 70%|███████   | 14/20 [00:00<00:00, 22.59it/s] 85%|████████▌ | 17/20 [00:00<00:00, 22.24it/s]100%|██████████| 20/20 [00:00<00:00, 22.67it/s]100%|██████████| 20/20 [00:00<00:00, 21.99it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.27it/s] 30%|███       | 6/20 [00:00<00:00, 21.80it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.45it/s] 60%|██████    | 12/20 [00:00<00:00, 23.00it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.26it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.41it/s]100%|██████████| 20/20 [00:00<00:00, 23.08it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.48it/s] 30%|███       | 6/20 [00:00<00:00, 23.65it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.73it/s] 60%|██████    | 12/20 [00:00<00:00, 23.84it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.90it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.95it/s]100%|██████████| 20/20 [00:00<00:00, 23.87it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch004_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep004] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.1547  consec=0
+    topo:  compact=0.343(≥0.6)  D_vis=0.023(≥0.25)  D_amo=0.051(≥0.4)  LCC=0.826(≥0.85)  2color=Y(0.533/0.467)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.089(≥0.35)  winner=0.510(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0693(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep004] S1:FAIL  S2:----  S3:----  compact=0.343  2color=Y(0.533/0.467)  iou_min=0.012  gate=0.0000  overlay=0.089  winner=0.51  diff_mse=0.0693  contract_score=0.1547
+  * best epoch=4 val_score=0.1500
+  [ep   5] stage1  loss=59.7558  acc_ent=0.3733  diff_w=0.00  steps=11/20
+  [ep   6] stage1  loss=76.5304  acc_ent=0.2281  diff_w=0.00  steps=12/20
+  [ep   7] stage1  loss=78.9029  acc_ent=0.1860  diff_w=0.00  steps=15/20
+  [ep   8] stage1  loss=78.0049  acc_ent=0.2019  diff_w=0.00  steps=16/20
+  [ep   9] stage1  loss=76.7799  acc_ent=0.2461  diff_w=0.00  steps=17/20
+  [contract ep009] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2847  consec=0
+    topo:  compact=0.435(≥0.6)  D_vis=0.080(≥0.25)  D_amo=0.073(≥0.4)  LCC=0.871(≥0.85)  2color=Y(0.632/0.368)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.089(≥0.35)  winner=0.664(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0687(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep009] S1:FAIL  S2:----  S3:----  compact=0.435  2color=Y(0.632/0.368)  iou_min=0.042  gate=0.0000  overlay=0.089  winner=0.66  diff_mse=0.0687  contract_score=0.2847
+  [val] score=0.1650  struct=30.5423  acc_ent=0.2137  iou_e0=0.0445  iou_e1=0.0418  iou_min=0.0418  compact=0.435  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.99it/s] 30%|███       | 6/20 [00:00<00:00, 23.97it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.96it/s] 60%|██████    | 12/20 [00:00<00:00, 23.88it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.85it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.87it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.03it/s] 30%|███       | 6/20 [00:00<00:00, 24.03it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.93it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.91it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.82it/s]100%|██████████| 20/20 [00:00<00:00, 23.87it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.80it/s] 30%|███       | 6/20 [00:00<00:00, 23.69it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.72it/s] 60%|██████    | 12/20 [00:00<00:00, 23.81it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.90it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.95it/s]100%|██████████| 20/20 [00:00<00:00, 23.86it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch009_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep009] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2348  consec=0
+    topo:  compact=0.435(≥0.6)  D_vis=0.080(≥0.25)  D_amo=0.073(≥0.4)  LCC=0.871(≥0.85)  2color=Y(0.632/0.368)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.089(≥0.35)  winner=0.664(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0687(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep009] S1:FAIL  S2:----  S3:----  compact=0.435  2color=Y(0.632/0.368)  iou_min=0.042  gate=0.0000  overlay=0.089  winner=0.66  diff_mse=0.0687  contract_score=0.2348
+  * best epoch=9 val_score=0.2069
+  [ep  10] stage1  loss=68.2657  acc_ent=0.4188  diff_w=0.00  steps=11/20
+  [ep  11] stage1  loss=68.9551  acc_ent=0.4329  diff_w=0.00  steps=13/20
+  [ep  12] stage1  loss=70.9420  acc_ent=0.4393  diff_w=0.00  steps=8/20
+  [ep  13] stage1  loss=66.4853  acc_ent=0.4325  diff_w=0.00  steps=13/20
+  [ep  14] stage1  loss=73.4380  acc_ent=0.3256  diff_w=0.00  steps=12/20
+  [contract ep014] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2925  consec=0
+    topo:  compact=0.432(≥0.6)  D_vis=0.087(≥0.25)  D_amo=0.080(≥0.4)  LCC=0.848(≥0.85)  2color=Y(0.569/0.431)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.089(≥0.35)  winner=0.552(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0686(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep014] S1:FAIL  S2:----  S3:----  compact=0.432  2color=Y(0.569/0.431)  iou_min=0.045  gate=0.0000  overlay=0.089  winner=0.55  diff_mse=0.0686  contract_score=0.2925
+  [val] score=0.1782  struct=42.6662  acc_ent=0.2690  iou_e0=0.0454  iou_e1=0.0540  iou_min=0.0454  compact=0.432  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.82it/s] 30%|███       | 6/20 [00:00<00:00, 23.30it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.55it/s] 60%|██████    | 12/20 [00:00<00:00, 23.66it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.75it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.83it/s]100%|██████████| 20/20 [00:00<00:00, 23.69it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.08it/s] 30%|███       | 6/20 [00:00<00:00, 22.57it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.04it/s] 60%|██████    | 12/20 [00:00<00:00, 23.06it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.27it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.41it/s]100%|██████████| 20/20 [00:00<00:00, 23.25it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.70it/s] 30%|███       | 6/20 [00:00<00:00, 23.39it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.39it/s] 60%|██████    | 12/20 [00:00<00:00, 23.17it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.42it/s] 90%|█████████ | 18/20 [00:00<00:00, 22.61it/s]100%|██████████| 20/20 [00:00<00:00, 22.96it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch014_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep014] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2426  consec=0
+    topo:  compact=0.432(≥0.6)  D_vis=0.087(≥0.25)  D_amo=0.080(≥0.4)  LCC=0.848(≥0.85)  2color=Y(0.569/0.431)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.089(≥0.35)  winner=0.552(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0686(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep014] S1:FAIL  S2:----  S3:----  compact=0.432  2color=Y(0.569/0.431)  iou_min=0.045  gate=0.0000  overlay=0.089  winner=0.55  diff_mse=0.0686  contract_score=0.2426
+  * best epoch=14 val_score=0.2169
+  [ep  15] stage1  loss=58.3951  acc_ent=0.4857  diff_w=0.00  steps=11/20
+  [ep  16] stage1  loss=72.0091  acc_ent=0.3742  diff_w=0.00  steps=13/20
+  [ep  17] stage1  loss=68.4606  acc_ent=0.3920  diff_w=0.00  steps=12/20
+  [ep  18] stage1  loss=70.7709  acc_ent=0.3907  diff_w=0.00  steps=10/20
+  [ep  19] stage1  loss=65.2423  acc_ent=0.4458  diff_w=0.00  steps=15/20
+  [contract ep019] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2807  consec=0
+    topo:  compact=0.430(≥0.6)  D_vis=0.078(≥0.25)  D_amo=0.071(≥0.4)  LCC=0.855(≥0.85)  2color=Y(0.462/0.487)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.091(≥0.35)  winner=0.507(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep019] S1:FAIL  S2:----  S3:----  compact=0.430  2color=Y(0.462/0.487)  iou_min=0.041  gate=0.0000  overlay=0.091  winner=0.51  diff_mse=0.0685  contract_score=0.2807
+  [val] score=0.1646  struct=32.5859  acc_ent=0.2019  iou_e0=0.0408  iou_e1=0.0623  iou_min=0.0408  compact=0.430  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.07it/s] 30%|███       | 6/20 [00:00<00:00, 23.93it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.95it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.95it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.96it/s] 30%|███       | 6/20 [00:00<00:00, 23.96it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.92it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.97it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.93it/s] 30%|███       | 6/20 [00:00<00:00, 24.00it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.03it/s] 60%|██████    | 12/20 [00:00<00:00, 24.04it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.03it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.04it/s]100%|██████████| 20/20 [00:00<00:00, 24.03it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch019_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep019] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2309  consec=0
+    topo:  compact=0.430(≥0.6)  D_vis=0.078(≥0.25)  D_amo=0.071(≥0.4)  LCC=0.855(≥0.85)  2color=Y(0.462/0.487)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.091(≥0.35)  winner=0.507(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep019] S1:FAIL  S2:----  S3:----  compact=0.430  2color=Y(0.462/0.487)  iou_min=0.041  gate=0.0000  overlay=0.091  winner=0.51  diff_mse=0.0685  contract_score=0.2309
+  [ep  20] stage1  loss=73.5499  acc_ent=0.3571  diff_w=0.00  steps=13/20
+  [ep  21] stage1  loss=70.7519  acc_ent=0.4263  diff_w=0.00  steps=15/20
+  [ep  22] stage1  loss=62.5309  acc_ent=0.4142  diff_w=0.00  steps=12/20
+  [ep  23] stage1  loss=73.6078  acc_ent=0.3668  diff_w=0.00  steps=16/20
+  [ep  24] stage1  loss=65.7422  acc_ent=0.4465  diff_w=0.00  steps=12/20
+  [contract ep024] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2970  consec=0
+    topo:  compact=0.378(≥0.6)  D_vis=0.103(≥0.25)  D_amo=0.090(≥0.4)  LCC=0.829(≥0.85)  2color=Y(0.458/0.434)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.100(≥0.35)  winner=0.510(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0678(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep024] S1:FAIL  S2:----  S3:----  compact=0.378  2color=Y(0.458/0.434)  iou_min=0.054  gate=0.0000  overlay=0.100  winner=0.51  diff_mse=0.0678  contract_score=0.2970
+  [val] score=0.1799  struct=48.1827  acc_ent=0.2570  iou_e0=0.0544  iou_e1=0.0555  iou_min=0.0544  compact=0.378  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.58it/s] 30%|███       | 6/20 [00:00<00:00, 23.68it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.78it/s] 60%|██████    | 12/20 [00:00<00:00, 23.80it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.80it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.85it/s]100%|██████████| 20/20 [00:00<00:00, 23.82it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.73it/s] 30%|███       | 6/20 [00:00<00:00, 23.33it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.48it/s] 60%|██████    | 12/20 [00:00<00:00, 23.14it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.11it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.20it/s]100%|██████████| 20/20 [00:00<00:00, 23.22it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.83it/s] 30%|███       | 6/20 [00:00<00:00, 23.77it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.76it/s] 60%|██████    | 12/20 [00:00<00:00, 23.63it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.64it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.37it/s]100%|██████████| 20/20 [00:00<00:00, 23.43it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch024_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep024] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2471  consec=0
+    topo:  compact=0.378(≥0.6)  D_vis=0.103(≥0.25)  D_amo=0.090(≥0.4)  LCC=0.829(≥0.85)  2color=Y(0.458/0.434)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.100(≥0.35)  winner=0.510(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0678(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep024] S1:FAIL  S2:----  S3:----  compact=0.378  2color=Y(0.458/0.434)  iou_min=0.054  gate=0.0000  overlay=0.100  winner=0.51  diff_mse=0.0678  contract_score=0.2471
+  * best epoch=24 val_score=0.2202
+  [ep  25] stage1  loss=64.7417  acc_ent=0.4361  diff_w=0.00  steps=15/20
+  [ep  26] stage1  loss=56.5561  acc_ent=0.4653  diff_w=0.00  steps=12/20
+  [ep  27] stage1  loss=74.6742  acc_ent=0.3045  diff_w=0.00  steps=17/20
+  [ep  28] stage1  loss=67.1587  acc_ent=0.4242  diff_w=0.00  steps=15/20
+  [ep  29] stage1  loss=68.6989  acc_ent=0.4361  diff_w=0.00  steps=12/20
+  [contract ep029] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2813  consec=0
+    topo:  compact=0.403(≥0.6)  D_vis=0.084(≥0.25)  D_amo=0.076(≥0.4)  LCC=0.822(≥0.85)  2color=Y(0.514/0.370)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.101(≥0.35)  winner=0.569(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0683(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep029] S1:FAIL  S2:----  S3:----  compact=0.403  2color=Y(0.514/0.370)  iou_min=0.044  gate=0.0000  overlay=0.101  winner=0.57  diff_mse=0.0683  contract_score=0.2813
+  [val] score=0.1773  struct=31.6470  acc_ent=0.2465  iou_e0=0.0440  iou_e1=0.0769  iou_min=0.0440  compact=0.403  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.08it/s] 30%|███       | 6/20 [00:00<00:00, 23.94it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.98it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.99it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.00it/s]100%|██████████| 20/20 [00:00<00:00, 24.00it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.93it/s] 30%|███       | 6/20 [00:00<00:00, 23.87it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.85it/s] 60%|██████    | 12/20 [00:00<00:00, 23.90it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.97it/s]100%|██████████| 20/20 [00:00<00:00, 23.93it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.82it/s] 30%|███       | 6/20 [00:00<00:00, 23.93it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.97it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.97it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.92it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch029_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep029] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2315  consec=0
+    topo:  compact=0.403(≥0.6)  D_vis=0.084(≥0.25)  D_amo=0.076(≥0.4)  LCC=0.822(≥0.85)  2color=Y(0.514/0.370)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.101(≥0.35)  winner=0.569(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0683(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep029] S1:FAIL  S2:----  S3:----  compact=0.403  2color=Y(0.514/0.370)  iou_min=0.044  gate=0.0000  overlay=0.101  winner=0.57  diff_mse=0.0683  contract_score=0.2315
+  [ep  30] stage1  loss=63.2391  acc_ent=0.3941  diff_w=0.00  steps=15/20
+  [ep  31] stage1  loss=63.9425  acc_ent=0.4049  diff_w=0.00  steps=12/20
+  [ep  32] stage1  loss=71.7558  acc_ent=0.3815  diff_w=0.00  steps=12/20
+  [ep  33] stage1  loss=67.8049  acc_ent=0.3743  diff_w=0.00  steps=11/20
+  [ep  34] stage1  loss=58.3355  acc_ent=0.4757  diff_w=0.00  steps=15/20
+  [contract ep034] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.2793  consec=0
+    topo:  compact=0.431(≥0.6)  D_vis=0.076(≥0.25)  D_amo=0.072(≥0.4)  LCC=0.818(≥0.85)  2color=Y(0.363/0.514)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.101(≥0.35)  winner=0.572(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0678(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep034] S1:FAIL  S2:----  S3:----  compact=0.431  2color=Y(0.363/0.514)  iou_min=0.039  gate=0.0000  overlay=0.101  winner=0.57  diff_mse=0.0678  contract_score=0.2793
+  [val] score=0.1821  struct=73.0234  acc_ent=0.2882  iou_e0=0.0394  iou_e1=0.0781  iou_min=0.0394  compact=0.431  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.05it/s] 30%|███       | 6/20 [00:00<00:00, 23.85it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.83it/s] 60%|██████    | 12/20 [00:00<00:00, 23.77it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.77it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.80it/s]100%|██████████| 20/20 [00:00<00:00, 23.82it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.05it/s] 30%|███       | 6/20 [00:00<00:00, 23.65it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.58it/s] 60%|██████    | 12/20 [00:00<00:00, 23.24it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.42it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.45it/s]100%|██████████| 20/20 [00:00<00:00, 23.51it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.60it/s] 30%|███       | 6/20 [00:00<00:00, 22.87it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.88it/s] 60%|██████    | 12/20 [00:00<00:00, 23.20it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.36it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.51it/s]100%|██████████| 20/20 [00:00<00:00, 23.34it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch034_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep034] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2295  consec=0
+    topo:  compact=0.431(≥0.6)  D_vis=0.076(≥0.25)  D_amo=0.072(≥0.4)  LCC=0.818(≥0.85)  2color=Y(0.363/0.514)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.101(≥0.35)  winner=0.572(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0678(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep034] S1:FAIL  S2:----  S3:----  compact=0.431  2color=Y(0.363/0.514)  iou_min=0.039  gate=0.0000  overlay=0.101  winner=0.57  diff_mse=0.0678  contract_score=0.2295
+  [ep  35] stage1  loss=62.9810  acc_ent=0.3730  diff_w=0.00  steps=15/20
+  [ep  36] stage1  loss=62.7178  acc_ent=0.4772  diff_w=0.00  steps=15/20
+  [ep  37] stage1  loss=58.8084  acc_ent=0.4749  diff_w=0.00  steps=11/20
+  [ep  38] stage1  loss=64.1575  acc_ent=0.3730  diff_w=0.00  steps=10/20
+  [ep  39] stage1  loss=64.6397  acc_ent=0.4094  diff_w=0.00  steps=11/20
+  [contract ep039] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3185  consec=0
+    topo:  compact=0.427(≥0.6)  D_vis=0.107(≥0.25)  D_amo=0.102(≥0.4)  LCC=0.802(≥0.85)  2color=Y(0.446/0.364)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.110(≥0.35)  winner=0.585(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep039] S1:FAIL  S2:----  S3:----  compact=0.427  2color=Y(0.446/0.364)  iou_min=0.057  gate=0.0000  overlay=0.110  winner=0.59  diff_mse=0.0685  contract_score=0.3185
+  [val] score=0.1815  struct=40.9394  acc_ent=0.2429  iou_e0=0.0568  iou_e1=0.0760  iou_min=0.0568  compact=0.427  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.19it/s] 30%|███       | 6/20 [00:00<00:00, 23.08it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.44it/s] 60%|██████    | 12/20 [00:00<00:00, 23.67it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.78it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.79it/s]100%|██████████| 20/20 [00:00<00:00, 23.63it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.05it/s] 30%|███       | 6/20 [00:00<00:00, 24.04it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.00it/s] 60%|██████    | 12/20 [00:00<00:00, 23.98it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.97it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.97it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.02it/s] 30%|███       | 6/20 [00:00<00:00, 23.98it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.03it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.87it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.89it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch039_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep039] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2687  consec=0
+    topo:  compact=0.427(≥0.6)  D_vis=0.107(≥0.25)  D_amo=0.102(≥0.4)  LCC=0.802(≥0.85)  2color=Y(0.446/0.364)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.110(≥0.35)  winner=0.585(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep039] S1:FAIL  S2:----  S3:----  compact=0.427  2color=Y(0.446/0.364)  iou_min=0.057  gate=0.0000  overlay=0.110  winner=0.59  diff_mse=0.0685  contract_score=0.2687
+  * best epoch=39 val_score=0.2338
+  [ep  40] stage1  loss=68.7073  acc_ent=0.4083  diff_w=0.00  steps=11/20
+  [ep  41] stage1  loss=55.5854  acc_ent=0.3896  diff_w=0.00  steps=10/20
+  [ep  42] stage1  loss=60.0440  acc_ent=0.3735  diff_w=0.00  steps=11/20
+  [ep  43] stage1  loss=70.5532  acc_ent=0.3902  diff_w=0.00  steps=13/20
+  [ep  44] stage1  loss=63.9903  acc_ent=0.3872  diff_w=0.00  steps=13/20
+  [contract ep044] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3195  consec=0
+    topo:  compact=0.428(≥0.6)  D_vis=0.109(≥0.25)  D_amo=0.100(≥0.4)  LCC=0.801(≥0.85)  2color=Y(0.275/0.422)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.127(≥0.35)  winner=0.596(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep044] S1:FAIL  S2:----  S3:----  compact=0.428  2color=Y(0.275/0.422)  iou_min=0.058  gate=0.0000  overlay=0.127  winner=0.60  diff_mse=0.0685  contract_score=0.3195
+  [val] score=0.1841  struct=42.2212  acc_ent=0.2401  iou_e0=0.0579  iou_e1=0.0941  iou_min=0.0579  compact=0.428  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.97it/s] 30%|███       | 6/20 [00:00<00:00, 23.85it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.89it/s] 60%|██████    | 12/20 [00:00<00:00, 23.89it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.90it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.92it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.81it/s] 30%|███       | 6/20 [00:00<00:00, 23.79it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.76it/s] 60%|██████    | 12/20 [00:00<00:00, 23.70it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.74it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.82it/s]100%|██████████| 20/20 [00:00<00:00, 23.81it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 24.00it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.97it/s] 60%|██████    | 12/20 [00:00<00:00, 24.00it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.01it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.99it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch044_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep044] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2696  consec=0
+    topo:  compact=0.428(≥0.6)  D_vis=0.109(≥0.25)  D_amo=0.100(≥0.4)  LCC=0.801(≥0.85)  2color=Y(0.275/0.422)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.127(≥0.35)  winner=0.596(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep044] S1:FAIL  S2:----  S3:----  compact=0.428  2color=Y(0.275/0.422)  iou_min=0.058  gate=0.0000  overlay=0.127  winner=0.60  diff_mse=0.0685  contract_score=0.2696
+  * best epoch=44 val_score=0.2354
+  [ep  45] stage1  loss=60.8181  acc_ent=0.3700  diff_w=0.00  steps=18/20
+  [ep  46] stage1  loss=58.0421  acc_ent=0.4102  diff_w=0.00  steps=14/20
+  [ep  47] stage1  loss=62.1265  acc_ent=0.4148  diff_w=0.00  steps=14/20
+  [ep  48] stage1  loss=62.5249  acc_ent=0.3646  diff_w=0.00  steps=15/20
+  [ep  49] stage1  loss=72.7191  acc_ent=0.3905  diff_w=0.00  steps=13/20
+  [contract ep049] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3344  consec=0
+    topo:  compact=0.429(≥0.6)  D_vis=0.120(≥0.25)  D_amo=0.112(≥0.4)  LCC=0.808(≥0.85)  2color=Y(0.350/0.338)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.129(≥0.35)  winner=0.514(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0689(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep049] S1:FAIL  S2:----  S3:----  compact=0.429  2color=Y(0.350/0.338)  iou_min=0.064  gate=0.0000  overlay=0.129  winner=0.51  diff_mse=0.0689  contract_score=0.3344
+  [val] score=0.1884  struct=42.0429  acc_ent=0.2516  iou_e0=0.0638  iou_e1=0.0902  iou_min=0.0638  compact=0.429  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.97it/s] 30%|███       | 6/20 [00:00<00:00, 23.81it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.51it/s] 60%|██████    | 12/20 [00:00<00:00, 23.39it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.24it/s] 90%|█████████ | 18/20 [00:00<00:00, 22.90it/s]100%|██████████| 20/20 [00:00<00:00, 23.05it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.97it/s] 30%|███       | 6/20 [00:00<00:00, 23.87it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.79it/s] 60%|██████    | 12/20 [00:00<00:00, 23.73it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.70it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.78it/s]100%|██████████| 20/20 [00:00<00:00, 23.81it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.03it/s] 30%|███       | 6/20 [00:00<00:00, 23.97it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.95it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.00it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.00it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch049_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep049] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.2846  consec=0
+    topo:  compact=0.429(≥0.6)  D_vis=0.120(≥0.25)  D_amo=0.112(≥0.4)  LCC=0.808(≥0.85)  2color=Y(0.350/0.338)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.129(≥0.35)  winner=0.514(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0689(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep049] S1:FAIL  S2:----  S3:----  compact=0.429  2color=Y(0.350/0.338)  iou_min=0.064  gate=0.0000  overlay=0.129  winner=0.51  diff_mse=0.0689  contract_score=0.2846
+  * best epoch=49 val_score=0.2461
+  [ep  50] stage1  loss=59.0714  acc_ent=0.4469  diff_w=0.00  steps=11/20
+  [ep  51] stage1  loss=60.1808  acc_ent=0.4237  diff_w=0.00  steps=13/20
+  [ep  52] stage1  loss=66.3624  acc_ent=0.3777  diff_w=0.00  steps=14/20
+  [ep  53] stage1  loss=58.3557  acc_ent=0.4813  diff_w=0.00  steps=11/20
+  [ep  54] stage1  loss=55.7627  acc_ent=0.4067  diff_w=0.00  steps=7/20
+  [contract ep054] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3772  consec=0
+    topo:  compact=0.416(≥0.6)  D_vis=0.162(≥0.25)  D_amo=0.137(≥0.4)  LCC=0.613(≥0.85)  2color=Y(0.190/0.123)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.282(≥0.35)  winner=0.586(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0686(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep054] S1:FAIL  S2:----  S3:----  compact=0.416  2color=Y(0.190/0.123)  iou_min=0.088  gate=0.0000  overlay=0.282  winner=0.59  diff_mse=0.0686  contract_score=0.3772
+  [val] score=0.1882  struct=130.1406  acc_ent=0.1943  iou_e0=0.1021  iou_e1=0.0882  iou_min=0.0882  compact=0.416  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 21.33it/s] 30%|███       | 6/20 [00:00<00:00, 22.67it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.22it/s] 60%|██████    | 12/20 [00:00<00:00, 23.49it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.64it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.66it/s]100%|██████████| 20/20 [00:00<00:00, 23.39it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.93it/s] 30%|███       | 6/20 [00:00<00:00, 23.84it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.76it/s] 60%|██████    | 12/20 [00:00<00:00, 23.64it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.58it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.59it/s]100%|██████████| 20/20 [00:00<00:00, 23.66it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.00it/s] 30%|███       | 6/20 [00:00<00:00, 23.93it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.92it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.91it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.92it/s]100%|██████████| 20/20 [00:00<00:00, 23.93it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch054_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep054] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3274  consec=0
+    topo:  compact=0.416(≥0.6)  D_vis=0.162(≥0.25)  D_amo=0.137(≥0.4)  LCC=0.613(≥0.85)  2color=Y(0.190/0.123)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.282(≥0.35)  winner=0.586(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0686(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep054] S1:FAIL  S2:----  S3:----  compact=0.416  2color=Y(0.190/0.123)  iou_min=0.088  gate=0.0000  overlay=0.282  winner=0.59  diff_mse=0.0686  contract_score=0.3274
+  * best epoch=54 val_score=0.2717
+  [ep  55] stage1  loss=74.8790  acc_ent=0.0901  diff_w=0.00  steps=1/20
+  [ep  56] stage1  loss=69.7255  acc_ent=0.4247  diff_w=0.00  steps=6/20
+  [ep  57] stage1  loss=56.3850  acc_ent=0.4282  diff_w=0.00  steps=9/20
+  [ep  58] stage1  loss=59.3469  acc_ent=0.3561  diff_w=0.00  steps=13/20
+  [ep  59] stage1  loss=60.4230  acc_ent=0.4583  diff_w=0.00  steps=13/20
+  [contract ep059] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.4380  consec=0
+    topo:  compact=0.402(≥0.6)  D_vis=0.218(≥0.25)  D_amo=0.176(≥0.4)  LCC=0.656(≥0.85)  2color=Y(0.092/0.121)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.398(≥0.35)  winner=0.561(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep059] S1:PASS  S2:----  S3:----  compact=0.402  2color=Y(0.092/0.121)  iou_min=0.123  gate=0.0000  overlay=0.398  winner=0.56  diff_mse=0.0685  contract_score=0.4380
+  [val] score=0.2103  struct=45.5787  acc_ent=0.1925  iou_e0=0.1225  iou_e1=0.1394  iou_min=0.1225  compact=0.402  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.14it/s] 30%|███       | 6/20 [00:00<00:00, 23.12it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.51it/s] 60%|██████    | 12/20 [00:00<00:00, 23.70it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.83it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.89it/s]100%|██████████| 20/20 [00:00<00:00, 23.51it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.82it/s] 30%|███       | 6/20 [00:00<00:00, 23.76it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.47it/s] 60%|██████    | 12/20 [00:00<00:00, 23.36it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.38it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.38it/s]100%|██████████| 20/20 [00:00<00:00, 23.38it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.82it/s] 30%|███       | 6/20 [00:00<00:00, 23.92it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.88it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.96it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch059_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep059] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3881  consec=0
+    topo:  compact=0.402(≥0.6)  D_vis=0.218(≥0.25)  D_amo=0.176(≥0.4)  LCC=0.656(≥0.85)  2color=Y(0.092/0.121)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.398(≥0.35)  winner=0.561(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0685(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep059] S1:PASS  S2:----  S3:----  compact=0.402  2color=Y(0.092/0.121)  iou_min=0.123  gate=0.0000  overlay=0.398  winner=0.56  diff_mse=0.0685  contract_score=0.3881
+  * best epoch=59 val_score=0.3170
+  [ep  60] stage1  loss=65.3714  acc_ent=0.3989  diff_w=0.00  steps=11/20
+  [ep  61] stage1  loss=55.7996  acc_ent=0.4288  diff_w=0.00  steps=12/20
+  [ep  62] stage1  loss=58.9662  acc_ent=0.4555  diff_w=0.00  steps=13/20
+  [ep  63] stage1  loss=64.1382  acc_ent=0.4065  diff_w=0.00  steps=13/20
+  [ep  64] stage1  loss=72.1363  acc_ent=0.3042  diff_w=0.00  steps=14/20
+  [contract ep064] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.4129  consec=0
+    topo:  compact=0.420(≥0.6)  D_vis=0.195(≥0.25)  D_amo=0.154(≥0.4)  LCC=0.705(≥0.85)  2color=Y(0.121/0.153)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.324(≥0.35)  winner=0.521(≤0.45)  cosF=0.496(≤0.1)
+    diff:  mse=0.0688(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep064] S1:PASS  S2:----  S3:----  compact=0.420  2color=Y(0.121/0.153)  iou_min=0.108  gate=0.0000  overlay=0.324  winner=0.52  diff_mse=0.0688  contract_score=0.4129
+  [val] score=0.2024  struct=33.7596  acc_ent=0.1947  iou_e0=0.1081  iou_e1=0.1226  iou_min=0.1081  compact=0.420  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.95it/s] 30%|███       | 6/20 [00:00<00:00, 23.80it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.90it/s] 60%|██████    | 12/20 [00:00<00:00, 23.92it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.95it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.97it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.93it/s] 30%|███       | 6/20 [00:00<00:00, 23.91it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.93it/s] 60%|██████    | 12/20 [00:00<00:00, 23.89it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.93it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.94it/s]100%|██████████| 20/20 [00:00<00:00, 23.93it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 23.99it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.03it/s] 60%|██████    | 12/20 [00:00<00:00, 24.04it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.05it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.06it/s]100%|██████████| 20/20 [00:00<00:00, 24.05it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch064_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep064] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3630  consec=0
+    topo:  compact=0.420(≥0.6)  D_vis=0.195(≥0.25)  D_amo=0.154(≥0.4)  LCC=0.705(≥0.85)  2color=Y(0.121/0.153)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.324(≥0.35)  winner=0.521(≤0.45)  cosF=0.496(≤0.1)
+    diff:  mse=0.0688(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep064] S1:PASS  S2:----  S3:----  compact=0.420  2color=Y(0.121/0.153)  iou_min=0.108  gate=0.0000  overlay=0.324  winner=0.52  diff_mse=0.0688  contract_score=0.3630
+  [ep  65] stage1  loss=63.9821  acc_ent=0.4157  diff_w=0.00  steps=12/20
+  [ep  66] stage1  loss=64.1811  acc_ent=0.4128  diff_w=0.00  steps=11/20
+  [ep  67] stage1  loss=68.3383  acc_ent=0.2551  diff_w=0.00  steps=11/20
+  [ep  68] stage1  loss=64.6314  acc_ent=0.4680  diff_w=0.00  steps=13/20
+  [ep  69] stage1  loss=58.4673  acc_ent=0.3463  diff_w=0.00  steps=14/20
+  [contract ep069] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3837  consec=0
+    topo:  compact=0.376(≥0.6)  D_vis=0.175(≥0.25)  D_amo=0.150(≥0.4)  LCC=0.691(≥0.85)  2color=Y(0.227/0.198)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.209(≥0.35)  winner=0.520(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0688(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep069] S1:FAIL  S2:----  S3:----  compact=0.376  2color=Y(0.227/0.198)  iou_min=0.096  gate=0.0000  overlay=0.209  winner=0.52  diff_mse=0.0688  contract_score=0.3837
+  [val] score=0.2030  struct=38.4745  acc_ent=0.2398  iou_e0=0.1055  iou_e1=0.0958  iou_min=0.0958  compact=0.376  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.03it/s] 30%|███       | 6/20 [00:00<00:00, 23.84it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.90it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.96it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.96it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.05it/s] 30%|███       | 6/20 [00:00<00:00, 24.01it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.01it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.59it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.59it/s]100%|██████████| 20/20 [00:00<00:00, 23.62it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.23it/s] 30%|███       | 6/20 [00:00<00:00, 23.25it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.42it/s] 60%|██████    | 12/20 [00:00<00:00, 23.16it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.27it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.41it/s]100%|██████████| 20/20 [00:00<00:00, 23.38it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch069_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep069] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3338  consec=0
+    topo:  compact=0.376(≥0.6)  D_vis=0.175(≥0.25)  D_amo=0.150(≥0.4)  LCC=0.691(≥0.85)  2color=Y(0.227/0.198)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.209(≥0.35)  winner=0.520(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0688(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep069] S1:FAIL  S2:----  S3:----  compact=0.376  2color=Y(0.227/0.198)  iou_min=0.096  gate=0.0000  overlay=0.209  winner=0.52  diff_mse=0.0688  contract_score=0.3338
+  [ep  70] stage1  loss=61.2582  acc_ent=0.4183  diff_w=0.00  steps=16/20
+  [ep  71] stage1  loss=52.3449  acc_ent=0.3946  diff_w=0.00  steps=12/20
+  [ep  72] stage1  loss=67.2167  acc_ent=0.4458  diff_w=0.00  steps=12/20
+  [ep  73] stage1  loss=67.6909  acc_ent=0.3456  diff_w=0.00  steps=15/20
+  [ep  74] stage1  loss=59.6556  acc_ent=0.4084  diff_w=0.00  steps=15/20
+  [contract ep074] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3890  consec=0
+    topo:  compact=0.409(≥0.6)  D_vis=0.170(≥0.25)  D_amo=0.152(≥0.4)  LCC=0.726(≥0.85)  2color=Y(0.198/0.249)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.199(≥0.35)  winner=0.545(≤0.45)  cosF=0.496(≤0.1)
+    diff:  mse=0.0686(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep074] S1:FAIL  S2:----  S3:----  compact=0.409  2color=Y(0.198/0.249)  iou_min=0.093  gate=0.0000  overlay=0.199  winner=0.54  diff_mse=0.0686  contract_score=0.3890
+  [val] score=0.2039  struct=53.4502  acc_ent=0.2586  iou_e0=0.0997  iou_e1=0.0929  iou_min=0.0929  compact=0.409  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.06it/s] 30%|███       | 6/20 [00:00<00:00, 23.92it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.95it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.93it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.76it/s] 30%|███       | 6/20 [00:00<00:00, 23.86it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.93it/s] 60%|██████    | 12/20 [00:00<00:00, 23.95it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.95it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.05it/s] 30%|███       | 6/20 [00:00<00:00, 24.02it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.04it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.01it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.02it/s]100%|██████████| 20/20 [00:00<00:00, 24.01it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch074_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep074] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3392  consec=0
+    topo:  compact=0.409(≥0.6)  D_vis=0.170(≥0.25)  D_amo=0.152(≥0.4)  LCC=0.726(≥0.85)  2color=Y(0.198/0.249)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.199(≥0.35)  winner=0.545(≤0.45)  cosF=0.496(≤0.1)
+    diff:  mse=0.0686(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep074] S1:FAIL  S2:----  S3:----  compact=0.409  2color=Y(0.198/0.249)  iou_min=0.093  gate=0.0000  overlay=0.199  winner=0.54  diff_mse=0.0686  contract_score=0.3392
+  [ep  75] stage1  loss=54.8801  acc_ent=0.4266  diff_w=0.00  steps=14/20
+  [ep  76] stage1  loss=60.1325  acc_ent=0.4314  diff_w=0.00  steps=13/20
+  [ep  77] stage1  loss=55.5877  acc_ent=0.4380  diff_w=0.00  steps=11/20
+  [ep  78] stage1  loss=57.5021  acc_ent=0.4221  diff_w=0.00  steps=10/20
+  [ep  79] stage1  loss=57.5456  acc_ent=0.3735  diff_w=0.00  steps=12/20
+  [contract ep079] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3824  consec=0
+    topo:  compact=0.407(≥0.6)  D_vis=0.169(≥0.25)  D_amo=0.141(≥0.4)  LCC=0.685(≥0.85)  2color=Y(0.152/0.187)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.257(≥0.35)  winner=0.550(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0683(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep079] S1:FAIL  S2:----  S3:----  compact=0.407  2color=Y(0.152/0.187)  iou_min=0.092  gate=0.0000  overlay=0.257  winner=0.55  diff_mse=0.0683  contract_score=0.3824
+  [val] score=0.2067  struct=40.0244  acc_ent=0.2356  iou_e0=0.0923  iou_e1=0.1470  iou_min=0.0923  compact=0.407  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.50it/s] 30%|███       | 6/20 [00:00<00:00, 23.18it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.41it/s] 60%|██████    | 12/20 [00:00<00:00, 23.55it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.67it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.77it/s]100%|██████████| 20/20 [00:00<00:00, 23.61it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.90it/s] 30%|███       | 6/20 [00:00<00:00, 23.91it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.97it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.97it/s]100%|██████████| 20/20 [00:00<00:00, 23.95it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.70it/s] 30%|███       | 6/20 [00:00<00:00, 23.90it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.97it/s] 60%|██████    | 12/20 [00:00<00:00, 24.01it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.02it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.03it/s]100%|██████████| 20/20 [00:00<00:00, 24.00it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch079_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep079] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3326  consec=0
+    topo:  compact=0.407(≥0.6)  D_vis=0.169(≥0.25)  D_amo=0.141(≥0.4)  LCC=0.685(≥0.85)  2color=Y(0.152/0.187)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.257(≥0.35)  winner=0.550(≤0.45)  cosF=0.499(≤0.1)
+    diff:  mse=0.0683(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep079] S1:FAIL  S2:----  S3:----  compact=0.407  2color=Y(0.152/0.187)  iou_min=0.092  gate=0.0000  overlay=0.257  winner=0.55  diff_mse=0.0683  contract_score=0.3326
+  [ep  80] stage1  loss=63.6298  acc_ent=0.3986  diff_w=0.00  steps=12/20
+  [ep  81] stage1  loss=64.9736  acc_ent=0.4155  diff_w=0.00  steps=13/20
+  [ep  82] stage1  loss=56.5560  acc_ent=0.4389  diff_w=0.00  steps=11/20
+  [ep  83] stage1  loss=58.9292  acc_ent=0.4316  diff_w=0.00  steps=10/20
+  [ep  84] stage1  loss=65.5223  acc_ent=0.3802  diff_w=0.00  steps=12/20
+  [contract ep084] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3810  consec=0
+    topo:  compact=0.436(≥0.6)  D_vis=0.160(≥0.25)  D_amo=0.138(≥0.4)  LCC=0.734(≥0.85)  2color=Y(0.259/0.283)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.164(≥0.35)  winner=0.510(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0690(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep084] S1:FAIL  S2:----  S3:----  compact=0.436  2color=Y(0.259/0.283)  iou_min=0.087  gate=0.0000  overlay=0.164  winner=0.51  diff_mse=0.0690  contract_score=0.3810
+  [val] score=0.2031  struct=42.4399  acc_ent=0.2634  iou_e0=0.0870  iou_e1=0.1028  iou_min=0.0870  compact=0.436  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.38it/s] 30%|███       | 6/20 [00:00<00:00, 22.67it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.98it/s] 60%|██████    | 12/20 [00:00<00:00, 23.23it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.34it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.46it/s]100%|██████████| 20/20 [00:00<00:00, 23.30it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.09it/s] 30%|███       | 6/20 [00:00<00:00, 24.05it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.05it/s] 60%|██████    | 12/20 [00:00<00:00, 24.03it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.01it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.96it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 24.03it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.04it/s] 60%|██████    | 12/20 [00:00<00:00, 23.98it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.00it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.02it/s]100%|██████████| 20/20 [00:00<00:00, 24.02it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch084_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep084] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3312  consec=0
+    topo:  compact=0.436(≥0.6)  D_vis=0.160(≥0.25)  D_amo=0.138(≥0.4)  LCC=0.734(≥0.85)  2color=Y(0.259/0.283)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.164(≥0.35)  winner=0.510(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0690(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep084] S1:FAIL  S2:----  S3:----  compact=0.436  2color=Y(0.259/0.283)  iou_min=0.087  gate=0.0000  overlay=0.164  winner=0.51  diff_mse=0.0690  contract_score=0.3312
+  [ep  85] stage1  loss=63.7632  acc_ent=0.4152  diff_w=0.00  steps=12/20
+  [ep  86] stage1  loss=64.1523  acc_ent=0.4099  diff_w=0.00  steps=13/20
+  [ep  87] stage1  loss=74.4536  acc_ent=0.3052  diff_w=0.00  steps=13/20
+  [ep  88] stage1  loss=64.9750  acc_ent=0.3894  diff_w=0.00  steps=14/20
+  [ep  89] stage1  loss=56.5295  acc_ent=0.4245  diff_w=0.00  steps=15/20
+  [contract ep089] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3624  consec=0
+    topo:  compact=0.392(≥0.6)  D_vis=0.154(≥0.25)  D_amo=0.132(≥0.4)  LCC=0.757(≥0.85)  2color=Y(0.112/0.309)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.211(≥0.35)  winner=0.711(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0692(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep089] S1:FAIL  S2:----  S3:----  compact=0.392  2color=Y(0.112/0.309)  iou_min=0.084  gate=0.0000  overlay=0.211  winner=0.71  diff_mse=0.0692  contract_score=0.3624
+  [val] score=0.2020  struct=52.2120  acc_ent=0.2686  iou_e0=0.0835  iou_e1=0.1017  iou_min=0.0835  compact=0.392  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.54it/s] 30%|███       | 6/20 [00:00<00:00, 23.27it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.62it/s] 60%|██████    | 12/20 [00:00<00:00, 23.77it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.86it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.74it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.07it/s] 30%|███       | 6/20 [00:00<00:00, 24.00it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.99it/s] 60%|██████    | 12/20 [00:00<00:00, 23.95it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.95it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.98it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.86it/s] 30%|███       | 6/20 [00:00<00:00, 23.80it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.79it/s] 60%|██████    | 12/20 [00:00<00:00, 23.77it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.78it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.84it/s]100%|██████████| 20/20 [00:00<00:00, 23.84it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch089_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep089] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3125  consec=0
+    topo:  compact=0.392(≥0.6)  D_vis=0.154(≥0.25)  D_amo=0.132(≥0.4)  LCC=0.757(≥0.85)  2color=Y(0.112/0.309)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.211(≥0.35)  winner=0.711(≤0.45)  cosF=0.498(≤0.1)
+    diff:  mse=0.0692(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep089] S1:FAIL  S2:----  S3:----  compact=0.392  2color=Y(0.112/0.309)  iou_min=0.084  gate=0.0000  overlay=0.211  winner=0.71  diff_mse=0.0692  contract_score=0.3125
+  [ep  90] stage1  loss=58.4875  acc_ent=0.4646  diff_w=0.00  steps=12/20
+  [ep  91] stage1  loss=55.6489  acc_ent=0.4915  diff_w=0.00  steps=11/20
+  [ep  92] stage1  loss=58.1549  acc_ent=0.4702  diff_w=0.00  steps=13/20
+  [ep  93] stage1  loss=60.6088  acc_ent=0.3832  diff_w=0.00  steps=13/20
+  [ep  94] stage1  loss=55.3367  acc_ent=0.4191  diff_w=0.00  steps=12/20
+  [contract ep094] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.4128  consec=0
+    topo:  compact=0.398(≥0.6)  D_vis=0.199(≥0.25)  D_amo=0.158(≥0.4)  LCC=0.685(≥0.85)  2color=Y(0.127/0.216)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.259(≥0.35)  winner=0.618(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0692(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep094] S1:PASS  S2:----  S3:----  compact=0.398  2color=Y(0.127/0.216)  iou_min=0.111  gate=0.0000  overlay=0.259  winner=0.62  diff_mse=0.0692  contract_score=0.4128
+  [val] score=0.2130  struct=35.1267  acc_ent=0.2464  iou_e0=0.1106  iou_e1=0.1177  iou_min=0.1106  compact=0.398  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 10%|█         | 2/20 [00:00<00:01, 17.02it/s] 25%|██▌       | 5/20 [00:00<00:00, 20.49it/s] 40%|████      | 8/20 [00:00<00:00, 21.95it/s] 55%|█████▌    | 11/20 [00:00<00:00, 22.61it/s] 70%|███████   | 14/20 [00:00<00:00, 22.60it/s] 85%|████████▌ | 17/20 [00:00<00:00, 22.83it/s]100%|██████████| 20/20 [00:00<00:00, 23.00it/s]100%|██████████| 20/20 [00:00<00:00, 22.37it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.19it/s] 30%|███       | 6/20 [00:00<00:00, 22.88it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.09it/s] 60%|██████    | 12/20 [00:00<00:00, 22.43it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.87it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.17it/s]100%|██████████| 20/20 [00:00<00:00, 22.98it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.95it/s] 30%|███       | 6/20 [00:00<00:00, 24.01it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.03it/s] 60%|██████    | 12/20 [00:00<00:00, 23.97it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.95it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.96it/s]100%|██████████| 20/20 [00:00<00:00, 23.98it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch094_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep094] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3629  consec=0
+    topo:  compact=0.398(≥0.6)  D_vis=0.199(≥0.25)  D_amo=0.158(≥0.4)  LCC=0.685(≥0.85)  2color=Y(0.127/0.216)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.259(≥0.35)  winner=0.618(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0692(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep094] S1:PASS  S2:----  S3:----  compact=0.398  2color=Y(0.127/0.216)  iou_min=0.111  gate=0.0000  overlay=0.259  winner=0.62  diff_mse=0.0692  contract_score=0.3629
+  [ep  95] stage1  loss=66.1496  acc_ent=0.3777  diff_w=0.00  steps=16/20
+  [ep  96] stage1  loss=52.7977  acc_ent=0.4398  diff_w=0.00  steps=11/20
+  [ep  97] stage1  loss=61.6694  acc_ent=0.4250  diff_w=0.00  steps=14/20
+  [ep  98] stage1  loss=61.5587  acc_ent=0.3551  diff_w=0.00  steps=12/20
+  [ep  99] stage1  loss=59.2821  acc_ent=0.4442  diff_w=0.00  steps=16/20
+  [contract ep099] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3997  consec=0
+    topo:  compact=0.409(≥0.6)  D_vis=0.182(≥0.25)  D_amo=0.154(≥0.4)  LCC=0.722(≥0.85)  2color=Y(0.137/0.268)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.217(≥0.35)  winner=0.631(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0689(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep099] S1:PASS  S2:----  S3:----  compact=0.409  2color=Y(0.137/0.268)  iou_min=0.100  gate=0.0000  overlay=0.217  winner=0.63  diff_mse=0.0689  contract_score=0.3997
+  [val] score=0.2086  struct=48.0998  acc_ent=0.2515  iou_e0=0.1001  iou_e1=0.1177  iou_min=0.1001  compact=0.409  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 10%|█         | 2/20 [00:00<00:00, 19.28it/s] 25%|██▌       | 5/20 [00:00<00:00, 22.08it/s] 40%|████      | 8/20 [00:00<00:00, 23.01it/s] 55%|█████▌    | 11/20 [00:00<00:00, 23.43it/s] 70%|███████   | 14/20 [00:00<00:00, 23.64it/s] 85%|████████▌ | 17/20 [00:00<00:00, 23.78it/s]100%|██████████| 20/20 [00:00<00:00, 23.85it/s]100%|██████████| 20/20 [00:00<00:00, 23.40it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.87it/s] 30%|███       | 6/20 [00:00<00:00, 23.89it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.85it/s] 60%|██████    | 12/20 [00:00<00:00, 23.85it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.89it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.93it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.99it/s] 30%|███       | 6/20 [00:00<00:00, 23.98it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.01it/s] 60%|██████    | 12/20 [00:00<00:00, 24.00it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.01it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.00it/s]100%|██████████| 20/20 [00:00<00:00, 24.00it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch099_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep099] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3499  consec=0
+    topo:  compact=0.409(≥0.6)  D_vis=0.182(≥0.25)  D_amo=0.154(≥0.4)  LCC=0.722(≥0.85)  2color=Y(0.137/0.268)
+    guide: gate=0.0000([0.1,0.35])  overlay=0.217(≥0.35)  winner=0.631(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0689(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep099] S1:PASS  S2:----  S3:----  compact=0.409  2color=Y(0.137/0.268)  iou_min=0.100  gate=0.0000  overlay=0.217  winner=0.63  diff_mse=0.0689  contract_score=0.3499
+  [ep 100] stage2  loss=22.4154  acc_ent=0.3162  diff_w=0.20  steps=20/20
+  [ep 101] stage2  loss=18.9095  acc_ent=0.3594  diff_w=0.40  steps=20/20
+  [ep 102] stage2  loss=21.2561  acc_ent=0.3130  diff_w=0.60  steps=20/20
+  [ep 103] stage2  loss=19.8963  acc_ent=0.3587  diff_w=0.80  steps=20/20
+  [ep 104] stage2  loss=22.3180  acc_ent=0.3568  diff_w=1.00  steps=20/20
+  [contract ep104] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.3845  consec=0
+    topo:  compact=0.422(≥0.6)  D_vis=0.165(≥0.25)  D_amo=0.144(≥0.4)  LCC=0.750(≥0.85)  2color=Y(0.160/0.282)
+    guide: gate=0.0606([0.1,0.35])  overlay=0.197(≥0.35)  winner=0.607(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0692(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep104] S1:FAIL  S2:----  S3:----  compact=0.422  2color=Y(0.160/0.282)  iou_min=0.090  gate=0.0606  overlay=0.197  winner=0.61  diff_mse=0.0692  contract_score=0.3845
+  [val] score=0.2061  struct=45.8015  acc_ent=0.2652  iou_e0=0.0900  iou_e1=0.1124  iou_min=0.0900  compact=0.422  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.02it/s] 30%|███       | 6/20 [00:00<00:00, 23.91it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.87it/s] 60%|██████    | 12/20 [00:00<00:00, 23.87it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.91it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.93it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.97it/s] 30%|███       | 6/20 [00:00<00:00, 23.94it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.97it/s] 60%|██████    | 12/20 [00:00<00:00, 23.98it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.95it/s] 30%|███       | 6/20 [00:00<00:00, 23.95it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.95it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.93it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.93it/s]100%|██████████| 20/20 [00:00<00:00, 23.92it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch104_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep104] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3350  consec=0
+    topo:  compact=0.422(≥0.6)  D_vis=0.165(≥0.25)  D_amo=0.144(≥0.4)  LCC=0.750(≥0.85)  2color=Y(0.160/0.282)
+    guide: gate=0.0606([0.1,0.35])  overlay=0.197(≥0.35)  winner=0.607(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0692(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep104] S1:FAIL  S2:----  S3:----  compact=0.422  2color=Y(0.160/0.282)  iou_min=0.090  gate=0.0606  overlay=0.197  winner=0.61  diff_mse=0.0692  contract_score=0.3350
+  [ep 105] stage2  loss=19.6575  acc_ent=0.3563  diff_w=1.00  steps=20/20
+  [ep 106] stage2  loss=21.3087  acc_ent=0.3562  diff_w=1.00  steps=20/20
+  [ep 107] stage2  loss=20.5657  acc_ent=0.3576  diff_w=1.00  steps=20/20
+  [ep 108] stage2  loss=20.6150  acc_ent=0.3583  diff_w=1.00  steps=20/20
+  [ep 109] stage2  loss=25.1718  acc_ent=0.3488  diff_w=1.00  steps=20/20
+  [contract ep109] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.4196  consec=0
+    topo:  compact=0.430(≥0.6)  D_vis=0.173(≥0.25)  D_amo=0.148(≥0.4)  LCC=0.737(≥0.85)  2color=Y(0.174/0.247)
+    guide: gate=0.1408([0.1,0.35])  overlay=0.208(≥0.35)  winner=0.574(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0671(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep109] S1:FAIL  S2:----  S3:----  compact=0.430  2color=Y(0.174/0.247)  iou_min=0.095  gate=0.1408  overlay=0.208  winner=0.57  diff_mse=0.0671  contract_score=0.4196
+  [val] score=0.2100  struct=44.4710  acc_ent=0.2678  iou_e0=0.0949  iou_e1=0.1188  iou_min=0.0949  compact=0.430  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.04it/s] 30%|███       | 6/20 [00:00<00:00, 23.87it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.89it/s] 60%|██████    | 12/20 [00:00<00:00, 23.86it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.88it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.00it/s] 30%|███       | 6/20 [00:00<00:00, 23.92it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.90it/s] 60%|██████    | 12/20 [00:00<00:00, 23.88it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.81it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.85it/s]100%|██████████| 20/20 [00:00<00:00, 23.75it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.84it/s] 30%|███       | 6/20 [00:00<00:00, 23.82it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.62it/s] 60%|██████    | 12/20 [00:00<00:00, 23.23it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.26it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.02it/s]100%|██████████| 20/20 [00:00<00:00, 23.19it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch109_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.044
+  [contract+render] recomputed with C_render metrics
+  [contract ep109] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.3712  consec=0
+    topo:  compact=0.430(≥0.6)  D_vis=0.173(≥0.25)  D_amo=0.148(≥0.4)  LCC=0.737(≥0.85)  2color=Y(0.174/0.247)
+    guide: gate=0.1408([0.1,0.35])  overlay=0.208(≥0.35)  winner=0.574(≤0.45)  cosF=0.497(≤0.1)
+    diff:  mse=0.0671(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.044(≥0.25)
+  [contract ep109] S1:FAIL  S2:----  S3:----  compact=0.430  2color=Y(0.174/0.247)  iou_min=0.095  gate=0.1408  overlay=0.208  winner=0.57  diff_mse=0.0671  contract_score=0.3712
+  [ep 110] stage2  loss=20.2716  acc_ent=0.3782  diff_w=1.00  steps=20/20
+  [ep 111] stage2  loss=19.1644  acc_ent=0.3800  diff_w=1.00  steps=20/20
+  [ep 112] stage2  loss=20.1249  acc_ent=0.3774  diff_w=1.00  steps=20/20
+  [ep 113] stage2  loss=18.7408  acc_ent=0.3788  diff_w=1.00  steps=20/20
+  [ep 114] stage2  loss=24.9518  acc_ent=0.3160  diff_w=1.00  steps=20/20
+  [contract ep114] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.4894  consec=0
+    topo:  compact=0.428(≥0.6)  D_vis=0.203(≥0.25)  D_amo=0.168(≥0.4)  LCC=0.686(≥0.85)  2color=Y(0.118/0.222)
+    guide: gate=0.2022([0.1,0.35])  overlay=0.252(≥0.35)  winner=0.623(≤0.45)  cosF=0.495(≤0.1)
+    diff:  mse=0.0659(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep114] S1:PASS  S2:PASS  S3:PASS  compact=0.428  2color=Y(0.118/0.222)  iou_min=0.113  gate=0.2022  overlay=0.252  winner=0.62  diff_mse=0.0659  contract_score=0.4894
+  [val] score=0.2200  struct=42.9953  acc_ent=0.2687  iou_e0=0.1127  iou_e1=0.1299  iou_min=0.1127  compact=0.428  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.99it/s] 30%|███       | 6/20 [00:00<00:00, 23.81it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.83it/s] 60%|██████    | 12/20 [00:00<00:00, 23.86it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.89it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.86it/s]100%|██████████| 20/20 [00:00<00:00, 23.87it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.05it/s] 30%|███       | 6/20 [00:00<00:00, 24.02it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.01it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.00it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.00it/s]100%|██████████| 20/20 [00:00<00:00, 24.00it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.88it/s] 30%|███       | 6/20 [00:00<00:00, 23.84it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.90it/s] 60%|██████    | 12/20 [00:00<00:00, 23.80it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.80it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.74it/s]100%|██████████| 20/20 [00:00<00:00, 23.79it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch114_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.040
+  [contract+render] recomputed with C_render metrics
+  [contract ep114] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.4386  consec=0
+    topo:  compact=0.428(≥0.6)  D_vis=0.203(≥0.25)  D_amo=0.168(≥0.4)  LCC=0.686(≥0.85)  2color=Y(0.118/0.222)
+    guide: gate=0.2022([0.1,0.35])  overlay=0.252(≥0.35)  winner=0.623(≤0.45)  cosF=0.495(≤0.1)
+    diff:  mse=0.0659(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.040(≥0.25)
+  [contract ep114] S1:PASS  S2:PASS  S3:PASS  compact=0.428  2color=Y(0.118/0.222)  iou_min=0.113  gate=0.2022  overlay=0.252  winner=0.62  diff_mse=0.0659  contract_score=0.4386
+  * best epoch=114 val_score=0.3512
+  [ep 115] stage2  loss=21.5398  acc_ent=0.3548  diff_w=1.00  steps=20/20
+  [ep 116] stage2  loss=19.6401  acc_ent=0.3860  diff_w=1.00  steps=20/20
+  [ep 117] stage2  loss=20.0922  acc_ent=0.3606  diff_w=1.00  steps=20/20
+  [ep 118] stage2  loss=18.7907  acc_ent=0.3979  diff_w=1.00  steps=20/20
+  [ep 119] stage2  loss=18.5037  acc_ent=0.3767  diff_w=1.00  steps=20/20
+  [contract ep119] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.5456  consec=0
+    topo:  compact=0.428(≥0.6)  D_vis=0.223(≥0.25)  D_amo=0.184(≥0.4)  LCC=0.652(≥0.85)  2color=Y(0.112/0.193)
+    guide: gate=0.2553([0.1,0.35])  overlay=0.281(≥0.35)  winner=0.619(≤0.45)  cosF=0.493(≤0.1)
+    diff:  mse=0.0646(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep119] S1:PASS  S2:PASS  S3:PASS  compact=0.428  2color=Y(0.112/0.193)  iou_min=0.125  gate=0.2553  overlay=0.281  winner=0.62  diff_mse=0.0646  contract_score=0.5456
+  [val] score=0.2293  struct=43.0511  acc_ent=0.2703  iou_e0=0.1255  iou_e1=0.1508  iou_min=0.1255  compact=0.428  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.99it/s] 30%|███       | 6/20 [00:00<00:00, 23.85it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.83it/s] 60%|██████    | 12/20 [00:00<00:00, 23.80it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.84it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.87it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.18it/s] 30%|███       | 6/20 [00:00<00:00, 23.44it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.51it/s] 60%|██████    | 12/20 [00:00<00:00, 23.61it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.65it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.65it/s]100%|██████████| 20/20 [00:00<00:00, 23.57it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.41it/s] 30%|███       | 6/20 [00:00<00:00, 23.21it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.55it/s] 60%|██████    | 12/20 [00:00<00:00, 23.67it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.75it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.81it/s]100%|██████████| 20/20 [00:00<00:00, 23.65it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch119_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.044
+  [contract+render] recomputed with C_render metrics
+  [contract ep119] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.4970  consec=0
+    topo:  compact=0.428(≥0.6)  D_vis=0.223(≥0.25)  D_amo=0.184(≥0.4)  LCC=0.652(≥0.85)  2color=Y(0.112/0.193)
+    guide: gate=0.2553([0.1,0.35])  overlay=0.281(≥0.35)  winner=0.619(≤0.45)  cosF=0.493(≤0.1)
+    diff:  mse=0.0646(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.044(≥0.25)
+  [contract ep119] S1:PASS  S2:PASS  S3:PASS  compact=0.428  2color=Y(0.112/0.193)  iou_min=0.125  gate=0.2553  overlay=0.281  winner=0.62  diff_mse=0.0646  contract_score=0.4970
+  * best epoch=119 val_score=0.3900
+  [ep 120] stage2  loss=20.5162  acc_ent=0.3628  diff_w=1.00  steps=20/20
+  [ep 121] stage2  loss=23.1967  acc_ent=0.3278  diff_w=1.00  steps=20/20
+  [ep 122] stage2  loss=19.1064  acc_ent=0.4049  diff_w=1.00  steps=20/20
+  [ep 123] stage2  loss=18.6283  acc_ent=0.4291  diff_w=1.00  steps=20/20
+  [ep 124] stage2  loss=20.6309  acc_ent=0.3638  diff_w=1.00  steps=20/20
+  [contract ep124] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.5903  consec=0
+    topo:  compact=0.427(≥0.6)  D_vis=0.240(≥0.25)  D_amo=0.193(≥0.4)  LCC=0.615(≥0.85)  2color=Y(0.102/0.156)
+    guide: gate=0.3007([0.1,0.35])  overlay=0.330(≥0.35)  winner=0.596(≤0.45)  cosF=0.490(≤0.1)
+    diff:  mse=0.0612(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep124] S1:PASS  S2:PASS  S3:PASS  compact=0.427  2color=Y(0.102/0.156)  iou_min=0.136  gate=0.3007  overlay=0.330  winner=0.60  diff_mse=0.0612  contract_score=0.5903
+  [val] score=0.2349  struct=42.2952  acc_ent=0.2676  iou_e0=0.1361  iou_e1=0.1572  iou_min=0.1361  compact=0.427  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.02it/s] 30%|███       | 6/20 [00:00<00:00, 23.85it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.89it/s] 60%|██████    | 12/20 [00:00<00:00, 23.90it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.92it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.93it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.47it/s] 30%|███       | 6/20 [00:00<00:00, 23.75it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.82it/s] 60%|██████    | 12/20 [00:00<00:00, 23.79it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.85it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.83it/s]100%|██████████| 20/20 [00:00<00:00, 23.79it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.00it/s] 30%|███       | 6/20 [00:00<00:00, 24.00it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.00it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.93it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.92it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch124_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.044
+  [contract+render] recomputed with C_render metrics
+  [contract ep124] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5419  consec=0
+    topo:  compact=0.427(≥0.6)  D_vis=0.240(≥0.25)  D_amo=0.193(≥0.4)  LCC=0.615(≥0.85)  2color=Y(0.102/0.156)
+    guide: gate=0.3007([0.1,0.35])  overlay=0.330(≥0.35)  winner=0.596(≤0.45)  cosF=0.490(≤0.1)
+    diff:  mse=0.0612(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.044(≥0.25)
+  [contract ep124] S1:PASS  S2:PASS  S3:PASS  compact=0.427  2color=Y(0.102/0.156)  iou_min=0.136  gate=0.3007  overlay=0.330  winner=0.60  diff_mse=0.0612  contract_score=0.5419
+  * best epoch=124 val_score=0.4191
+  [ep 125] stage2  loss=19.2397  acc_ent=0.4317  diff_w=1.00  steps=20/20
+  [ep 126] stage2  loss=20.8630  acc_ent=0.3322  diff_w=1.00  steps=20/20
+  [ep 127] stage2  loss=18.0759  acc_ent=0.3976  diff_w=1.00  steps=20/20
+  [ep 128] stage2  loss=22.3110  acc_ent=0.3419  diff_w=1.00  steps=20/20
+  [ep 129] stage2  loss=15.1856  acc_ent=0.4196  diff_w=1.00  steps=20/20
+  [contract ep129] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6267  consec=0
+    topo:  compact=0.419(≥0.6)  D_vis=0.257(≥0.25)  D_amo=0.209(≥0.4)  LCC=0.577(≥0.85)  2color=Y(0.104/0.131)
+    guide: gate=0.3373([0.1,0.35])  overlay=0.364(≥0.35)  winner=0.562(≤0.45)  cosF=0.482(≤0.1)
+    diff:  mse=0.0585(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep129] S1:PASS  S2:PASS  S3:PASS  compact=0.419  2color=Y(0.104/0.131)  iou_min=0.148  gate=0.3373  overlay=0.364  winner=0.56  diff_mse=0.0585  contract_score=0.6267
+  [val] score=0.2423  struct=41.3409  acc_ent=0.2651  iou_e0=0.1476  iou_e1=0.1734  iou_min=0.1476  compact=0.419  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.91it/s] 30%|███       | 6/20 [00:00<00:00, 23.66it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.79it/s] 60%|██████    | 12/20 [00:00<00:00, 23.86it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.92it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.94it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 23.86it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.90it/s] 60%|██████    | 12/20 [00:00<00:00, 23.83it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.86it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.79it/s]100%|██████████| 20/20 [00:00<00:00, 23.82it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.62it/s] 30%|███       | 6/20 [00:00<00:00, 23.68it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.79it/s] 60%|██████    | 12/20 [00:00<00:00, 23.86it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.89it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.93it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch129_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.045
+  [contract+render] recomputed with C_render metrics
+  [contract ep129] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5789  consec=0
+    topo:  compact=0.419(≥0.6)  D_vis=0.257(≥0.25)  D_amo=0.209(≥0.4)  LCC=0.577(≥0.85)  2color=Y(0.104/0.131)
+    guide: gate=0.3373([0.1,0.35])  overlay=0.364(≥0.35)  winner=0.562(≤0.45)  cosF=0.482(≤0.1)
+    diff:  mse=0.0585(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.045(≥0.25)
+  [contract ep129] S1:PASS  S2:PASS  S3:PASS  compact=0.419  2color=Y(0.104/0.131)  iou_min=0.148  gate=0.3373  overlay=0.364  winner=0.56  diff_mse=0.0585  contract_score=0.5789
+  * best epoch=129 val_score=0.4443
+  [ep 130] stage2  loss=18.6639  acc_ent=0.4027  diff_w=1.00  steps=20/20
+  [ep 131] stage2  loss=22.6771  acc_ent=0.3808  diff_w=1.00  steps=20/20
+  [ep 132] stage2  loss=16.1327  acc_ent=0.4043  diff_w=1.00  steps=20/20
+  [ep 133] stage2  loss=24.5254  acc_ent=0.3397  diff_w=1.00  steps=20/20
+  [ep 134] stage2  loss=17.8044  acc_ent=0.4006  diff_w=1.00  steps=20/20
+  [contract ep134] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6341  consec=0
+    topo:  compact=0.427(≥0.6)  D_vis=0.252(≥0.25)  D_amo=0.205(≥0.4)  LCC=0.585(≥0.85)  2color=Y(0.102/0.151)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.320(≥0.35)  winner=0.593(≤0.45)  cosF=0.482(≤0.1)
+    diff:  mse=0.0564(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep134] S1:PASS  S2:PASS  S3:PASS  compact=0.427  2color=Y(0.102/0.151)  iou_min=0.144  gate=0.3500  overlay=0.320  winner=0.59  diff_mse=0.0564  contract_score=0.6341
+  [val] score=0.2425  struct=41.5631  acc_ent=0.2734  iou_e0=0.1443  iou_e1=0.1727  iou_min=0.1443  compact=0.427  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.61it/s] 30%|███       | 6/20 [00:00<00:00, 23.57it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.66it/s] 60%|██████    | 12/20 [00:00<00:00, 23.36it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.18it/s]100%|██████████| 20/20 [00:00<00:00, 23.30it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.58it/s] 30%|███       | 6/20 [00:00<00:00, 22.07it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.10it/s] 60%|██████    | 12/20 [00:00<00:00, 22.77it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.13it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.33it/s]100%|██████████| 20/20 [00:00<00:00, 23.04it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.85it/s] 30%|███       | 6/20 [00:00<00:00, 23.90it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.82it/s] 60%|██████    | 12/20 [00:00<00:00, 23.77it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.77it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.68it/s]100%|██████████| 20/20 [00:00<00:00, 23.74it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch134_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.040
+  [contract+render] recomputed with C_render metrics
+  [contract ep134] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5830  consec=0
+    topo:  compact=0.427(≥0.6)  D_vis=0.252(≥0.25)  D_amo=0.205(≥0.4)  LCC=0.585(≥0.85)  2color=Y(0.102/0.151)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.320(≥0.35)  winner=0.593(≤0.45)  cosF=0.482(≤0.1)
+    diff:  mse=0.0564(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.040(≥0.25)
+  [contract ep134] S1:PASS  S2:PASS  S3:PASS  compact=0.427  2color=Y(0.102/0.151)  iou_min=0.144  gate=0.3500  overlay=0.320  winner=0.59  diff_mse=0.0564  contract_score=0.5830
+  * best epoch=134 val_score=0.4468
+  [ep 135] stage2  loss=18.9271  acc_ent=0.4032  diff_w=1.00  steps=20/20
+  [ep 136] stage2  loss=21.5520  acc_ent=0.3379  diff_w=1.00  steps=20/20
+  [ep 137] stage2  loss=18.2588  acc_ent=0.4288  diff_w=1.00  steps=20/20
+  [ep 138] stage2  loss=20.8287  acc_ent=0.3720  diff_w=1.00  steps=20/20
+  [ep 139] stage2  loss=23.6462  acc_ent=0.3541  diff_w=1.00  steps=20/20
+  [contract ep139] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6339  consec=0
+    topo:  compact=0.415(≥0.6)  D_vis=0.260(≥0.25)  D_amo=0.210(≥0.4)  LCC=0.582(≥0.85)  2color=Y(0.098/0.130)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.375(≥0.35)  winner=0.568(≤0.45)  cosF=0.469(≤0.1)
+    diff:  mse=0.0552(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep139] S1:PASS  S2:PASS  S3:PASS  compact=0.415  2color=Y(0.098/0.130)  iou_min=0.150  gate=0.3500  overlay=0.375  winner=0.57  diff_mse=0.0552  contract_score=0.6339
+  [val] score=0.2448  struct=39.6676  acc_ent=0.2698  iou_e0=0.1496  iou_e1=0.1751  iou_min=0.1496  compact=0.415  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.90it/s] 30%|███       | 6/20 [00:00<00:00, 23.76it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.71it/s] 60%|██████    | 12/20 [00:00<00:00, 23.74it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.79it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.81it/s]100%|██████████| 20/20 [00:00<00:00, 23.80it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.95it/s] 30%|███       | 6/20 [00:00<00:00, 23.96it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.93it/s] 60%|██████    | 12/20 [00:00<00:00, 23.84it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.85it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.98it/s] 30%|███       | 6/20 [00:00<00:00, 23.97it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.96it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.86it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.83it/s]100%|██████████| 20/20 [00:00<00:00, 23.86it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch139_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.044
+  [contract+render] recomputed with C_render metrics
+  [contract ep139] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5854  consec=0
+    topo:  compact=0.415(≥0.6)  D_vis=0.260(≥0.25)  D_amo=0.210(≥0.4)  LCC=0.582(≥0.85)  2color=Y(0.098/0.130)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.375(≥0.35)  winner=0.568(≤0.45)  cosF=0.469(≤0.1)
+    diff:  mse=0.0552(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.044(≥0.25)
+  [contract ep139] S1:PASS  S2:PASS  S3:PASS  compact=0.415  2color=Y(0.098/0.130)  iou_min=0.150  gate=0.3500  overlay=0.375  winner=0.57  diff_mse=0.0552  contract_score=0.5854
+  * best epoch=139 val_score=0.4491
+  [ep 140] stage2  loss=22.3135  acc_ent=0.3589  diff_w=1.00  steps=20/20
+  [ep 141] stage2  loss=17.6432  acc_ent=0.4076  diff_w=1.00  steps=20/20
+  [ep 142] stage2  loss=17.4266  acc_ent=0.4377  diff_w=1.00  steps=20/20
+  [ep 143] stage2  loss=23.2872  acc_ent=0.3408  diff_w=1.00  steps=20/20
+  [ep 144] stage2  loss=17.4431  acc_ent=0.4101  diff_w=1.00  steps=20/20
+  [contract ep144] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6354  consec=0
+    topo:  compact=0.417(≥0.6)  D_vis=0.267(≥0.25)  D_amo=0.212(≥0.4)  LCC=0.584(≥0.85)  2color=Y(0.098/0.142)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.363(≥0.35)  winner=0.579(≤0.45)  cosF=0.456(≤0.1)
+    diff:  mse=0.0533(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep144] S1:PASS  S2:PASS  S3:PASS  compact=0.417  2color=Y(0.098/0.142)  iou_min=0.154  gate=0.3500  overlay=0.363  winner=0.58  diff_mse=0.0533  contract_score=0.6354
+  [val] score=0.2474  struct=38.1903  acc_ent=0.2750  iou_e0=0.1537  iou_e1=0.1717  iou_min=0.1537  compact=0.417  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.87it/s] 30%|███       | 6/20 [00:00<00:00, 23.87it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.89it/s] 60%|██████    | 12/20 [00:00<00:00, 23.93it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.90it/s]100%|██████████| 20/20 [00:00<00:00, 23.89it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.94it/s] 30%|███       | 6/20 [00:00<00:00, 23.85it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.85it/s] 60%|██████    | 12/20 [00:00<00:00, 23.72it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.79it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.85it/s]100%|██████████| 20/20 [00:00<00:00, 23.83it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.91it/s] 30%|███       | 6/20 [00:00<00:00, 23.90it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.89it/s] 60%|██████    | 12/20 [00:00<00:00, 23.90it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.90it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch144_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.042
+  [contract+render] recomputed with C_render metrics
+  [contract ep144] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5859  consec=0
+    topo:  compact=0.417(≥0.6)  D_vis=0.267(≥0.25)  D_amo=0.212(≥0.4)  LCC=0.584(≥0.85)  2color=Y(0.098/0.142)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.363(≥0.35)  winner=0.579(≤0.45)  cosF=0.456(≤0.1)
+    diff:  mse=0.0533(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.042(≥0.25)
+  [contract ep144] S1:PASS  S2:PASS  S3:PASS  compact=0.417  2color=Y(0.098/0.142)  iou_min=0.154  gate=0.3500  overlay=0.363  winner=0.58  diff_mse=0.0533  contract_score=0.5859
+  * best epoch=144 val_score=0.4505
+  [ep 145] stage2  loss=23.2523  acc_ent=0.3398  diff_w=1.00  steps=20/20
+  [ep 146] stage2  loss=16.8977  acc_ent=0.4197  diff_w=1.00  steps=20/20
+  [ep 147] stage2  loss=23.8852  acc_ent=0.3366  diff_w=1.00  steps=20/20
+  [ep 148] stage2  loss=19.7866  acc_ent=0.3838  diff_w=1.00  steps=20/20
+  [ep 149] stage2  loss=19.7702  acc_ent=0.3757  diff_w=1.00  steps=20/20
+  [contract ep149] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6367  consec=0
+    topo:  compact=0.414(≥0.6)  D_vis=0.266(≥0.25)  D_amo=0.217(≥0.4)  LCC=0.586(≥0.85)  2color=Y(0.103/0.135)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.360(≥0.35)  winner=0.558(≤0.45)  cosF=0.447(≤0.1)
+    diff:  mse=0.0534(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep149] S1:PASS  S2:PASS  S3:PASS  compact=0.414  2color=Y(0.103/0.135)  iou_min=0.153  gate=0.3500  overlay=0.360  winner=0.56  diff_mse=0.0534  contract_score=0.6367
+  [val] score=0.2471  struct=37.8221  acc_ent=0.2762  iou_e0=0.1531  iou_e1=0.1698  iou_min=0.1531  compact=0.414  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.77it/s] 30%|███       | 6/20 [00:00<00:00, 23.89it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.92it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.28it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.37it/s]100%|██████████| 20/20 [00:00<00:00, 23.48it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.91it/s] 30%|███       | 6/20 [00:00<00:00, 23.38it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.42it/s] 60%|██████    | 12/20 [00:00<00:00, 23.45it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.24it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.08it/s]100%|██████████| 20/20 [00:00<00:00, 23.23it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.56it/s] 30%|███       | 6/20 [00:00<00:00, 23.51it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.47it/s] 60%|██████    | 12/20 [00:00<00:00, 23.65it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.74it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.78it/s]100%|██████████| 20/20 [00:00<00:00, 23.71it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch149_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.047
+  [contract+render] recomputed with C_render metrics
+  [contract ep149] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5897  consec=0
+    topo:  compact=0.414(≥0.6)  D_vis=0.266(≥0.25)  D_amo=0.217(≥0.4)  LCC=0.586(≥0.85)  2color=Y(0.103/0.135)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.360(≥0.35)  winner=0.558(≤0.45)  cosF=0.447(≤0.1)
+    diff:  mse=0.0534(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.047(≥0.25)
+  [contract ep149] S1:PASS  S2:PASS  S3:PASS  compact=0.414  2color=Y(0.103/0.135)  iou_min=0.153  gate=0.3500  overlay=0.360  winner=0.56  diff_mse=0.0534  contract_score=0.5897
+  * best epoch=149 val_score=0.4527
+  [ep 150] stage2  loss=16.3884  acc_ent=0.4174  diff_w=1.00  steps=20/20
+  [ep 151] stage2  loss=18.0158  acc_ent=0.4369  diff_w=1.00  steps=20/20
+  [ep 152] stage2  loss=17.0181  acc_ent=0.4406  diff_w=1.00  steps=20/20
+  [ep 153] stage2  loss=19.6124  acc_ent=0.3835  diff_w=1.00  steps=20/20
+  [ep 154] stage2  loss=21.0268  acc_ent=0.3582  diff_w=1.00  steps=20/20
+  [contract ep154] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6340  consec=0
+    topo:  compact=0.431(≥0.6)  D_vis=0.252(≥0.25)  D_amo=0.203(≥0.4)  LCC=0.586(≥0.85)  2color=Y(0.106/0.128)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.348(≥0.35)  winner=0.530(≤0.45)  cosF=0.433(≤0.1)
+    diff:  mse=0.0519(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep154] S1:PASS  S2:PASS  S3:PASS  compact=0.431  2color=Y(0.106/0.128)  iou_min=0.144  gate=0.3500  overlay=0.348  winner=0.53  diff_mse=0.0519  contract_score=0.6340
+  [val] score=0.2440  struct=36.5734  acc_ent=0.2770  iou_e0=0.1443  iou_e1=0.1730  iou_min=0.1443  compact=0.431  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.76it/s] 30%|███       | 6/20 [00:00<00:00, 23.73it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.74it/s] 60%|██████    | 12/20 [00:00<00:00, 23.75it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.80it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.84it/s]100%|██████████| 20/20 [00:00<00:00, 23.80it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.83it/s] 30%|███       | 6/20 [00:00<00:00, 23.82it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.79it/s] 60%|██████    | 12/20 [00:00<00:00, 23.71it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.75it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.78it/s]100%|██████████| 20/20 [00:00<00:00, 23.77it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.89it/s] 30%|███       | 6/20 [00:00<00:00, 23.88it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.84it/s] 60%|██████    | 12/20 [00:00<00:00, 23.79it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.77it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.71it/s]100%|██████████| 20/20 [00:00<00:00, 23.78it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch154_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.049
+  [contract+render] recomputed with C_render metrics
+  [contract ep154] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5886  consec=0
+    topo:  compact=0.431(≥0.6)  D_vis=0.252(≥0.25)  D_amo=0.203(≥0.4)  LCC=0.586(≥0.85)  2color=Y(0.106/0.128)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.348(≥0.35)  winner=0.530(≤0.45)  cosF=0.433(≤0.1)
+    diff:  mse=0.0519(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.049(≥0.25)
+  [contract ep154] S1:PASS  S2:PASS  S3:PASS  compact=0.431  2color=Y(0.106/0.128)  iou_min=0.144  gate=0.3500  overlay=0.348  winner=0.53  diff_mse=0.0519  contract_score=0.5886
+  [ep 155] stage2  loss=19.9336  acc_ent=0.3970  diff_w=1.00  steps=20/20
+  [ep 156] stage2  loss=19.9807  acc_ent=0.3319  diff_w=1.00  steps=20/20
+  [ep 157] stage2  loss=20.0100  acc_ent=0.3623  diff_w=1.00  steps=20/20
+  [ep 158] stage2  loss=20.1794  acc_ent=0.3857  diff_w=1.00  steps=20/20
+  [ep 159] stage2  loss=19.4873  acc_ent=0.4024  diff_w=1.00  steps=20/20
+  [contract ep159] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6372  consec=0
+    topo:  compact=0.422(≥0.6)  D_vis=0.264(≥0.25)  D_amo=0.214(≥0.4)  LCC=0.577(≥0.85)  2color=Y(0.101/0.119)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.372(≥0.35)  winner=0.535(≤0.45)  cosF=0.412(≤0.1)
+    diff:  mse=0.0515(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep159] S1:PASS  S2:PASS  S3:PASS  compact=0.422  2color=Y(0.101/0.119)  iou_min=0.152  gate=0.3500  overlay=0.372  winner=0.53  diff_mse=0.0515  contract_score=0.6372
+  [val] score=0.2474  struct=35.8520  acc_ent=0.2727  iou_e0=0.1522  iou_e1=0.1769  iou_min=0.1522  compact=0.422  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.79it/s] 30%|███       | 6/20 [00:00<00:00, 23.69it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.72it/s] 60%|██████    | 12/20 [00:00<00:00, 23.77it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.82it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.85it/s]100%|██████████| 20/20 [00:00<00:00, 23.80it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 23.95it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.89it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.90it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.66it/s] 30%|███       | 6/20 [00:00<00:00, 23.45it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.55it/s] 60%|██████    | 12/20 [00:00<00:00, 23.69it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.73it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.73it/s]100%|██████████| 20/20 [00:00<00:00, 23.67it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch159_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.055
+  [contract+render] recomputed with C_render metrics
+  [contract ep159] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5955  consec=0
+    topo:  compact=0.422(≥0.6)  D_vis=0.264(≥0.25)  D_amo=0.214(≥0.4)  LCC=0.577(≥0.85)  2color=Y(0.101/0.119)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.372(≥0.35)  winner=0.535(≤0.45)  cosF=0.412(≤0.1)
+    diff:  mse=0.0515(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.055(≥0.25)
+  [contract ep159] S1:PASS  S2:PASS  S3:PASS  compact=0.422  2color=Y(0.101/0.119)  iou_min=0.152  gate=0.3500  overlay=0.372  winner=0.53  diff_mse=0.0515  contract_score=0.5955
+  * best epoch=159 val_score=0.4563
+  [ep 160] stage2  loss=20.4008  acc_ent=0.3736  diff_w=1.00  steps=20/20
+  [ep 161] stage2  loss=18.9534  acc_ent=0.3816  diff_w=1.00  steps=20/20
+  [ep 162] stage2  loss=17.2618  acc_ent=0.4265  diff_w=1.00  steps=20/20
+  [ep 163] stage2  loss=19.4003  acc_ent=0.3863  diff_w=1.00  steps=20/20
+  [ep 164] stage2  loss=19.4503  acc_ent=0.3778  diff_w=1.00  steps=20/20
+  [contract ep164] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6370  consec=0
+    topo:  compact=0.414(≥0.6)  D_vis=0.269(≥0.25)  D_amo=0.217(≥0.4)  LCC=0.572(≥0.85)  2color=Y(0.111/0.113)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.356(≥0.35)  winner=0.508(≤0.45)  cosF=0.387(≤0.1)
+    diff:  mse=0.0506(≤0.05)  Δ=0.000(≤0.1)  stable=True
+  [contract ep164] S1:PASS  S2:PASS  S3:PASS  compact=0.414  2color=Y(0.111/0.113)  iou_min=0.155  gate=0.3500  overlay=0.356  winner=0.51  diff_mse=0.0506  contract_score=0.6370
+  [val] score=0.2477  struct=34.3569  acc_ent=0.2728  iou_e0=0.1553  iou_e1=0.1680  iou_min=0.1553  compact=0.414  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 22.68it/s] 30%|███       | 6/20 [00:00<00:00, 23.12it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.83it/s] 60%|██████    | 12/20 [00:00<00:00, 22.83it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.96it/s] 90%|█████████ | 18/20 [00:00<00:00, 22.98it/s]100%|██████████| 20/20 [00:00<00:00, 22.98it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.72it/s] 30%|███       | 6/20 [00:00<00:00, 23.84it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.80it/s] 60%|██████    | 12/20 [00:00<00:00, 23.72it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.69it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.72it/s]100%|██████████| 20/20 [00:00<00:00, 23.75it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.94it/s] 30%|███       | 6/20 [00:00<00:00, 23.91it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.84it/s] 60%|██████    | 12/20 [00:00<00:00, 23.76it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.71it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.72it/s]100%|██████████| 20/20 [00:00<00:00, 23.76it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch164_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.050
+  [contract+render] recomputed with C_render metrics
+  [contract ep164] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5920  consec=0
+    topo:  compact=0.414(≥0.6)  D_vis=0.269(≥0.25)  D_amo=0.217(≥0.4)  LCC=0.572(≥0.85)  2color=Y(0.111/0.113)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.356(≥0.35)  winner=0.508(≤0.45)  cosF=0.387(≤0.1)
+    diff:  mse=0.0506(≤0.05)  Δ=0.000(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.050(≥0.25)
+  [contract ep164] S1:PASS  S2:PASS  S3:PASS  compact=0.414  2color=Y(0.111/0.113)  iou_min=0.155  gate=0.3500  overlay=0.356  winner=0.51  diff_mse=0.0506  contract_score=0.5920
+  [ep 165] stage3  loss=18.7508  acc_ent=0.4382  diff_w=0.50  steps=20/20
+  [ep 166] stage3  loss=21.3540  acc_ent=0.3618  diff_w=1.00  steps=20/20
+  [ep 167] stage3  loss=20.6938  acc_ent=0.3822  diff_w=1.00  steps=20/20
+  [ep 168] stage3  loss=19.8991  acc_ent=0.4025  diff_w=1.00  steps=20/20
+  [ep 169] stage3  loss=19.9642  acc_ent=0.4108  diff_w=1.00  steps=20/20
+  [contract ep169] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6448  consec=0
+    topo:  compact=0.403(≥0.6)  D_vis=0.290(≥0.25)  D_amo=0.238(≥0.4)  LCC=0.546(≥0.85)  2color=Y(0.090/0.116)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.375(≥0.35)  winner=0.538(≤0.45)  cosF=0.389(≤0.1)
+    diff:  mse=0.0512(≤0.05)  Δ=0.011(≤0.1)  stable=True
+  [contract ep169] S1:PASS  S2:PASS  S3:PASS  compact=0.403  2color=Y(0.090/0.116)  iou_min=0.170  gate=0.3500  overlay=0.375  winner=0.54  diff_mse=0.0512  contract_score=0.6448
+  [val] score=0.2537  struct=37.3678  acc_ent=0.2619  iou_e0=0.1696  iou_e1=0.1817  iou_min=0.1696  compact=0.403  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.98it/s] 30%|███       | 6/20 [00:00<00:00, 23.76it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.87it/s] 60%|██████    | 12/20 [00:00<00:00, 23.86it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.89it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.88it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 24.03it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.98it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.96it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.96it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.04it/s] 30%|███       | 6/20 [00:00<00:00, 24.04it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.04it/s] 60%|██████    | 12/20 [00:00<00:00, 24.03it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.02it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.01it/s]100%|██████████| 20/20 [00:00<00:00, 24.02it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch169_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.056
+  [contract+render] recomputed with C_render metrics
+  [contract ep169] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.6034  consec=0
+    topo:  compact=0.403(≥0.6)  D_vis=0.290(≥0.25)  D_amo=0.238(≥0.4)  LCC=0.546(≥0.85)  2color=Y(0.090/0.116)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.375(≥0.35)  winner=0.538(≤0.45)  cosF=0.389(≤0.1)
+    diff:  mse=0.0512(≤0.05)  Δ=0.011(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.056(≥0.25)
+  [contract ep169] S1:PASS  S2:PASS  S3:PASS  compact=0.403  2color=Y(0.090/0.116)  iou_min=0.170  gate=0.3500  overlay=0.375  winner=0.54  diff_mse=0.0512  contract_score=0.6034
+  * best epoch=169 val_score=0.4635
+  [ep 170] stage3  loss=22.4530  acc_ent=0.3524  diff_w=1.00  steps=20/20
+  [ep 171] stage3  loss=19.3273  acc_ent=0.4088  diff_w=1.00  steps=20/20
+  [ep 172] stage3  loss=16.1334  acc_ent=0.4460  diff_w=1.00  steps=20/20
+  [ep 173] stage3  loss=20.0997  acc_ent=0.3881  diff_w=1.00  steps=20/20
+  [ep 174] stage3  loss=22.2834  acc_ent=0.3890  diff_w=1.00  steps=20/20
+  [contract ep174] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6401  consec=0
+    topo:  compact=0.411(≥0.6)  D_vis=0.280(≥0.25)  D_amo=0.225(≥0.4)  LCC=0.553(≥0.85)  2color=Y(0.094/0.109)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.384(≥0.35)  winner=0.530(≤0.45)  cosF=0.402(≤0.1)
+    diff:  mse=0.0502(≤0.05)  Δ=0.008(≤0.1)  stable=True
+  [contract ep174] S1:PASS  S2:PASS  S3:PASS  compact=0.411  2color=Y(0.094/0.109)  iou_min=0.163  gate=0.3500  overlay=0.384  winner=0.53  diff_mse=0.0502  contract_score=0.6401
+  [val] score=0.2501  struct=37.4474  acc_ent=0.2556  iou_e0=0.1631  iou_e1=0.1852  iou_min=0.1631  compact=0.411  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.07it/s] 30%|███       | 6/20 [00:00<00:00, 23.90it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.88it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.88it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.90it/s]100%|██████████| 20/20 [00:00<00:00, 23.89it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.08it/s] 30%|███       | 6/20 [00:00<00:00, 24.03it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.02it/s] 60%|██████    | 12/20 [00:00<00:00, 24.01it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.02it/s] 90%|█████████ | 18/20 [00:00<00:00, 24.02it/s]100%|██████████| 20/20 [00:00<00:00, 24.02it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.02it/s] 30%|███       | 6/20 [00:00<00:00, 23.99it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.00it/s] 60%|██████    | 12/20 [00:00<00:00, 23.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.93it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.94it/s]100%|██████████| 20/20 [00:00<00:00, 23.95it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch174_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.056
+  [contract+render] recomputed with C_render metrics
+  [contract ep174] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5986  consec=0
+    topo:  compact=0.411(≥0.6)  D_vis=0.280(≥0.25)  D_amo=0.225(≥0.4)  LCC=0.553(≥0.85)  2color=Y(0.094/0.109)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.384(≥0.35)  winner=0.530(≤0.45)  cosF=0.402(≤0.1)
+    diff:  mse=0.0502(≤0.05)  Δ=0.008(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.056(≥0.25)
+  [contract ep174] S1:PASS  S2:PASS  S3:PASS  compact=0.411  2color=Y(0.094/0.109)  iou_min=0.163  gate=0.3500  overlay=0.384  winner=0.53  diff_mse=0.0502  contract_score=0.5986
+  [ep 175] stage3  loss=17.4306  acc_ent=0.4318  diff_w=1.00  steps=20/20
+  [ep 176] stage3  loss=20.4084  acc_ent=0.3860  diff_w=1.00  steps=20/20
+  [ep 177] stage3  loss=23.4773  acc_ent=0.3680  diff_w=1.00  steps=20/20
+  [ep 178] stage3  loss=20.1700  acc_ent=0.3788  diff_w=1.00  steps=20/20
+  [ep 179] stage3  loss=18.0234  acc_ent=0.4517  diff_w=1.00  steps=20/20
+  [contract ep179] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6377  consec=0
+    topo:  compact=0.418(≥0.6)  D_vis=0.265(≥0.25)  D_amo=0.216(≥0.4)  LCC=0.555(≥0.85)  2color=Y(0.095/0.107)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.366(≥0.35)  winner=0.513(≤0.45)  cosF=0.405(≤0.1)
+    diff:  mse=0.0505(≤0.05)  Δ=0.002(≤0.1)  stable=True
+  [contract ep179] S1:PASS  S2:PASS  S3:PASS  compact=0.418  2color=Y(0.095/0.107)  iou_min=0.153  gate=0.3500  overlay=0.366  winner=0.51  diff_mse=0.0505  contract_score=0.6377
+  [val] score=0.2476  struct=37.6069  acc_ent=0.2617  iou_e0=0.1530  iou_e1=0.1909  iou_min=0.1530  compact=0.418  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.01it/s] 30%|███       | 6/20 [00:00<00:00, 23.93it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.93it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.94it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.08it/s] 30%|███       | 6/20 [00:00<00:00, 23.45it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.48it/s] 60%|██████    | 12/20 [00:00<00:00, 23.16it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.35it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.50it/s]100%|██████████| 20/20 [00:00<00:00, 23.42it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.31it/s] 30%|███       | 6/20 [00:00<00:00, 23.44it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.49it/s] 60%|██████    | 12/20 [00:00<00:00, 23.64it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.41it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.04it/s]100%|██████████| 20/20 [00:00<00:00, 23.30it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch179_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.056
+  [contract+render] recomputed with C_render metrics
+  [contract ep179] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.5964  consec=0
+    topo:  compact=0.418(≥0.6)  D_vis=0.265(≥0.25)  D_amo=0.216(≥0.4)  LCC=0.555(≥0.85)  2color=Y(0.095/0.107)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.366(≥0.35)  winner=0.513(≤0.45)  cosF=0.405(≤0.1)
+    diff:  mse=0.0505(≤0.05)  Δ=0.002(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.056(≥0.25)
+  [contract ep179] S1:PASS  S2:PASS  S3:PASS  compact=0.418  2color=Y(0.095/0.107)  iou_min=0.153  gate=0.3500  overlay=0.366  winner=0.51  diff_mse=0.0505  contract_score=0.5964
+  [ep 180] stage3  loss=18.2143  acc_ent=0.4054  diff_w=1.00  steps=20/20
+  [ep 181] stage3  loss=20.1792  acc_ent=0.4072  diff_w=1.00  steps=18/20
+  [ep 182] stage3  loss=20.3952  acc_ent=0.3833  diff_w=1.00  steps=20/20
+  [ep 183] stage3  loss=21.4131  acc_ent=0.3611  diff_w=1.00  steps=20/20
+  [ep 184] stage3  loss=20.0476  acc_ent=0.3963  diff_w=1.00  steps=20/20
+  [contract ep184] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6439  consec=0
+    topo:  compact=0.404(≥0.6)  D_vis=0.288(≥0.25)  D_amo=0.236(≥0.4)  LCC=0.545(≥0.85)  2color=Y(0.099/0.103)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.378(≥0.35)  winner=0.500(≤0.45)  cosF=0.396(≤0.1)
+    diff:  mse=0.0507(≤0.05)  Δ=0.001(≤0.1)  stable=True
+  [contract ep184] S1:PASS  S2:PASS  S3:PASS  compact=0.404  2color=Y(0.099/0.103)  iou_min=0.168  gate=0.3500  overlay=0.378  winner=0.50  diff_mse=0.0507  contract_score=0.6439
+  [val] score=0.2521  struct=37.5721  acc_ent=0.2584  iou_e0=0.1683  iou_e1=0.1791  iou_min=0.1683  compact=0.404  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.99it/s] 30%|███       | 6/20 [00:00<00:00, 23.93it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.93it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.99it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.65it/s] 30%|███       | 6/20 [00:00<00:00, 23.87it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.96it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.98it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.63it/s] 30%|███       | 6/20 [00:00<00:00, 23.72it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.73it/s] 60%|██████    | 12/20 [00:00<00:00, 23.82it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.88it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.91it/s]100%|██████████| 20/20 [00:00<00:00, 23.86it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch184_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.052
+  [contract+render] recomputed with C_render metrics
+  [contract ep184] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.6000  consec=0
+    topo:  compact=0.404(≥0.6)  D_vis=0.288(≥0.25)  D_amo=0.236(≥0.4)  LCC=0.545(≥0.85)  2color=Y(0.099/0.103)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.378(≥0.35)  winner=0.500(≤0.45)  cosF=0.396(≤0.1)
+    diff:  mse=0.0507(≤0.05)  Δ=0.001(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.052(≥0.25)
+  [contract ep184] S1:PASS  S2:PASS  S3:PASS  compact=0.404  2color=Y(0.099/0.103)  iou_min=0.168  gate=0.3500  overlay=0.378  winner=0.50  diff_mse=0.0507  contract_score=0.6000
+  [ep 185] stage3  loss=20.1069  acc_ent=0.3874  diff_w=1.00  steps=20/20
+  [ep 186] stage3  loss=22.4859  acc_ent=0.3776  diff_w=1.00  steps=20/20
+  [ep 187] stage3  loss=21.7153  acc_ent=0.3783  diff_w=1.00  steps=20/20
+  [ep 188] stage3  loss=23.3772  acc_ent=0.3435  diff_w=1.00  steps=20/20
+  [ep 189] stage3  loss=27.5680  acc_ent=0.2858  diff_w=1.00  steps=20/20
+  [contract ep189] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✓ Crobust:✗  ALL:FAIL  score=0.7930  consec=0
+    topo:  compact=0.410(≥0.6)  D_vis=0.287(≥0.25)  D_amo=0.231(≥0.4)  LCC=0.546(≥0.85)  2color=Y(0.083/0.108)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.374(≥0.35)  winner=0.546(≤0.45)  cosF=0.381(≤0.1)
+    diff:  mse=0.0499(≤0.05)  Δ=0.014(≤0.1)  stable=True
+  [contract ep189] S1:PASS  S2:PASS  S3:PASS  compact=0.410  2color=Y(0.083/0.108)  iou_min=0.168  gate=0.3500  overlay=0.374  winner=0.55  diff_mse=0.0499  contract_score=0.7930
+  [val] score=0.2530  struct=36.9588  acc_ent=0.2594  iou_e0=0.1675  iou_e1=0.1860  iou_min=0.1675  compact=0.410  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.00it/s] 30%|███       | 6/20 [00:00<00:00, 23.92it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.93it/s] 60%|██████    | 12/20 [00:00<00:00, 23.95it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.99it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.00it/s] 30%|███       | 6/20 [00:00<00:00, 23.89it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.26it/s] 60%|██████    | 12/20 [00:00<00:00, 23.22it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.33it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.42it/s]100%|██████████| 20/20 [00:00<00:00, 23.29it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.42it/s] 30%|███       | 6/20 [00:00<00:00, 23.26it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.50it/s] 60%|██████    | 12/20 [00:00<00:00, 23.60it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.40it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.35it/s]100%|██████████| 20/20 [00:00<00:00, 23.38it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch189_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.056
+  [contract+render] recomputed with C_render metrics
+  [contract ep189] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✗ Crobust:✗  ALL:FAIL  score=0.7513  consec=0
+    topo:  compact=0.410(≥0.6)  D_vis=0.287(≥0.25)  D_amo=0.231(≥0.4)  LCC=0.546(≥0.85)  2color=Y(0.083/0.108)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.374(≥0.35)  winner=0.546(≤0.45)  cosF=0.381(≤0.1)
+    diff:  mse=0.0499(≤0.05)  Δ=0.014(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.056(≥0.25)
+  [contract ep189] S1:PASS  S2:PASS  S3:PASS  compact=0.410  2color=Y(0.083/0.108)  iou_min=0.168  gate=0.3500  overlay=0.374  winner=0.55  diff_mse=0.0499  contract_score=0.7513
+  * best epoch=189 val_score=0.5520
+  [ep 190] stage3  loss=24.5664  acc_ent=0.3580  diff_w=1.00  steps=20/20
+  [ep 191] stage3  loss=21.5686  acc_ent=0.3574  diff_w=1.00  steps=19/20
+  [ep 192] stage3  loss=26.9988  acc_ent=0.2891  diff_w=1.00  steps=19/20
+  [ep 193] stage3  loss=24.5466  acc_ent=0.3548  diff_w=1.00  steps=20/20
+  [ep 194] stage3  loss=25.2991  acc_ent=0.3217  diff_w=1.00  steps=20/20
+  [contract ep194] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✓ Crobust:✗  ALL:FAIL  score=0.6417  consec=0
+    topo:  compact=0.410(≥0.6)  D_vis=0.283(≥0.25)  D_amo=0.228(≥0.4)  LCC=0.543(≥0.85)  2color=Y(0.091/0.100)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.371(≥0.35)  winner=0.515(≤0.45)  cosF=0.382(≤0.1)
+    diff:  mse=0.0501(≤0.05)  Δ=0.011(≤0.1)  stable=True
+  [contract ep194] S1:PASS  S2:PASS  S3:PASS  compact=0.410  2color=Y(0.091/0.100)  iou_min=0.165  gate=0.3500  overlay=0.371  winner=0.52  diff_mse=0.0501  contract_score=0.6417
+  [val] score=0.2516  struct=37.0747  acc_ent=0.2603  iou_e0=0.1645  iou_e1=0.1845  iou_min=0.1645  compact=0.410  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.88it/s] 30%|███       | 6/20 [00:00<00:00, 23.89it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.92it/s] 60%|██████    | 12/20 [00:00<00:00, 23.93it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.91it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.92it/s]100%|██████████| 20/20 [00:00<00:00, 23.92it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.04it/s] 30%|███       | 6/20 [00:00<00:00, 24.02it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.01it/s] 60%|██████    | 12/20 [00:00<00:00, 23.98it/s] 75%|███████▌  | 15/20 [00:00<00:00, 24.00it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.91it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.02it/s] 30%|███       | 6/20 [00:00<00:00, 23.98it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.98it/s] 60%|██████    | 12/20 [00:00<00:00, 23.98it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.96it/s]100%|██████████| 20/20 [00:00<00:00, 23.95it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch194_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.056
+  [contract+render] recomputed with C_render metrics
+  [contract ep194] Ctopo:✗ Cguide:✗ Cdiff:✗ Crender:✗ Crobust:✗  ALL:FAIL  score=0.6004  consec=0
+    topo:  compact=0.410(≥0.6)  D_vis=0.283(≥0.25)  D_amo=0.228(≥0.4)  LCC=0.543(≥0.85)  2color=Y(0.091/0.100)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.371(≥0.35)  winner=0.515(≤0.45)  cosF=0.382(≤0.1)
+    diff:  mse=0.0501(≤0.05)  Δ=0.011(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.056(≥0.25)
+  [contract ep194] S1:PASS  S2:PASS  S3:PASS  compact=0.410  2color=Y(0.091/0.100)  iou_min=0.165  gate=0.3500  overlay=0.371  winner=0.52  diff_mse=0.0501  contract_score=0.6004
+  [ep 195] stage3  loss=25.2718  acc_ent=0.3383  diff_w=1.00  steps=20/20
+  [ep 196] stage3  loss=23.3055  acc_ent=0.3522  diff_w=1.00  steps=20/20
+  [ep 197] stage3  loss=23.6044  acc_ent=0.3557  diff_w=1.00  steps=20/20
+  [ep 198] stage3  loss=20.8744  acc_ent=0.3795  diff_w=1.00  steps=20/20
+  [ep 199] stage3  loss=25.6521  acc_ent=0.3518  diff_w=1.00  steps=20/20
+  [contract ep199] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✓ Crobust:✗  ALL:FAIL  score=0.7892  consec=0
+    topo:  compact=0.413(≥0.6)  D_vis=0.276(≥0.25)  D_amo=0.222(≥0.4)  LCC=0.556(≥0.85)  2color=Y(0.084/0.110)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.339(≥0.35)  winner=0.544(≤0.45)  cosF=0.371(≤0.1)
+    diff:  mse=0.0498(≤0.05)  Δ=0.016(≤0.1)  stable=True
+  [contract ep199] S1:PASS  S2:PASS  S3:PASS  compact=0.413  2color=Y(0.084/0.110)  iou_min=0.160  gate=0.3500  overlay=0.339  winner=0.54  diff_mse=0.0498  contract_score=0.7892
+  [val] score=0.2496  struct=36.9004  acc_ent=0.2634  iou_e0=0.1600  iou_e1=0.1804  iou_min=0.1600  compact=0.413  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.64it/s] 30%|███       | 6/20 [00:00<00:00, 23.32it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.22it/s] 60%|██████    | 12/20 [00:00<00:00, 23.02it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.93it/s] 90%|█████████ | 18/20 [00:00<00:00, 22.33it/s]100%|██████████| 20/20 [00:00<00:00, 22.72it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.09it/s] 30%|███       | 6/20 [00:00<00:00, 24.06it/s] 45%|████▌     | 9/20 [00:00<00:00, 24.02it/s] 60%|██████    | 12/20 [00:00<00:00, 24.03it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.97it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.95it/s]100%|██████████| 20/20 [00:00<00:00, 23.97it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.62it/s] 30%|███       | 6/20 [00:00<00:00, 23.69it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.83it/s] 60%|██████    | 12/20 [00:00<00:00, 23.80it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.83it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.87it/s]100%|██████████| 20/20 [00:00<00:00, 23.82it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch199_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.056
+  [contract+render] recomputed with C_render metrics
+  [contract ep199] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✗ Crobust:✗  ALL:FAIL  score=0.7478  consec=0
+    topo:  compact=0.413(≥0.6)  D_vis=0.276(≥0.25)  D_amo=0.222(≥0.4)  LCC=0.556(≥0.85)  2color=Y(0.084/0.110)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.339(≥0.35)  winner=0.544(≤0.45)  cosF=0.371(≤0.1)
+    diff:  mse=0.0498(≤0.05)  Δ=0.016(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.056(≥0.25)
+  [contract ep199] S1:PASS  S2:PASS  S3:PASS  compact=0.413  2color=Y(0.084/0.110)  iou_min=0.160  gate=0.3500  overlay=0.339  winner=0.54  diff_mse=0.0498  contract_score=0.7478
+  [ep 200] stage3  loss=23.3684  acc_ent=0.3426  diff_w=1.00  steps=19/20
+  [ep 201] stage3  loss=20.8856  acc_ent=0.3664  diff_w=1.00  steps=20/20
+  [ep 202] stage3  loss=24.9602  acc_ent=0.3300  diff_w=1.00  steps=20/20
+  [ep 203] stage3  loss=23.0214  acc_ent=0.3813  diff_w=1.00  steps=20/20
+  [ep 204] stage3  loss=20.8413  acc_ent=0.3719  diff_w=1.00  steps=18/20
+  [contract ep204] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✓ Crobust:✗  ALL:FAIL  score=0.7865  consec=0
+    topo:  compact=0.419(≥0.6)  D_vis=0.267(≥0.25)  D_amo=0.214(≥0.4)  LCC=0.551(≥0.85)  2color=Y(0.078/0.115)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.344(≥0.35)  winner=0.576(≤0.45)  cosF=0.364(≤0.1)
+    diff:  mse=0.0493(≤0.05)  Δ=0.027(≤0.1)  stable=True
+  [contract ep204] S1:PASS  S2:PASS  S3:PASS  compact=0.419  2color=Y(0.078/0.115)  iou_min=0.154  gate=0.3500  overlay=0.344  winner=0.58  diff_mse=0.0493  contract_score=0.7865
+  [val] score=0.2470  struct=36.7300  acc_ent=0.2580  iou_e0=0.1543  iou_e1=0.1866  iou_min=0.1543  compact=0.419  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.94it/s] 30%|███       | 6/20 [00:00<00:00, 23.86it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.89it/s] 60%|██████    | 12/20 [00:00<00:00, 23.89it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.85it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.87it/s]100%|██████████| 20/20 [00:00<00:00, 23.88it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.06it/s] 30%|███       | 6/20 [00:00<00:00, 23.96it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.91it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.91it/s]100%|██████████| 20/20 [00:00<00:00, 23.93it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.92it/s] 30%|███       | 6/20 [00:00<00:00, 23.97it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.97it/s] 60%|██████    | 12/20 [00:00<00:00, 23.94it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.93it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.94it/s]100%|██████████| 20/20 [00:00<00:00, 23.95it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch204_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.046
+  [contract+render] recomputed with C_render metrics
+  [contract ep204] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✗ Crobust:✗  ALL:FAIL  score=0.7393  consec=0
+    topo:  compact=0.419(≥0.6)  D_vis=0.267(≥0.25)  D_amo=0.214(≥0.4)  LCC=0.551(≥0.85)  2color=Y(0.078/0.115)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.344(≥0.35)  winner=0.576(≤0.45)  cosF=0.364(≤0.1)
+    diff:  mse=0.0493(≤0.05)  Δ=0.027(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.046(≥0.25)
+  [contract ep204] S1:PASS  S2:PASS  S3:PASS  compact=0.419  2color=Y(0.078/0.115)  iou_min=0.154  gate=0.3500  overlay=0.344  winner=0.58  diff_mse=0.0493  contract_score=0.7393
+  [ep 205] stage3  loss=22.0196  acc_ent=0.3529  diff_w=1.00  steps=20/20
+  [ep 206] stage3  loss=22.1124  acc_ent=0.3699  diff_w=1.00  steps=19/20
+  [ep 207] stage3  loss=27.1531  acc_ent=0.3141  diff_w=1.00  steps=20/20
+  [ep 208] stage3  loss=19.9395  acc_ent=0.4026  diff_w=1.00  steps=20/20
+  [ep 209] stage3  loss=21.8252  acc_ent=0.3761  diff_w=1.00  steps=20/20
+  [contract ep209] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✓ Crobust:✗  ALL:FAIL  score=0.7875  consec=0
+    topo:  compact=0.415(≥0.6)  D_vis=0.273(≥0.25)  D_amo=0.217(≥0.4)  LCC=0.542(≥0.85)  2color=Y(0.077/0.120)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.327(≥0.35)  winner=0.574(≤0.45)  cosF=0.348(≤0.1)
+    diff:  mse=0.0498(≤0.05)  Δ=0.016(≤0.1)  stable=True
+  [contract ep209] S1:PASS  S2:PASS  S3:PASS  compact=0.415  2color=Y(0.077/0.120)  iou_min=0.158  gate=0.3500  overlay=0.327  winner=0.57  diff_mse=0.0498  contract_score=0.7875
+  [val] score=0.2479  struct=36.7945  acc_ent=0.2617  iou_e0=0.1578  iou_e1=0.1779  iou_min=0.1578  compact=0.415  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.86it/s] 30%|███       | 6/20 [00:00<00:00, 23.64it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.79it/s] 60%|██████    | 12/20 [00:00<00:00, 23.83it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.90it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.94it/s]100%|██████████| 20/20 [00:00<00:00, 23.89it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.06it/s] 30%|███       | 6/20 [00:00<00:00, 24.01it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.97it/s] 60%|██████    | 12/20 [00:00<00:00, 23.87it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.88it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.92it/s]100%|██████████| 20/20 [00:00<00:00, 23.93it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.03it/s] 30%|███       | 6/20 [00:00<00:00, 24.02it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.96it/s] 60%|██████    | 12/20 [00:00<00:00, 23.90it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.92it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.95it/s]100%|██████████| 20/20 [00:00<00:00, 23.96it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch209_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.057
+  [contract+render] recomputed with C_render metrics
+  [contract ep209] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✗ Crobust:✗  ALL:FAIL  score=0.7467  consec=0
+    topo:  compact=0.415(≥0.6)  D_vis=0.273(≥0.25)  D_amo=0.217(≥0.4)  LCC=0.542(≥0.85)  2color=Y(0.077/0.120)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.327(≥0.35)  winner=0.574(≤0.45)  cosF=0.348(≤0.1)
+    diff:  mse=0.0498(≤0.05)  Δ=0.016(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.057(≥0.25)
+  [contract ep209] S1:PASS  S2:PASS  S3:PASS  compact=0.415  2color=Y(0.077/0.120)  iou_min=0.158  gate=0.3500  overlay=0.327  winner=0.57  diff_mse=0.0498  contract_score=0.7467
+  [ep 210] stage3  loss=21.5240  acc_ent=0.3865  diff_w=1.00  steps=20/20
+  [ep 211] stage3  loss=19.0876  acc_ent=0.4609  diff_w=1.00  steps=20/20
+  [ep 212] stage3  loss=24.5151  acc_ent=0.3308  diff_w=1.00  steps=19/20
+  [ep 213] stage3  loss=21.0037  acc_ent=0.3881  diff_w=1.00  steps=18/20
+  [ep 214] stage3  loss=18.0017  acc_ent=0.4606  diff_w=1.00  steps=20/20
+  [contract ep214] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✓ Crobust:✗  ALL:FAIL  score=0.7872  consec=0
+    topo:  compact=0.418(≥0.6)  D_vis=0.267(≥0.25)  D_amo=0.215(≥0.4)  LCC=0.549(≥0.85)  2color=Y(0.081/0.105)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.333(≥0.35)  winner=0.553(≤0.45)  cosF=0.342(≤0.1)
+    diff:  mse=0.0495(≤0.05)  Δ=0.023(≤0.1)  stable=True
+  [contract ep214] S1:PASS  S2:PASS  S3:PASS  compact=0.418  2color=Y(0.081/0.105)  iou_min=0.154  gate=0.3500  overlay=0.333  winner=0.55  diff_mse=0.0495  contract_score=0.7872
+  [val] score=0.2459  struct=36.7430  acc_ent=0.2587  iou_e0=0.1541  iou_e1=0.1793  iou_min=0.1541  compact=0.418  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.03it/s] 30%|███       | 6/20 [00:00<00:00, 23.91it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.89it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.96it/s]100%|██████████| 20/20 [00:00<00:00, 23.94it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.51it/s] 30%|███       | 6/20 [00:00<00:00, 23.19it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.66it/s] 60%|██████    | 12/20 [00:00<00:00, 22.99it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.89it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.13it/s]100%|██████████| 20/20 [00:00<00:00, 23.10it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.01it/s] 30%|███       | 6/20 [00:00<00:00, 23.05it/s] 45%|████▌     | 9/20 [00:00<00:00, 22.83it/s] 60%|██████    | 12/20 [00:00<00:00, 22.15it/s] 75%|███████▌  | 15/20 [00:00<00:00, 22.40it/s] 90%|█████████ | 18/20 [00:00<00:00, 22.92it/s]100%|██████████| 20/20 [00:00<00:00, 22.87it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch214_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.057
+  [contract+render] recomputed with C_render metrics
+  [contract ep214] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✗ Crobust:✗  ALL:FAIL  score=0.7463  consec=0
+    topo:  compact=0.418(≥0.6)  D_vis=0.267(≥0.25)  D_amo=0.215(≥0.4)  LCC=0.549(≥0.85)  2color=Y(0.081/0.105)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.333(≥0.35)  winner=0.553(≤0.45)  cosF=0.342(≤0.1)
+    diff:  mse=0.0495(≤0.05)  Δ=0.023(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.057(≥0.25)
+  [contract ep214] S1:PASS  S2:PASS  S3:PASS  compact=0.418  2color=Y(0.081/0.105)  iou_min=0.154  gate=0.3500  overlay=0.333  winner=0.55  diff_mse=0.0495  contract_score=0.7463
+  [ep 215] stage3  loss=19.8875  acc_ent=0.3701  diff_w=1.00  steps=20/20
+  [ep 216] stage3  loss=23.2978  acc_ent=0.3457  diff_w=1.00  steps=20/20
+  [ep 217] stage3  loss=19.0193  acc_ent=0.4080  diff_w=1.00  steps=20/20
+  [ep 218] stage3  loss=17.4620  acc_ent=0.3834  diff_w=1.00  steps=19/20
+  [ep 219] stage3  loss=22.2506  acc_ent=0.3536  diff_w=1.00  steps=20/20
+  [contract ep219] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✓ Crobust:✗  ALL:FAIL  score=0.7874  consec=0
+    topo:  compact=0.414(≥0.6)  D_vis=0.264(≥0.25)  D_amo=0.218(≥0.4)  LCC=0.545(≥0.85)  2color=Y(0.087/0.099)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.331(≥0.35)  winner=0.525(≤0.45)  cosF=0.347(≤0.1)
+    diff:  mse=0.0491(≤0.05)  Δ=0.031(≤0.1)  stable=True
+  [contract ep219] S1:PASS  S2:PASS  S3:PASS  compact=0.414  2color=Y(0.087/0.099)  iou_min=0.152  gate=0.3500  overlay=0.331  winner=0.52  diff_mse=0.0491  contract_score=0.7874
+  [val] score=0.2448  struct=37.2038  acc_ent=0.2591  iou_e0=0.1522  iou_e1=0.1772  iou_min=0.1522  compact=0.414  n=36
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.02it/s] 30%|███       | 6/20 [00:00<00:00, 23.93it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.96it/s] 60%|██████    | 12/20 [00:00<00:00, 23.97it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.98it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.97it/s]100%|██████████| 20/20 [00:00<00:00, 23.96it/s]
+  [gif] composite_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_composite.gif
+  [gif] pred_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_pred_overlay.gif
+  [gif] pred_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_pred_overlay.png
+  [gif] gt_overlay_gif: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_gt_overlay.gif
+  [gif] gt_overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_gt_overlay.png
+  [gif] overlay_png: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_overlay.png
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 24.00it/s] 30%|███       | 6/20 [00:00<00:00, 23.94it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.93it/s] 60%|██████    | 12/20 [00:00<00:00, 23.91it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.94it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.91it/s]100%|██████████| 20/20 [00:00<00:00, 23.91it/s]
+  [gif] iso_e0: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_iso_e0.gif
+  0%|          | 0/20 [00:00<?, ?it/s] 15%|█▌        | 3/20 [00:00<00:00, 23.96it/s] 30%|███       | 6/20 [00:00<00:00, 23.91it/s] 45%|████▌     | 9/20 [00:00<00:00, 23.94it/s] 60%|██████    | 12/20 [00:00<00:00, 23.96it/s] 75%|███████▌  | 15/20 [00:00<00:00, 23.97it/s] 90%|█████████ | 18/20 [00:00<00:00, 23.95it/s]100%|██████████| 20/20 [00:00<00:00, 23.95it/s]
+  [gif] iso_e1: outputs/phase62_ablations/b1_v38_iso_s7/eval/eval_epoch219_iso_e1.gif
+  [render] P_2obj=1.000  chimera=0.000  M_id=0.651  iou_min=0.054
+  [contract+render] recomputed with C_render metrics
+  [contract ep219] Ctopo:✗ Cguide:✗ Cdiff:✓ Crender:✗ Crobust:✗  ALL:FAIL  score=0.7447  consec=0
+    topo:  compact=0.414(≥0.6)  D_vis=0.264(≥0.25)  D_amo=0.218(≥0.4)  LCC=0.545(≥0.85)  2color=Y(0.087/0.099)
+    guide: gate=0.3500([0.1,0.35])  overlay=0.331(≥0.35)  winner=0.525(≤0.45)  cosF=0.347(≤0.1)
+    diff:  mse=0.0491(≤0.05)  Δ=0.031(≤0.1)  stable=True
+    render: P_2obj=1.000(≥0.9)  chimera=0.000(≤0.05)  M_id=0.651(≥0.15)  IoU=0.054(≥0.25)
+  [contract ep219] S1:PASS  S2:PASS  S3:PASS  compact=0.414  2color=Y(0.087/0.099)  iou_min=0.152  gate=0.3500  overlay=0.331  winner=0.52  diff_mse=0.0491  contract_score=0.7447
+[Ablation] Done. Best epoch=189 val_score=0.5520
+[contract summary] S1 first_pass=59  S2 first_pass=114  S3 first_pass=114  ALL first_pass=never  best_consec=0  last_contract_score=0.7447
+
+============================================================
+[Ablation Summary]
+  b1_v38_iso_s7: best_epoch=189 val_score=0.5520
+  Summary saved to outputs/phase62_ablations/summary.json
