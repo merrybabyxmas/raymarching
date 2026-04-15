@@ -357,6 +357,35 @@ class AblationTrainer:
             self._unpack_sample(sample)
         frames_solo0, frames_solo1 = self._unpack_solo_frames(sample)
 
+        # v40t: Entity permutation augmentation (50% probability)
+        # ROOT CAUSE of seeds 1,7 failure: data has systematic entity 0 visibility bias
+        # (2color shows entity0:entity1 ≈ 3:1 for seeds 1,7 vs ≈1:1 for seed 42).
+        # lambda_id=10 reinforces this bias from data → lambda_balance can't fully overcome.
+        # Fix: randomly swap entity 0/1 labels so both entities are learned symmetrically.
+        # After augmentation, the model can't develop a persistent entity 0 dominance.
+        _entity_perm_aug = bool(getattr(self.train_cfg, "entity_perm_aug", False))
+        if _entity_perm_aug and np.random.rand() < 0.5:
+            # Swap entity labels in all label-dependent arrays
+            if entity_masks is not None and entity_masks.ndim >= 2:
+                # entity_masks shape: (T, 2, S) — swap entity channels
+                entity_masks = entity_masks[:, [1, 0], :]
+            if visible_masks is not None and visible_masks.ndim >= 2:
+                visible_masks = visible_masks[:, [1, 0], :]
+            # Swap backbone entity features
+            F_0_orig = None  # will be set after feature extraction; swap deferred below
+            _perm_swap_features = True
+            # Swap solo frames (for iso loss)
+            frames_solo0, frames_solo1 = frames_solo1, frames_solo0
+            # Swap depth ordering labels (1=e0 front, 2=e1 front → swap)
+            if depth_orders is not None:
+                _do = depth_orders.copy()
+                _do[depth_orders == 1] = -1  # temp sentinel
+                _do[depth_orders == 2] = 1
+                _do[depth_orders == -1] = 2
+                depth_orders = _do
+        else:
+            _perm_swap_features = False
+
         toks_e0_t, toks_e1_t, full_prompt = _get_entity_tokens_with_fallback(
             self.pipe, meta, self.device)
         self.backbone_mgr.set_entity_tokens(toks_e0_t, toks_e1_t)
@@ -385,6 +414,10 @@ class AblationTrainer:
         F_1 = self.backbone_mgr.primary.last_F1
         if F_g is None or F_0 is None or F_1 is None:
             return None
+
+        # v40t: Apply deferred feature swap for entity permutation augmentation
+        if _perm_swap_features:
+            F_0, F_1 = F_1, F_0
 
         # Build scene depth hint: (B_feat, H_vol, W_vol) ∈ [0,1]
         # Provides per-pixel depth cues so the 3D predictor can learn compact blobs.
