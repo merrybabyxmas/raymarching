@@ -1,0 +1,23 @@
+{
+  "visible_iou_e0": 0.5641201494468583,
+  "visible_iou_e1": 0.5387772526592016,
+  "visible_iou_min": 0.5387772526592016,
+  "amodal_iou_e0": 0.5636043854885631,
+  "amodal_iou_e1": 0.5329867326137092,
+  "amodal_iou_min": 0.5329867326137092,
+  "visible_survival_e0": 1.0,
+  "visible_survival_e1": 1.0,
+  "visible_survival_min": 1.0,
+  "reappearance_accuracy": 1.0,
+  "composite_isolated_consistency": 0.0,
+  "entity_balance": 0.9619307360299791,
+  "n_samples": 36,
+  "mean_visible_iou_e0": 0.5641201494468583,
+  "mean_visible_iou_e1": 0.5387772526592016,
+  "mean_visible_iou_min": 0.4371855811526378,
+  "mean_amodal_iou_e0": 0.5636043854885631,
+  "mean_amodal_iou_e1": 0.5329867326137092,
+  "mean_amodal_iou_min": 0.4351693174491326,
+  "mean_visible_mean_e0": 0.0967568177729845,
+  "mean_visible_mean_e1": 0.1005860548466444
+}
