@@ -94,6 +94,12 @@ Attach adapter + backbone and continue training while keeping scene losses activ
 
 ## Entrypoints
 
+### Unified main entrypoint
+```bash
+python scripts/train_main.py --stage 1
+python scripts/train_main.py --stage 2 --stage1_ckpt outputs/phase65/stage1/best_scene_module.pt
+```
+
 ### Stage 1
 ```bash
 python scripts/train_phase65_stage1.py --config config/phase65_min3d/stage1.yaml
@@ -110,6 +116,62 @@ python scripts/train_phase65_stage2.py \
 ```bash
 bash scripts/run_phase65_pipeline.sh
 ```
+
+---
+
+## Dataset Sanity Check
+
+Run this before training on a new Phase 65 dataset.
+
+```bash
+python scripts/check_phase65_dataset.py --config config/phase65_min3d/main.yaml
+```
+
+This checks:
+- visible area statistics for both entities,
+- amodal area statistics,
+- overlap ratio frequency,
+- clip type distribution.
+
+The script exits with an error if the dataset is too weak for contact-heavy training.
+
+---
+
+## Visualization
+
+Visualize SceneState predictions from a trained stage-1 checkpoint:
+
+```bash
+python scripts/viz_phase65.py \
+  --config config/phase65_min3d/stage1.yaml \
+  --ckpt outputs/phase65/stage1/best_scene_module.pt \
+  --out outputs/phase65/viz
+```
+
+---
+
+## Smoke Tests
+
+Run the basic smoke tests:
+
+```bash
+pytest tests/test_phase65_smoke.py
+```
+
+These verify:
+- SceneModule forward pass,
+- adapter wiring,
+- decoder baseline output shape.
+
+---
+
+## Configs
+
+Main configs:
+
+- `config/phase65_min3d/main.yaml`
+- `config/phase65_min3d/stage1.yaml`
+- `config/phase65_min3d/stage2.yaml`
 
 ---
 
