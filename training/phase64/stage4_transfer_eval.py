@@ -101,6 +101,21 @@ class Stage4TransferEval:
             p.requires_grad_(False)
         self.scene_prior.eval()
 
+        # Freeze SDXL UNet, text encoders, VAE — only adapter+guide_encoder train
+        if self.sdxl_pipe is not None:
+            for p in self.sdxl_pipe.unet.parameters():
+                p.requires_grad_(False)
+            for p in self.sdxl_pipe.text_encoder.parameters():
+                p.requires_grad_(False)
+            if hasattr(self.sdxl_pipe, "text_encoder_2"):
+                for p in self.sdxl_pipe.text_encoder_2.parameters():
+                    p.requires_grad_(False)
+            for p in self.sdxl_pipe.vae.parameters():
+                p.requires_grad_(False)
+            if hasattr(self.sdxl_pipe, "enable_model_cpu_offload"):
+                # Don't offload — stay on GPU but save graph memory
+                pass
+
         # NEW SDXL adapter — fresh weights
         self.guide_encoder = SceneGuideEncoder(
             in_ch=8,
@@ -236,7 +251,8 @@ class Stage4TransferEval:
         # Encode frames to SDXL VAE latents
         from PIL import Image
         mean_frame = frames.mean(axis=0).astype(np.uint8)
-        H_enc, W_enc = 512, 512
+        # Use 256x256 to reduce VRAM usage (SDXL-Turbo supports smaller resolutions)
+        H_enc, W_enc = 256, 256
         img_pil = Image.fromarray(mean_frame).resize((H_enc, W_enc))
         img_t = torch.from_numpy(np.array(img_pil, dtype=np.float32) / 255.0)
         img_t = img_t.permute(2, 0, 1).unsqueeze(0).to(self.device).half() * 2.0 - 1.0

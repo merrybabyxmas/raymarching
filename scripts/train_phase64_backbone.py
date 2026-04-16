@@ -148,16 +148,18 @@ def main() -> None:
 
         # Load SDXL pipeline
         print("[Phase 64 Backbone] Loading SDXL pipeline...", flush=True)
-        from diffusers import StableDiffusionXLPipeline
+        from diffusers import AutoPipelineForText2Image
         import torch as _torch
         sdxl_model_id = getattr(
             getattr(config, "backbone", object()),
             "pipeline",
-            "stabilityai/stable-diffusion-xl-base-1.0",
+            "stabilityai/sdxl-turbo",
         )
-        sdxl_pipe = StableDiffusionXLPipeline.from_pretrained(
+        sdxl_pipe = AutoPipelineForText2Image.from_pretrained(
             sdxl_model_id, torch_dtype=_torch.float16, variant="fp16",
         ).to(device)
+        # Reduce memory: enable attention slicing
+        sdxl_pipe.enable_attention_slicing()
         print(f"[Phase 64 Backbone] SDXL pipeline loaded on {device}", flush=True)
 
         transfer = Stage4TransferEval(

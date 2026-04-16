@@ -36,4 +36,5 @@ data:
   val_frac: 0.2
 
 backbone:
-  pipeline: stabilityai/stable-diffusion-xl-base-1.0
+  # Use SDXL-Turbo (cached, 4-step, lower VRAM) instead of SDXL-base-1.0
+  pipeline: stabilityai/sdxl-turbo
