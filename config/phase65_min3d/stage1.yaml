@@ -1,0 +1,28 @@
+device: cuda
+output_dir: outputs/phase65/stage1
+
+model:
+  slot_dim: 256
+  feat_dim: 64
+  hidden_dim: 128
+  Hs: 64
+  Ws: 64
+  Hf: 32
+  Wf: 32
+
+train:
+  batch_size: 2
+  stage1_epochs: 50
+  lr_scene_stage1: 3.0e-4
+
+loss:
+  lambda_vis: 1.0
+  lambda_amo: 1.0
+  lambda_temp: 0.25
+  lambda_depth: 0.1
+
+data:
+  root: data/phase65
+  image_size: 256
+  mask_size: 64
+  num_frames: 16
