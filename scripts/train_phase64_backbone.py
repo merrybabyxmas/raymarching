@@ -145,12 +145,28 @@ def main() -> None:
     elif args.stage == 4:
         print("\n[Phase 64 Backbone] Stage 4 — SDXL transfer adapter training...",
               flush=True)
+
+        # Load SDXL pipeline
+        print("[Phase 64 Backbone] Loading SDXL pipeline...", flush=True)
+        from diffusers import StableDiffusionXLPipeline
+        import torch as _torch
+        sdxl_model_id = getattr(
+            getattr(config, "backbone", object()),
+            "pipeline",
+            "stabilityai/stable-diffusion-xl-base-1.0",
+        )
+        sdxl_pipe = StableDiffusionXLPipeline.from_pretrained(
+            sdxl_model_id, torch_dtype=_torch.float16, variant="fp16",
+        ).to(device)
+        print(f"[Phase 64 Backbone] SDXL pipeline loaded on {device}", flush=True)
+
         transfer = Stage4TransferEval(
             config=config,
             dataset=dataset,
             splits=splits,
             stage1_ckpt=stage1_ckpt,
             device=device,
+            sdxl_pipe=sdxl_pipe,
         )
         if args.ckpt and Path(args.ckpt).exists():
             print(f"[Phase 64 Backbone] Resuming SDXL adapter from {args.ckpt}",
