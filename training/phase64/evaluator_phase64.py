@@ -259,8 +259,20 @@ class Phase64Evaluator:
         eps: float = 1e-6,
     ) -> float:
         """Soft IoU between two binary or soft masks (any shape)."""
-        p = pred.float().clamp(0.0, 1.0).reshape(-1)
-        g = gt.float().clamp(0.0, 1.0).reshape(-1)
+        p = pred.float().clamp(0.0, 1.0)
+        g = gt.float().clamp(0.0, 1.0)
+        # Handle spatial size mismatch (e.g. scaled model 64×64 vs GT 32×32)
+        if p.shape != g.shape and p.numel() != g.numel():
+            # Resize pred to match gt spatial resolution
+            g_shape = g.shape
+            p = torch.nn.functional.interpolate(
+                p.reshape(1, 1, *p.shape[-2:]) if p.dim() >= 2 else p.reshape(1, 1, -1, 1),
+                size=g_shape[-2:] if g.dim() >= 2 else (g.numel(), 1),
+                mode="bilinear",
+                align_corners=False,
+            ).reshape(g.shape)
+        p = p.reshape(-1)
+        g = g.reshape(-1)
         inter = (p * g).sum()
         union = p.sum() + g.sum() - inter
         return float((inter + eps) / (union + eps))
