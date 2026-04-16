@@ -29,7 +29,7 @@ training:
   lambda_diff: 1.0
   lambda_surv: 2.0
 
-stage1_ckpt: checkpoints/phase64/p64_stage1/best.pt
+stage1_ckpt: checkpoints/phase64/p64_stage1/best_scene_prior.pt
 
 data:
   data_root: toy/data_objaverse

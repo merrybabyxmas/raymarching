@@ -35,8 +35,8 @@ training:
   lambda_contrast: 0.3
   contrast_margin: 0.02
 
-stage1_ckpt: checkpoints/phase64/p64_stage1/best.pt
-stage2_ckpt: checkpoints/phase64/p64_stage2/best.pt
+stage1_ckpt: checkpoints/phase64/p64_stage1/best_scene_prior.pt
+stage2_ckpt: checkpoints/phase64/p64_stage2/best_decoder.pt
 
 eval:
   visible_survival_thresh: 0.02

@@ -119,6 +119,13 @@ def main() -> None:
     if args.stage == 3:
         print("\n[Phase 64 Backbone] Stage 3 — AnimateDiff adapter training...",
               flush=True)
+
+        # Load AnimateDiff pipeline (same as Phase 63 approach)
+        print("[Phase 64 Backbone] Loading AnimateDiff pipeline...", flush=True)
+        from scripts.run_animatediff import load_pipeline as _load_pipe
+        pipe = _load_pipe(device=device)
+        print(f"[Phase 64 Backbone] Pipeline loaded on {device}", flush=True)
+
         trainer = Stage3Trainer(
             config=config,
             dataset=dataset,
@@ -126,6 +133,7 @@ def main() -> None:
             stage1_ckpt=stage1_ckpt,
             stage2_ckpt=stage2_ckpt,
             device=device,
+            pipe=pipe,
         )
         if args.ckpt and Path(args.ckpt).exists():
             print(f"[Phase 64 Backbone] Resuming from {args.ckpt}", flush=True)
