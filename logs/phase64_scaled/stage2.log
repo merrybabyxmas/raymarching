@@ -1,0 +1,106 @@
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+[Phase 64 Decoder] device=cuda  seed=42
+[Phase 64 Decoder] Stage 1 ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Decoder] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34
+
+[Phase 64 Decoder] Building Stage2Trainer...
+[stage2] Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Decoder] Starting decoder from scratch.
+[stage2] Training decoder  epochs=80  steps/epoch=100  n_train=202
+[epoch 1] total=0.1885  rec=0.1670
+[epoch 2] total=0.0402  rec=0.0210
+[epoch 3] total=0.0163  rec=0.0131
+[epoch 4] total=0.0119  rec=0.0101
+[epoch 5] total=0.0105  rec=0.0092
+[epoch 6] total=0.0103  rec=0.0087
+[epoch 7] total=0.0103  rec=0.0091
+[epoch 8] total=0.0097  rec=0.0083
+[epoch 9] total=0.0086  rec=0.0078
+[epoch 10] total=0.0083  rec=0.0073
+  [val epoch 10] PSNR=29.15 dB  L1=0.0070
+  [val] New best PSNR=29.15 dB → saved to checkpoints/p64s_stage2/best_decoder.pt
+[epoch 11] total=0.0091  rec=0.0085
+[epoch 12] total=0.0091  rec=0.0080
+[epoch 13] total=0.0086  rec=0.0075
+[epoch 14] total=0.0084  rec=0.0075
+[epoch 15] total=0.0079  rec=0.0070
+[epoch 16] total=0.0084  rec=0.0075
+[epoch 17] total=0.0080  rec=0.0072
+[epoch 18] total=0.0079  rec=0.0069
+[epoch 19] total=0.0087  rec=0.0077
+[epoch 20] total=0.0073  rec=0.0068
+  [val epoch 20] PSNR=29.04 dB  L1=0.0063
+[epoch 21] total=0.0078  rec=0.0069
+[epoch 22] total=0.0078  rec=0.0070
+[epoch 23] total=0.0078  rec=0.0071
+[epoch 24] total=0.0072  rec=0.0067
+[epoch 25] total=0.0073  rec=0.0067
+[epoch 26] total=0.0070  rec=0.0067
+[epoch 27] total=0.0075  rec=0.0067
+[epoch 28] total=0.0075  rec=0.0067
+[epoch 29] total=0.0073  rec=0.0070
+[epoch 30] total=0.0077  rec=0.0071
+  [val epoch 30] PSNR=29.46 dB  L1=0.0060
+  [val] New best PSNR=29.46 dB → saved to checkpoints/p64s_stage2/best_decoder.pt
+[epoch 31] total=0.0079  rec=0.0071
+[epoch 32] total=0.0070  rec=0.0066
+[epoch 33] total=0.0069  rec=0.0065
+[epoch 34] total=0.0070  rec=0.0067
+[epoch 35] total=0.0065  rec=0.0065
+[epoch 36] total=0.0069  rec=0.0064
+[epoch 37] total=0.0075  rec=0.0070
+[epoch 38] total=0.0069  rec=0.0065
+[epoch 39] total=0.0068  rec=0.0067
+[epoch 40] total=0.0067  rec=0.0063
+  [val epoch 40] PSNR=29.12 dB  L1=0.0059
+[epoch 41] total=0.0067  rec=0.0066
+[epoch 42] total=0.0065  rec=0.0061
+[epoch 43] total=0.0066  rec=0.0061
+[epoch 44] total=0.0069  rec=0.0063
+[epoch 45] total=0.0067  rec=0.0063
+[epoch 46] total=0.0069  rec=0.0064
+[epoch 47] total=0.0070  rec=0.0065
+[epoch 48] total=0.0070  rec=0.0066
+[epoch 49] total=0.0065  rec=0.0062
+[epoch 50] total=0.0071  rec=0.0066
+  [val epoch 50] PSNR=29.21 dB  L1=0.0059
+[epoch 51] total=0.0061  rec=0.0057
+[epoch 52] total=0.0061  rec=0.0060
+[epoch 53] total=0.0068  rec=0.0067
+[epoch 54] total=0.0067  rec=0.0064
+[epoch 55] total=0.0068  rec=0.0063
+[epoch 56] total=0.0066  rec=0.0061
+[epoch 57] total=0.0063  rec=0.0060
+[epoch 58] total=0.0065  rec=0.0062
+[epoch 59] total=0.0064  rec=0.0061
+[epoch 60] total=0.0066  rec=0.0062
+  [val epoch 60] PSNR=29.23 dB  L1=0.0056
+[epoch 61] total=0.0065  rec=0.0061
+[epoch 62] total=0.0065  rec=0.0062
+[epoch 63] total=0.0064  rec=0.0062
+[epoch 64] total=0.0065  rec=0.0063
+[epoch 65] total=0.0061  rec=0.0057
+[epoch 66] total=0.0062  rec=0.0061
+[epoch 67] total=0.0065  rec=0.0059
+[epoch 68] total=0.0063  rec=0.0063
+[epoch 69] total=0.0068  rec=0.0062
+[epoch 70] total=0.0061  rec=0.0058
+  [val epoch 70] PSNR=29.16 dB  L1=0.0056
+[epoch 71] total=0.0065  rec=0.0062
+[epoch 72] total=0.0062  rec=0.0061
+[epoch 73] total=0.0065  rec=0.0062
+[epoch 74] total=0.0064  rec=0.0062
+[epoch 75] total=0.0062  rec=0.0061
+[epoch 76] total=0.0063  rec=0.0058
+[epoch 77] total=0.0062  rec=0.0057
+[epoch 78] total=0.0058  rec=0.0055
+[epoch 79] total=0.0063  rec=0.0063
+[epoch 80] total=0.0063  rec=0.0062
+  [val epoch 80] PSNR=29.54 dB  L1=0.0054
+  [val] New best PSNR=29.54 dB → saved to checkpoints/p64s_stage2/best_decoder.pt
+[stage2] Complete.  Best PSNR=29.54 dB
+[stage2] Logs → checkpoints/p64s_stage2
+[stage2] Decoder PSNR 29.54 ≥ 18.0 — OK to proceed to Stage 3.

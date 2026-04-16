@@ -1,0 +1,16 @@
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+Traceback (most recent call last):
+  File "/home/dongwoo44/papers/raymarching/scripts/eval_phase64_transfer.py", line 481, in <module>
+    main()
+  File "/home/dongwoo44/papers/raymarching/scripts/eval_phase64_transfer.py", line 398, in main
+    scene_prior = ScenePriorModule(
+TypeError: ScenePriorModule.__init__() got an unexpected keyword argument 'hidden_dim'
+ERROR conda.cli.main_run:execute(142): `conda run python scripts/eval_phase64_transfer.py --config config/phase64/stage3.yaml --stage1_ckpt checkpoints/phase64/p64_stage1/best_scene_prior.pt --stage3_ckpt checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0029.pt --stage4_ckpt checkpoints/phase64/p64_stage4_sdxl/sdxl_adapter.pt --out outputs/phase64/eval_transfer_final` failed. (See above for error)
+[Transfer Eval] Stage 1  : checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Transfer Eval] Stage 3  : NOT FOUND
+[Transfer Eval] Stage 4  : checkpoints/phase64/p64_stage4_sdxl/sdxl_adapter.pt
+[Transfer Eval] device   : cuda
+[Transfer Eval] Loading dataset from toy/data_objaverse...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  val=35
+[Transfer Eval] Building scene prior...

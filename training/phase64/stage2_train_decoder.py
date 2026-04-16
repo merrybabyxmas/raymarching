@@ -204,7 +204,7 @@ class Stage2Trainer:
 
         self.evaluator = Phase64Evaluator()
         run_name = getattr(config, "run_name", "p64_stage2")
-        self.out_dir = Path(f"checkpoints/phase64/{run_name}")
+        self.out_dir = Path(f"checkpoints/{run_name}")
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self._best_psnr: float = 0.0

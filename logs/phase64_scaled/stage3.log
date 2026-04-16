@@ -1,0 +1,106 @@
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]
+
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 196/196 [00:00<00:00, 7121.37it/s]
+[1mCLIPTextModel LOAD REPORT[0m from: /home/dongwoo44/.cache/huggingface/hub/models--emilianJR--epiCRealism/snapshots/6522cf856b8c8e14638a0aaa7bd89b1b098aed17/text_encoder
+Key                                | Status     |  | 
+-----------------------------------+------------+--+-
+text_model.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+
+Loading pipeline components...:  50%|█████     | 3/6 [00:00<00:00,  8.51it/s]CLIPFeatureExtractor appears to have been deprecated in transformers. Using CLIPImageProcessor instead.
+
+Loading pipeline components...: 100%|██████████| 6/6 [00:00<00:00, 13.27it/s]
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/diffusers/pipelines/pipeline_utils.py:2263: FutureWarning: `enable_vae_slicing` is deprecated and will be removed in version 0.40.0. Calling `enable_vae_slicing()` on a `AnimateDiffPipeline` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_slicing()`.
+  deprecate(
+[Phase 64 Backbone] stage=3  device=cuda  seed=42
+[Phase 64 Backbone] Stage 1 ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Stage 2 ckpt: checkpoints/p64s_stage2/best_decoder.pt
+[Phase 64 Backbone] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34
+
+[Phase 64 Backbone] Stage 3 — AnimateDiff adapter training...
+[Phase 64 Backbone] Loading AnimateDiff pipeline...
+Loading MotionAdapter...
+Loading base model (emilianJR/epiCRealism)...
+Pipeline on cuda, dtype=torch.float16
+[Phase 64 Backbone] Pipeline loaded on cuda
+[stage3] Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt
+[stage3] Loaded decoder from checkpoints/p64s_stage2/best_decoder.pt
+[Phase 64 Backbone] Starting adapter from scratch.
+[stage3] Training adapter  epochs=60  steps/epoch=100  n_train=202
+[epoch 1] total=0.1904  diff=0.1844
+[epoch 2] total=0.1877  diff=0.1798
+[epoch 3] total=0.1823  diff=0.1713
+[epoch 4] total=0.1384  diff=0.1318
+[epoch 5] total=0.1874  diff=0.1780
+[epoch 6] total=0.1307  diff=0.1233
+[epoch 7] total=0.1588  diff=0.1501
+[epoch 8] total=0.1771  diff=0.1691
+[epoch 9] total=0.1711  diff=0.1628
+[epoch 10] total=0.1989  diff=0.1910
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0010.pt
+[epoch 11] total=0.1703  diff=0.1631
+[epoch 12] total=0.1752  diff=0.1666
+[epoch 13] total=0.1484  diff=0.1407
+[epoch 14] total=0.1413  diff=0.1334
+[epoch 15] total=0.1498  diff=0.1415
+[epoch 16] total=0.1433  diff=0.1361
+[epoch 17] total=0.1591  diff=0.1514
+[epoch 18] total=0.1579  diff=0.1499
+[epoch 19] total=0.1536  diff=0.1442
+[epoch 20] total=0.1594  diff=0.1521
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0020.pt
+[epoch 21] total=0.1211  diff=0.1137
+[epoch 22] total=0.1538  diff=0.1477
+[epoch 23] total=0.1537  diff=0.1462
+[epoch 24] total=0.1270  diff=0.1193
+[epoch 25] total=0.1463  diff=0.1389
+[epoch 26] total=0.1467  diff=0.1396
+[epoch 27] total=0.1624  diff=0.1524
+[epoch 28] total=0.1329  diff=0.1245
+[epoch 29] total=0.1448  diff=0.1363
+[epoch 30] total=0.1636  diff=0.1550
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0030.pt
+[epoch 31] total=0.1335  diff=0.1237
+[epoch 32] total=0.1284  diff=0.1199
+[epoch 33] total=0.1577  diff=0.1492
+[epoch 34] total=0.1377  diff=0.1289
+[epoch 35] total=0.1188  diff=0.1112
+[epoch 36] total=0.1430  diff=0.1357
+[epoch 37] total=0.1475  diff=0.1389
+[epoch 38] total=0.1262  diff=0.1177
+[epoch 39] total=0.1316  diff=0.1221
+[epoch 40] total=0.1202  diff=0.1127
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0040.pt
+[epoch 41] total=0.1361  diff=0.1291
+[epoch 42] total=0.1334  diff=0.1250
+[epoch 43] total=0.1265  diff=0.1183
+[epoch 44] total=0.1657  diff=0.1563
+[epoch 45] total=0.1593  diff=0.1525
+[epoch 46] total=0.1477  diff=0.1398
+[epoch 47] total=0.1076  diff=0.1005
+[epoch 48] total=0.1224  diff=0.1137
+[epoch 49] total=0.1285  diff=0.1216
+[epoch 50] total=0.1368  diff=0.1287
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0050.pt
+[epoch 51] total=0.1200  diff=0.1116
+[epoch 52] total=0.1037  diff=0.0966
+[epoch 53] total=0.1317  diff=0.1226
+[epoch 54] total=0.1203  diff=0.1131
+[epoch 55] total=0.1224  diff=0.1143
+[epoch 56] total=0.1171  diff=0.1085
+[epoch 57] total=0.1014  diff=0.0936
+[epoch 58] total=0.1161  diff=0.1090
+[epoch 59] total=0.1108  diff=0.1039
+[epoch 60] total=0.0977  diff=0.0915
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0060.pt
+[stage3] Complete.  Logs → checkpoints/p64s_stage3_animatediff

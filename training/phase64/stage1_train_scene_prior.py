@@ -85,24 +85,27 @@ def total_scene_loss(
     Returns a dict of named loss tensors.  The caller sums them with their
     lambda weights to form the total scalar loss.
     """
-    # GT masks as tensors on device — shape (H, W)
-    # scene_out has shape (B=1, H, W) — squeeze batch dim
+    # Predicted fields — squeeze batch dim if B=1
+    pred_vis_e0 = scene_out.visible_e0.squeeze(0)   # (H_pred, W_pred)
+    pred_vis_e1 = scene_out.visible_e1.squeeze(0)
+    pred_amo_e0 = scene_out.amodal_e0.squeeze(0)
+    pred_amo_e1 = scene_out.amodal_e1.squeeze(0)
+    pred_sep    = scene_out.sep_map.squeeze(0)
+
+    pH, pW = pred_vis_e0.shape[-2], pred_vis_e0.shape[-1]
+
+    # GT masks: resize to match pred spatial size if needed
     def _gt(arr: np.ndarray) -> torch.Tensor:
-        # arr: (T, H, W) or (H, W) — use mean over T as single-frame GT
         t = torch.from_numpy(arr.mean(axis=0) if arr.ndim == 3 else arr).float().to(device)
+        if t.shape[-2] != pH or t.shape[-1] != pW:
+            t = F.interpolate(t.unsqueeze(0).unsqueeze(0), size=(pH, pW),
+                              mode="bilinear", align_corners=False).squeeze()
         return t
 
     gt_vis_e0 = _gt(scene_gt.vis_e0)
     gt_vis_e1 = _gt(scene_gt.vis_e1)
     gt_amo_e0 = _gt(scene_gt.amo_e0)
     gt_amo_e1 = _gt(scene_gt.amo_e1)
-
-    # Predicted fields — squeeze batch dim if B=1
-    pred_vis_e0 = scene_out.visible_e0.squeeze(0)
-    pred_vis_e1 = scene_out.visible_e1.squeeze(0)
-    pred_amo_e0 = scene_out.amodal_e0.squeeze(0)
-    pred_amo_e1 = scene_out.amodal_e1.squeeze(0)
-    pred_sep    = scene_out.sep_map.squeeze(0)
 
     losses: Dict[str, torch.Tensor] = {}
 
@@ -214,7 +217,7 @@ class Stage1Trainer:
         )
 
         run_name = getattr(config, "run_name", "p64_stage1")
-        self.out_dir = Path(f"checkpoints/phase64/{run_name}")
+        self.out_dir = Path(f"checkpoints/{run_name}")
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self._best_vis_iou_min: float = 0.0

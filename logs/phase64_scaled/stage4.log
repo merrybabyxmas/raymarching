@@ -1,0 +1,80 @@
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+
+Loading pipeline components...:   0%|          | 0/7 [00:00<?, ?it/s]
+Loading pipeline components...:  14%|█▍        | 1/7 [00:00<00:00,  8.25it/s]
+
+Loading weights:   0%|          | 0/517 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 517/517 [00:00<00:00, 11883.96it/s]
+
+Loading pipeline components...:  43%|████▎     | 3/7 [00:00<00:00,  6.75it/s]
+
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 196/196 [00:00<00:00, 9746.56it/s]
+
+Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 14.99it/s]
+Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 12.74it/s]
+[Phase 64 Backbone] stage=4  device=cuda  seed=42
+[Phase 64 Backbone] Stage 1 ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34
+
+[Phase 64 Backbone] Stage 4 — SDXL transfer adapter training...
+[Phase 64 Backbone] Loading SDXL pipeline...
+[Phase 64 Backbone] SDXL pipeline loaded on cuda
+[stage4] Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Starting SDXL adapter from scratch.
+[stage4] Training SDXL adapter  epochs=40  steps/epoch=100
+  [sdxl epoch 1] loss=nan
+  [sdxl epoch 2] loss=nan
+  [sdxl epoch 3] loss=nan
+  [sdxl epoch 4] loss=nan
+  [sdxl epoch 5] loss=nan
+  [sdxl epoch 6] loss=nan
+  [sdxl epoch 7] loss=nan
+  [sdxl epoch 8] loss=nan
+  [sdxl epoch 9] loss=nan
+  [sdxl epoch 10] loss=nan
+  [sdxl epoch 11] loss=nan
+  [sdxl epoch 12] loss=nan
+  [sdxl epoch 13] loss=nan
+  [sdxl epoch 14] loss=nan
+  [sdxl epoch 15] loss=nan
+  [sdxl epoch 16] loss=nan
+  [sdxl epoch 17] loss=nan
+  [sdxl epoch 18] loss=nan
+  [sdxl epoch 19] loss=nan
+  [sdxl epoch 20] loss=nan
+  [sdxl epoch 21] loss=nan
+  [sdxl epoch 22] loss=nan
+  [sdxl epoch 23] loss=nan
+  [sdxl epoch 24] loss=nan
+  [sdxl epoch 25] loss=nan
+  [sdxl epoch 26] loss=nan
+  [sdxl epoch 27] loss=nan
+  [sdxl epoch 28] loss=nan
+  [sdxl epoch 29] loss=nan
+  [sdxl epoch 30] loss=nan
+  [sdxl epoch 31] loss=nan
+  [sdxl epoch 32] loss=nan
+  [sdxl epoch 33] loss=nan
+  [sdxl epoch 34] loss=nan
+  [sdxl epoch 35] loss=nan
+  [sdxl epoch 36] loss=nan
+  [sdxl epoch 37] loss=nan
+  [sdxl epoch 38] loss=nan
+  [sdxl epoch 39] loss=nan
+  [sdxl epoch 40] loss=nan
+[stage4] SDXL adapter saved → checkpoints/p64s_stage4_sdxl/sdxl_adapter.pt
+[stage4] Transfer eval saved → checkpoints/p64s_stage4_sdxl/transfer_eval.json
+
+============================================================
+Stage 4 Transfer Evaluation Summary
+============================================================
+  visible_iou_min                           baseline=0.0282  guided=0.3632  Δ=+0.3350
+  visible_survival_min                      baseline=1.0000  guided=0.6176  Δ=-0.3824
+  chimera_rate                              baseline=0.0000  guided=0.5000  Δ=+0.5000
+============================================================

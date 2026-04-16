@@ -1,0 +1,667 @@
+bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by bash)
+=== Phase 64 Full Pipeline  GPU=0  START Thu Apr 16 01:07:17 PM KST 2026 ===
+
+============================================================
+  [stage0_1] START  2026-04-16 13:07:17
+  CMD: python scripts/train_phase64_scene.py --config config/phase64/stage1.yaml
+============================================================
+[Phase 64 Scene] device=cuda  seed=42
+[Phase 64 Scene] Loading dataset from toy/data_objaverse...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  dataset size: 180
+  train=145  val=35  O=171  C=9  R=0  X=0
+
+[Phase 64 Stage 0] Running dataset validation...
+[stage0] Stats saved → outputs/phase64/stage0/dataset_stats.json
+[stage0] Histogram saved → outputs/phase64/stage0/histograms.png
+============================================================
+Phase 64 — Stage 0 Dataset Validation  (n=180)
+============================================================
+  Visible coverage e0: mean=0.0270  std=0.0195
+  Visible coverage e1: mean=0.0288  std=0.0298
+  Hidden fraction e0:  mean=0.0167  std=0.0839
+  Hidden fraction e1:  mean=0.0113  std=0.0699
+  Overlap IoU:         mean=0.0141  std=0.0511
+  Depth gap (std):     mean=0.1535  std=0.0744
+  Mean GT objects/frame: 1.494
+    count=0: 27 frames
+    count=1: 37 frames
+    count=2: 116 frames
+    count=3: 0 frames
+  Split breakdown:
+    O: 171  (47.5%)
+    C: 9  (2.5%)
+    R: 0  (0.0%)
+    X: 0  (0.0%)
+    train: 145  (40.3%)
+    val: 35  (9.7%)
+============================================================
+[Phase 64 Stage 0] Stats saved. oracle_amo_iou=0.0000
+
+[Phase 64 Stage 1] Building Stage1Trainer...
+[Phase 64 Stage 1] Starting from scratch.
+[stage1] Training  epochs=60  steps/epoch=30  n_train=145
+  epoch 1/60  step 6/30  loss=44.1717
+  epoch 1/60  step 12/30  loss=43.5616
+  epoch 1/60  step 18/30  loss=30.2842
+  epoch 1/60  step 24/30  loss=24.5555
+  epoch 1/60  step 30/30  loss=20.2640
+[epoch 1] loss=30.8836  vis_iou_e0=0.0505  vis_iou_e1=0.0269
+  epoch 2/60  step 6/30  loss=16.2990
+  epoch 2/60  step 12/30  loss=17.3043
+  epoch 2/60  step 18/30  loss=18.0411
+  epoch 2/60  step 24/30  loss=18.5659
+  epoch 2/60  step 30/30  loss=15.8295
+[epoch 2] loss=16.8372  vis_iou_e0=0.0576  vis_iou_e1=0.0467
+  epoch 3/60  step 6/30  loss=15.8907
+  epoch 3/60  step 12/30  loss=14.0889
+  epoch 3/60  step 18/30  loss=12.5485
+  epoch 3/60  step 24/30  loss=13.1419
+  epoch 3/60  step 30/30  loss=14.7349
+[epoch 3] loss=13.8279  vis_iou_e0=0.0682  vis_iou_e1=0.0613
+  epoch 4/60  step 6/30  loss=11.3438
+  epoch 4/60  step 12/30  loss=14.8575
+  epoch 4/60  step 18/30  loss=14.8587
+  epoch 4/60  step 24/30  loss=11.8864
+  epoch 4/60  step 30/30  loss=15.1765
+[epoch 4] loss=14.4829  vis_iou_e0=0.1356  vis_iou_e1=0.1015
+  epoch 5/60  step 6/30  loss=17.1677
+  epoch 5/60  step 12/30  loss=16.3256
+  epoch 5/60  step 18/30  loss=16.7568
+  epoch 5/60  step 24/30  loss=14.2921
+  epoch 5/60  step 30/30  loss=14.1613
+[epoch 5] loss=15.4871  vis_iou_e0=0.2841  vis_iou_e1=0.1440
+  [val epoch 5] vis_iou_min=0.1969  amo_iou_min=0.1967  surv_min=0.7429
+  [val] New best vis_iou_min=0.1969 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 6/60  step 6/30  loss=14.7020
+  epoch 6/60  step 12/30  loss=12.9994
+  epoch 6/60  step 18/30  loss=13.6540
+  epoch 6/60  step 24/30  loss=14.1658
+  epoch 6/60  step 30/30  loss=14.0785
+[epoch 6] loss=13.7718  vis_iou_e0=0.2690  vis_iou_e1=0.1968
+  epoch 7/60  step 6/30  loss=14.7424
+  epoch 7/60  step 12/30  loss=14.8142
+  epoch 7/60  step 18/30  loss=15.1927
+  epoch 7/60  step 24/30  loss=14.5343
+  epoch 7/60  step 30/30  loss=12.8447
+[epoch 7] loss=13.8827  vis_iou_e0=0.3014  vis_iou_e1=0.2144
+  epoch 8/60  step 6/30  loss=13.7158
+  epoch 8/60  step 12/30  loss=12.7972
+  epoch 8/60  step 18/30  loss=12.6208
+  epoch 8/60  step 24/30  loss=11.8701
+  epoch 8/60  step 30/30  loss=12.4303
+[epoch 8] loss=12.5506  vis_iou_e0=0.3033  vis_iou_e1=0.2986
+  epoch 9/60  step 6/30  loss=10.1733
+  epoch 9/60  step 12/30  loss=14.6560
+  epoch 9/60  step 18/30  loss=14.7566
+  epoch 9/60  step 24/30  loss=13.7598
+  epoch 9/60  step 30/30  loss=12.5143
+[epoch 9] loss=13.5934  vis_iou_e0=0.2976  vis_iou_e1=0.2333
+  epoch 10/60  step 6/30  loss=12.3903
+  epoch 10/60  step 12/30  loss=11.9781
+  epoch 10/60  step 18/30  loss=14.0999
+  epoch 10/60  step 24/30  loss=14.5593
+  epoch 10/60  step 30/30  loss=13.7668
+[epoch 10] loss=13.4052  vis_iou_e0=0.3872  vis_iou_e1=0.2954
+  [val epoch 10] vis_iou_min=0.2795  amo_iou_min=0.2790  surv_min=0.6571
+  [val] New best vis_iou_min=0.2795 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 11/60  step 6/30  loss=13.0371
+  epoch 11/60  step 12/30  loss=11.7777
+  epoch 11/60  step 18/30  loss=12.8281
+  epoch 11/60  step 24/30  loss=15.0231
+  epoch 11/60  step 30/30  loss=14.0201
+[epoch 11] loss=13.3358  vis_iou_e0=0.3753  vis_iou_e1=0.2951
+  epoch 12/60  step 6/30  loss=13.3740
+  epoch 12/60  step 12/30  loss=12.1588
+  epoch 12/60  step 18/30  loss=11.6912
+  epoch 12/60  step 24/30  loss=11.8661
+  epoch 12/60  step 30/30  loss=12.8249
+[epoch 12] loss=12.2824  vis_iou_e0=0.3573  vis_iou_e1=0.3168
+  epoch 13/60  step 6/30  loss=11.5845
+  epoch 13/60  step 12/30  loss=11.3348
+  epoch 13/60  step 18/30  loss=12.7652
+  epoch 13/60  step 24/30  loss=11.7883
+  epoch 13/60  step 30/30  loss=11.1193
+[epoch 13] loss=11.7630  vis_iou_e0=0.3239  vis_iou_e1=0.3122
+  epoch 14/60  step 6/30  loss=13.1807
+  epoch 14/60  step 12/30  loss=11.9649
+  epoch 14/60  step 18/30  loss=13.4179
+  epoch 14/60  step 24/30  loss=14.5379
+  epoch 14/60  step 30/30  loss=12.3843
+[epoch 14] loss=13.0736  vis_iou_e0=0.3632  vis_iou_e1=0.2465
+  epoch 15/60  step 6/30  loss=12.8868
+  epoch 15/60  step 12/30  loss=12.5872
+  epoch 15/60  step 18/30  loss=13.4329
+  epoch 15/60  step 24/30  loss=12.1515
+  epoch 15/60  step 30/30  loss=13.0539
+[epoch 15] loss=12.5294  vis_iou_e0=0.3604  vis_iou_e1=0.3183
+  [val epoch 15] vis_iou_min=0.3039  amo_iou_min=0.3031  surv_min=0.7143
+  [val] New best vis_iou_min=0.3039 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 16/60  step 6/30  loss=8.3744
+  epoch 16/60  step 12/30  loss=12.4422
+  epoch 16/60  step 18/30  loss=12.2559
+  epoch 16/60  step 24/30  loss=11.9699
+  epoch 16/60  step 30/30  loss=11.7408
+[epoch 16] loss=11.5225  vis_iou_e0=0.3853  vis_iou_e1=0.2846
+  epoch 17/60  step 6/30  loss=11.7759
+  epoch 17/60  step 12/30  loss=11.5344
+  epoch 17/60  step 18/30  loss=11.8211
+  epoch 17/60  step 24/30  loss=12.1669
+  epoch 17/60  step 30/30  loss=11.6675
+[epoch 17] loss=12.0020  vis_iou_e0=0.3911  vis_iou_e1=0.3108
+  epoch 18/60  step 6/30  loss=12.2401
+  epoch 18/60  step 12/30  loss=12.0656
+  epoch 18/60  step 18/30  loss=11.0143
+  epoch 18/60  step 24/30  loss=10.0039
+  epoch 18/60  step 30/30  loss=11.2784
+[epoch 18] loss=11.8042  vis_iou_e0=0.3163  vis_iou_e1=0.2645
+  epoch 19/60  step 6/30  loss=12.8253
+  epoch 19/60  step 12/30  loss=11.8459
+  epoch 19/60  step 18/30  loss=12.1409
+  epoch 19/60  step 24/30  loss=12.2476
+  epoch 19/60  step 30/30  loss=11.4540
+[epoch 19] loss=11.8658  vis_iou_e0=0.3612  vis_iou_e1=0.3416
+  epoch 20/60  step 6/30  loss=14.5799
+  epoch 20/60  step 12/30  loss=11.1463
+  epoch 20/60  step 18/30  loss=9.8565
+  epoch 20/60  step 24/30  loss=10.0036
+  epoch 20/60  step 30/30  loss=11.8421
+[epoch 20] loss=11.6224  vis_iou_e0=0.3834  vis_iou_e1=0.2661
+  [val epoch 20] vis_iou_min=0.3377  amo_iou_min=0.3373  surv_min=0.7429
+  [val] New best vis_iou_min=0.3377 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 21/60  step 6/30  loss=13.9680
+  epoch 21/60  step 12/30  loss=12.4429
+  epoch 21/60  step 18/30  loss=12.8888
+  epoch 21/60  step 24/30  loss=11.4288
+  epoch 21/60  step 30/30  loss=10.9697
+[epoch 21] loss=12.0494  vis_iou_e0=0.3774  vis_iou_e1=0.3326
+  epoch 22/60  step 6/30  loss=11.7332
+  epoch 22/60  step 12/30  loss=12.7023
+  epoch 22/60  step 18/30  loss=11.2009
+  epoch 22/60  step 24/30  loss=8.8366
+  epoch 22/60  step 30/30  loss=10.4537
+[epoch 22] loss=11.1172  vis_iou_e0=0.3478  vis_iou_e1=0.2948
+  epoch 23/60  step 6/30  loss=9.9110
+  epoch 23/60  step 12/30  loss=11.3192
+  epoch 23/60  step 18/30  loss=12.6571
+  epoch 23/60  step 24/30  loss=14.1019
+  epoch 23/60  step 30/30  loss=11.3136
+[epoch 23] loss=11.6393  vis_iou_e0=0.3366  vis_iou_e1=0.2595
+  epoch 24/60  step 6/30  loss=11.5607
+  epoch 24/60  step 12/30  loss=13.0062
+  epoch 24/60  step 18/30  loss=13.6872
+  epoch 24/60  step 24/30  loss=12.6220
+  epoch 24/60  step 30/30  loss=11.8669
+[epoch 24] loss=12.4645  vis_iou_e0=0.3508  vis_iou_e1=0.3723
+  epoch 25/60  step 6/30  loss=12.6914
+  epoch 25/60  step 12/30  loss=12.4381
+  epoch 25/60  step 18/30  loss=12.4490
+  epoch 25/60  step 24/30  loss=13.4783
+  epoch 25/60  step 30/30  loss=13.2945
+[epoch 25] loss=12.9840  vis_iou_e0=0.4268  vis_iou_e1=0.3392
+  [val epoch 25] vis_iou_min=0.3421  amo_iou_min=0.3292  surv_min=0.7143
+  [val] New best vis_iou_min=0.3421 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 26/60  step 6/30  loss=10.5980
+  epoch 26/60  step 12/30  loss=11.4725
+  epoch 26/60  step 18/30  loss=15.3126
+  epoch 26/60  step 24/30  loss=14.5874
+  epoch 26/60  step 30/30  loss=11.5058
+[epoch 26] loss=12.7107  vis_iou_e0=0.3666  vis_iou_e1=0.3203
+  epoch 27/60  step 6/30  loss=11.0845
+  epoch 27/60  step 12/30  loss=11.0177
+  epoch 27/60  step 18/30  loss=12.5671
+  epoch 27/60  step 24/30  loss=12.1012
+  epoch 27/60  step 30/30  loss=12.6387
+[epoch 27] loss=11.9665  vis_iou_e0=0.4119  vis_iou_e1=0.3586
+  epoch 28/60  step 6/30  loss=12.2409
+  epoch 28/60  step 12/30  loss=11.0335
+  epoch 28/60  step 18/30  loss=11.1276
+  epoch 28/60  step 24/30  loss=12.1840
+  epoch 28/60  step 30/30  loss=11.7200
+[epoch 28] loss=11.5557  vis_iou_e0=0.4221  vis_iou_e1=0.3466
+  epoch 29/60  step 6/30  loss=11.6415
+  epoch 29/60  step 12/30  loss=12.2708
+  epoch 29/60  step 18/30  loss=11.3246
+  epoch 29/60  step 24/30  loss=10.5041
+  epoch 29/60  step 30/30  loss=10.2017
+[epoch 29] loss=11.1574  vis_iou_e0=0.3423  vis_iou_e1=0.3167
+  epoch 30/60  step 6/30  loss=10.4098
+  epoch 30/60  step 12/30  loss=10.9402
+  epoch 30/60  step 18/30  loss=11.1520
+  epoch 30/60  step 24/30  loss=12.1551
+  epoch 30/60  step 30/30  loss=12.5179
+[epoch 30] loss=11.6245  vis_iou_e0=0.3493  vis_iou_e1=0.3167
+  [val epoch 30] vis_iou_min=0.3554  amo_iou_min=0.3553  surv_min=0.7429
+  [val] New best vis_iou_min=0.3554 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 31/60  step 6/30  loss=10.6807
+  epoch 31/60  step 12/30  loss=12.2240
+  epoch 31/60  step 18/30  loss=10.5638
+  epoch 31/60  step 24/30  loss=12.2867
+  epoch 31/60  step 30/30  loss=10.9823
+[epoch 31] loss=11.0924  vis_iou_e0=0.3945  vis_iou_e1=0.3643
+  epoch 32/60  step 6/30  loss=10.3527
+  epoch 32/60  step 12/30  loss=10.5389
+  epoch 32/60  step 18/30  loss=11.7254
+  epoch 32/60  step 24/30  loss=11.8413
+  epoch 32/60  step 30/30  loss=11.3174
+[epoch 32] loss=11.3871  vis_iou_e0=0.3759  vis_iou_e1=0.3830
+  epoch 33/60  step 6/30  loss=10.7157
+  epoch 33/60  step 12/30  loss=11.3316
+  epoch 33/60  step 18/30  loss=10.1710
+  epoch 33/60  step 24/30  loss=9.3775
+  epoch 33/60  step 30/30  loss=10.1171
+[epoch 33] loss=10.3480  vis_iou_e0=0.3790  vis_iou_e1=0.3258
+  epoch 34/60  step 6/30  loss=10.7872
+  epoch 34/60  step 12/30  loss=10.8141
+  epoch 34/60  step 18/30  loss=10.8710
+  epoch 34/60  step 24/30  loss=10.3941
+  epoch 34/60  step 30/30  loss=9.6659
+[epoch 34] loss=10.5118  vis_iou_e0=0.3705  vis_iou_e1=0.3339
+  epoch 35/60  step 6/30  loss=10.3428
+  epoch 35/60  step 12/30  loss=11.0819
+  epoch 35/60  step 18/30  loss=11.6322
+  epoch 35/60  step 24/30  loss=10.5475
+  epoch 35/60  step 30/30  loss=11.9996
+[epoch 35] loss=11.2304  vis_iou_e0=0.3770  vis_iou_e1=0.3659
+  [val epoch 35] vis_iou_min=0.3536  amo_iou_min=0.3272  surv_min=0.7429
+  epoch 36/60  step 6/30  loss=11.5945
+  epoch 36/60  step 12/30  loss=11.1106
+  epoch 36/60  step 18/30  loss=12.6499
+  epoch 36/60  step 24/30  loss=13.3800
+  epoch 36/60  step 30/30  loss=11.7008
+[epoch 36] loss=11.7907  vis_iou_e0=0.3828  vis_iou_e1=0.2952
+  epoch 37/60  step 6/30  loss=11.5673
+  epoch 37/60  step 12/30  loss=11.5969
+  epoch 37/60  step 18/30  loss=9.9960
+  epoch 37/60  step 24/30  loss=10.3801
+  epoch 37/60  step 30/30  loss=12.6490
+[epoch 37] loss=11.0920  vis_iou_e0=0.3964  vis_iou_e1=0.3074
+  epoch 38/60  step 6/30  loss=10.9865
+  epoch 38/60  step 12/30  loss=12.3387
+  epoch 38/60  step 18/30  loss=11.1708
+  epoch 38/60  step 24/30  loss=11.6381
+  epoch 38/60  step 30/30  loss=12.0541
+[epoch 38] loss=12.0162  vis_iou_e0=0.3979  vis_iou_e1=0.2836
+  epoch 39/60  step 6/30  loss=11.8962
+  epoch 39/60  step 12/30  loss=10.9610
+  epoch 39/60  step 18/30  loss=9.7430
+  epoch 39/60  step 24/30  loss=10.5406
+  epoch 39/60  step 30/30  loss=11.3659
+[epoch 39] loss=10.6951  vis_iou_e0=0.4345  vis_iou_e1=0.3312
+  epoch 40/60  step 6/30  loss=11.9129
+  epoch 40/60  step 12/30  loss=11.2519
+  epoch 40/60  step 18/30  loss=9.9683
+  epoch 40/60  step 24/30  loss=12.4422
+  epoch 40/60  step 30/30  loss=10.2475
+[epoch 40] loss=10.8174  vis_iou_e0=0.3750  vis_iou_e1=0.3199
+  [val epoch 40] vis_iou_min=0.3494  amo_iou_min=0.3458  surv_min=0.6571
+  epoch 41/60  step 6/30  loss=12.0734
+  epoch 41/60  step 12/30  loss=12.0026
+  epoch 41/60  step 18/30  loss=11.3251
+  epoch 41/60  step 24/30  loss=10.8241
+  epoch 41/60  step 30/30  loss=10.8974
+[epoch 41] loss=11.3052  vis_iou_e0=0.4227  vis_iou_e1=0.3171
+  epoch 42/60  step 6/30  loss=10.9179
+  epoch 42/60  step 12/30  loss=11.9732
+  epoch 42/60  step 18/30  loss=10.4626
+  epoch 42/60  step 24/30  loss=10.2627
+  epoch 42/60  step 30/30  loss=10.9406
+[epoch 42] loss=10.8265  vis_iou_e0=0.3559  vis_iou_e1=0.2490
+  epoch 43/60  step 6/30  loss=14.3207
+  epoch 43/60  step 12/30  loss=13.2180
+  epoch 43/60  step 18/30  loss=11.1879
+  epoch 43/60  step 24/30  loss=9.5523
+  epoch 43/60  step 30/30  loss=10.6236
+[epoch 43] loss=11.8161  vis_iou_e0=0.3532  vis_iou_e1=0.3418
+  epoch 44/60  step 6/30  loss=11.5339
+  epoch 44/60  step 12/30  loss=11.8220
+  epoch 44/60  step 18/30  loss=10.6601
+  epoch 44/60  step 24/30  loss=9.7357
+  epoch 44/60  step 30/30  loss=10.5035
+[epoch 44] loss=11.0954  vis_iou_e0=0.3879  vis_iou_e1=0.3062
+  epoch 45/60  step 6/30  loss=9.7809
+  epoch 45/60  step 12/30  loss=10.5793
+  epoch 45/60  step 18/30  loss=11.0823
+  epoch 45/60  step 24/30  loss=11.3898
+  epoch 45/60  step 30/30  loss=12.0136
+[epoch 45] loss=11.2564  vis_iou_e0=0.4055  vis_iou_e1=0.3232
+  [val epoch 45] vis_iou_min=0.3578  amo_iou_min=0.3580  surv_min=0.7143
+  [val] New best vis_iou_min=0.3578 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 46/60  step 6/30  loss=11.9893
+  epoch 46/60  step 12/30  loss=9.2926
+  epoch 46/60  step 18/30  loss=9.4281
+  epoch 46/60  step 24/30  loss=10.3101
+  epoch 46/60  step 30/30  loss=10.3641
+[epoch 46] loss=10.3071  vis_iou_e0=0.3975  vis_iou_e1=0.3890
+  epoch 47/60  step 6/30  loss=11.9578
+  epoch 47/60  step 12/30  loss=11.6052
+  epoch 47/60  step 18/30  loss=11.3034
+  epoch 47/60  step 24/30  loss=10.1789
+  epoch 47/60  step 30/30  loss=10.1139
+[epoch 47] loss=10.6191  vis_iou_e0=0.3845  vis_iou_e1=0.2740
+  epoch 48/60  step 6/30  loss=9.1885
+  epoch 48/60  step 12/30  loss=9.9582
+  epoch 48/60  step 18/30  loss=10.4966
+  epoch 48/60  step 24/30  loss=9.1970
+  epoch 48/60  step 30/30  loss=10.6687
+[epoch 48] loss=10.5559  vis_iou_e0=0.3913  vis_iou_e1=0.2905
+  epoch 49/60  step 6/30  loss=10.4387
+  epoch 49/60  step 12/30  loss=10.3358
+  epoch 49/60  step 18/30  loss=11.3501
+  epoch 49/60  step 24/30  loss=10.0533
+  epoch 49/60  step 30/30  loss=9.1349
+[epoch 49] loss=10.2654  vis_iou_e0=0.3436  vis_iou_e1=0.3536
+  epoch 50/60  step 6/30  loss=11.0133
+  epoch 50/60  step 12/30  loss=12.0097
+  epoch 50/60  step 18/30  loss=10.3590
+  epoch 50/60  step 24/30  loss=10.0832
+  epoch 50/60  step 30/30  loss=10.9253
+[epoch 50] loss=11.0864  vis_iou_e0=0.3832  vis_iou_e1=0.3473
+  [val epoch 50] vis_iou_min=0.3735  amo_iou_min=0.3445  surv_min=0.7429
+  [val] New best vis_iou_min=0.3735 → saved to checkpoints/phase64/p64_stage1/best_scene_prior.pt
+  epoch 51/60  step 6/30  loss=10.9651
+  epoch 51/60  step 12/30  loss=11.6056
+  epoch 51/60  step 18/30  loss=13.0117
+  epoch 51/60  step 24/30  loss=12.8098
+  epoch 51/60  step 30/30  loss=11.8596
+[epoch 51] loss=12.2135  vis_iou_e0=0.4209  vis_iou_e1=0.4094
+  epoch 52/60  step 6/30  loss=12.5573
+  epoch 52/60  step 12/30  loss=11.3483
+  epoch 52/60  step 18/30  loss=11.7115
+  epoch 52/60  step 24/30  loss=10.2512
+  epoch 52/60  step 30/30  loss=10.0194
+[epoch 52] loss=10.7561  vis_iou_e0=0.3943  vis_iou_e1=0.3538
+  epoch 53/60  step 6/30  loss=11.1554
+  epoch 53/60  step 12/30  loss=11.3788
+  epoch 53/60  step 18/30  loss=11.8534
+  epoch 53/60  step 24/30  loss=12.4678
+  epoch 53/60  step 30/30  loss=12.2502
+[epoch 53] loss=11.5614  vis_iou_e0=0.3254  vis_iou_e1=0.3090
+  epoch 54/60  step 6/30  loss=12.1344
+  epoch 54/60  step 12/30  loss=10.6004
+  epoch 54/60  step 18/30  loss=10.7257
+  epoch 54/60  step 24/30  loss=11.4540
+  epoch 54/60  step 30/30  loss=11.2380
+[epoch 54] loss=11.3446  vis_iou_e0=0.3819  vis_iou_e1=0.2712
+  epoch 55/60  step 6/30  loss=9.9629
+  epoch 55/60  step 12/30  loss=10.3693
+  epoch 55/60  step 18/30  loss=11.3881
+  epoch 55/60  step 24/30  loss=10.7416
+  epoch 55/60  step 30/30  loss=10.2595
+[epoch 55] loss=10.4231  vis_iou_e0=0.4222  vis_iou_e1=0.2672
+  [val epoch 55] vis_iou_min=0.3559  amo_iou_min=0.3552  surv_min=0.7429
+  epoch 56/60  step 6/30  loss=7.9410
+  epoch 56/60  step 12/30  loss=11.1013
+  epoch 56/60  step 18/30  loss=12.4375
+  epoch 56/60  step 24/30  loss=10.3945
+  epoch 56/60  step 30/30  loss=9.8503
+[epoch 56] loss=10.2224  vis_iou_e0=0.3562  vis_iou_e1=0.2746
+  epoch 57/60  step 6/30  loss=11.5861
+  epoch 57/60  step 12/30  loss=11.8830
+  epoch 57/60  step 18/30  loss=11.3218
+  epoch 57/60  step 24/30  loss=11.0409
+  epoch 57/60  step 30/30  loss=10.1923
+[epoch 57] loss=11.3623  vis_iou_e0=0.3595  vis_iou_e1=0.4237
+  epoch 58/60  step 6/30  loss=8.4023
+  epoch 58/60  step 12/30  loss=8.5992
+  epoch 58/60  step 18/30  loss=8.8132
+  epoch 58/60  step 24/30  loss=10.5670
+  epoch 58/60  step 30/30  loss=10.8648
+[epoch 58] loss=9.7489  vis_iou_e0=0.3569  vis_iou_e1=0.2814
+  epoch 59/60  step 6/30  loss=10.0232
+  epoch 59/60  step 12/30  loss=10.4049
+  epoch 59/60  step 18/30  loss=12.9275
+  epoch 59/60  step 24/30  loss=12.5616
+  epoch 59/60  step 30/30  loss=10.9562
+[epoch 59] loss=11.3869  vis_iou_e0=0.4326  vis_iou_e1=0.3519
+  epoch 60/60  step 6/30  loss=12.5975
+  epoch 60/60  step 12/30  loss=10.4727
+  epoch 60/60  step 18/30  loss=11.3589
+  epoch 60/60  step 24/30  loss=10.7172
+  epoch 60/60  step 30/30  loss=11.0299
+[epoch 60] loss=11.1866  vis_iou_e0=0.3692  vis_iou_e1=0.3056
+  [val epoch 60] vis_iou_min=0.3631  amo_iou_min=0.3461  surv_min=0.6857
+[stage1] Training complete.  Best vis_iou_min=0.3735
+[stage1] Logs saved to checkpoints/phase64/p64_stage1
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+  [stage0_1] DONE  2026-04-16 13:07:49
+Stage 1 checkpoint confirmed: checkpoints/phase64/p64_stage1/best_scene_prior.pt
+
+============================================================
+  [stage2] START  2026-04-16 13:07:49
+  CMD: python scripts/train_phase64_decoder.py --config config/phase64/stage2.yaml --stage1_ckpt checkpoints/phase64/p64_stage1/best_scene_prior.pt
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+[Phase 64 Decoder] device=cuda  seed=42
+[Phase 64 Decoder] Stage 1 ckpt: checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Phase 64 Decoder] Loading dataset from toy/data_objaverse...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  dataset size: 180
+  train=145  val=35
+
+[Phase 64 Decoder] Building Stage2Trainer...
+[stage2] Loaded scene prior from checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Phase 64 Decoder] Starting decoder from scratch.
+[stage2] Training decoder  epochs=30  steps/epoch=30  n_train=145
+[epoch 1] total=0.6045  rec=0.6045
+[epoch 2] total=0.4025  rec=0.4009
+[epoch 3] total=0.1409  rec=0.1070
+[epoch 4] total=0.0840  rec=0.0398
+[epoch 5] total=0.0697  rec=0.0261
+  [val epoch 5] PSNR=24.44 dB  L1=0.0204
+  [val] New best PSNR=24.44 dB → saved to checkpoints/phase64/p64_stage2/best_decoder.pt
+[epoch 6] total=0.0473  rec=0.0220
+[epoch 7] total=0.0430  rec=0.0178
+[epoch 8] total=0.0457  rec=0.0168
+[epoch 9] total=0.0436  rec=0.0177
+[epoch 10] total=0.0432  rec=0.0172
+  [val epoch 10] PSNR=26.04 dB  L1=0.0169
+  [val] New best PSNR=26.04 dB → saved to checkpoints/phase64/p64_stage2/best_decoder.pt
+[epoch 11] total=0.0468  rec=0.0193
+[epoch 12] total=0.0413  rec=0.0162
+[epoch 13] total=0.0434  rec=0.0187
+[epoch 14] total=0.0360  rec=0.0146
+[epoch 15] total=0.0429  rec=0.0169
+  [val epoch 15] PSNR=26.70 dB  L1=0.0152
+  [val] New best PSNR=26.70 dB → saved to checkpoints/phase64/p64_stage2/best_decoder.pt
+[epoch 16] total=0.0416  rec=0.0169
+[epoch 17] total=0.0431  rec=0.0187
+[epoch 18] total=0.0396  rec=0.0161
+[epoch 19] total=0.0399  rec=0.0164
+[epoch 20] total=0.0421  rec=0.0178
+  [val epoch 20] PSNR=26.98 dB  L1=0.0139
+  [val] New best PSNR=26.98 dB → saved to checkpoints/phase64/p64_stage2/best_decoder.pt
+[epoch 21] total=0.0361  rec=0.0144
+[epoch 22] total=0.0291  rec=0.0187
+[epoch 23] total=0.0202  rec=0.0168
+[epoch 24] total=0.0218  rec=0.0178
+[epoch 25] total=0.0191  rec=0.0164
+  [val epoch 25] PSNR=27.44 dB  L1=0.0146
+  [val] New best PSNR=27.44 dB → saved to checkpoints/phase64/p64_stage2/best_decoder.pt
+[epoch 26] total=0.0172  rec=0.0143
+[epoch 27] total=0.0177  rec=0.0151
+[epoch 28] total=0.0189  rec=0.0175
+[epoch 29] total=0.0165  rec=0.0141
+[epoch 30] total=0.0170  rec=0.0142
+  [val epoch 30] PSNR=29.38 dB  L1=0.0117
+  [val] New best PSNR=29.38 dB → saved to checkpoints/phase64/p64_stage2/best_decoder.pt
+[stage2] Complete.  Best PSNR=29.38 dB
+[stage2] Logs → checkpoints/phase64/p64_stage2
+[stage2] Decoder PSNR 29.38 ≥ 18.0 — OK to proceed to Stage 3.
+  [stage2] DONE  2026-04-16 13:08:03
+Stage 2 checkpoint confirmed: checkpoints/phase64/p64_stage2/best_decoder.pt
+
+============================================================
+  [stage3] START  2026-04-16 13:08:03
+  CMD: python scripts/train_phase64_backbone.py --config config/phase64/stage3.yaml --stage 3 --stage1_ckpt checkpoints/phase64/p64_stage1/best_scene_prior.pt --stage2_ckpt checkpoints/phase64/p64_stage2/best_decoder.pt
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]
+Loading pipeline components...:  17%|█▋        | 1/6 [00:00<00:02,  2.06it/s]CLIPFeatureExtractor appears to have been deprecated in transformers. Using CLIPImageProcessor instead.
+
+
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 196/196 [00:00<00:00, 5799.37it/s]
+[1mCLIPTextModel LOAD REPORT[0m from: /home/dongwoo44/.cache/huggingface/hub/models--emilianJR--epiCRealism/snapshots/6522cf856b8c8e14638a0aaa7bd89b1b098aed17/text_encoder
+Key                                | Status     |  | 
+-----------------------------------+------------+--+-
+text_model.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+
+Loading pipeline components...:  83%|████████▎ | 5/6 [00:00<00:00,  9.54it/s]
+Loading pipeline components...: 100%|██████████| 6/6 [00:00<00:00,  8.73it/s]
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/diffusers/pipelines/pipeline_utils.py:2263: FutureWarning: `enable_vae_slicing` is deprecated and will be removed in version 0.40.0. Calling `enable_vae_slicing()` on a `AnimateDiffPipeline` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_slicing()`.
+  deprecate(
+[Phase 64 Backbone] stage=3  device=cuda  seed=42
+[Phase 64 Backbone] Stage 1 ckpt: checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Stage 2 ckpt: checkpoints/phase64/p64_stage2/best_decoder.pt
+[Phase 64 Backbone] Loading dataset from toy/data_objaverse...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  dataset size: 180
+  train=145  val=35
+
+[Phase 64 Backbone] Stage 3 — AnimateDiff adapter training...
+[Phase 64 Backbone] Loading AnimateDiff pipeline...
+Loading MotionAdapter...
+Loading base model (emilianJR/epiCRealism)...
+Pipeline on cuda, dtype=torch.float16
+[Phase 64 Backbone] Pipeline loaded on cuda
+[stage3] Loaded scene prior from checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[stage3] Loaded decoder from checkpoints/phase64/p64_stage2/best_decoder.pt
+[Phase 64 Backbone] Starting adapter from scratch.
+[stage3] Training adapter  epochs=30  steps/epoch=30  n_train=145
+[epoch 1] total=0.2093  diff=0.2052
+[epoch 2] total=0.2171  diff=0.2097
+[epoch 3] total=0.1689  diff=0.1614
+[epoch 4] total=0.1208  diff=0.1120
+[epoch 5] total=0.1531  diff=0.1446
+  [stage3] Checkpoint → checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0005.pt
+[epoch 6] total=0.2692  diff=0.2639
+[epoch 7] total=0.2140  diff=0.2052
+[epoch 8] total=0.1531  diff=0.1451
+[epoch 9] total=0.1759  diff=0.1691
+[epoch 10] total=0.1842  diff=0.1761
+  [stage3] Checkpoint → checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0010.pt
+[epoch 11] total=0.1500  diff=0.1417
+[epoch 12] total=0.1694  diff=0.1644
+[epoch 13] total=0.1007  diff=0.0922
+[epoch 14] total=0.1747  diff=0.1661
+[epoch 15] total=0.1708  diff=0.1641
+  [stage3] Checkpoint → checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0015.pt
+[epoch 16] total=0.1684  diff=0.1596
+[epoch 17] total=0.2053  diff=0.1945
+[epoch 18] total=0.1231  diff=0.1117
+[epoch 19] total=0.0857  diff=0.0790
+[epoch 20] total=0.1737  diff=0.1659
+  [stage3] Checkpoint → checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0020.pt
+[epoch 21] total=0.1701  diff=0.1648
+[epoch 22] total=0.1663  diff=0.1558
+[epoch 23] total=0.1318  diff=0.1237
+[epoch 24] total=0.1632  diff=0.1560
+[epoch 25] total=0.1732  diff=0.1642
+  [stage3] Checkpoint → checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0025.pt
+[epoch 26] total=0.1889  diff=0.1798
+[epoch 27] total=0.1517  diff=0.1453
+[epoch 28] total=0.1425  diff=0.1341
+[epoch 29] total=0.1724  diff=0.1674
+[epoch 30] total=0.2026  diff=0.1969
+  [stage3] Checkpoint → checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0030.pt
+[stage3] Complete.  Logs → checkpoints/phase64/p64_stage3_animatediff
+  [stage3] DONE  2026-04-16 13:09:48
+
+============================================================
+  [stage4] START  2026-04-16 13:09:48
+  CMD: python scripts/train_phase64_backbone.py --config config/phase64/stage4.yaml --stage 4 --stage1_ckpt checkpoints/phase64/p64_stage1/best_scene_prior.pt
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+
+Loading pipeline components...:   0%|          | 0/7 [00:00<?, ?it/s]
+Loading pipeline components...:  43%|████▎     | 3/7 [00:00<00:00, 15.46it/s]
+
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 196/196 [00:00<00:00, 11135.57it/s]
+
+Loading pipeline components...:  71%|███████▏  | 5/7 [00:00<00:00, 11.11it/s]
+
+Loading weights:   0%|          | 0/517 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 517/517 [00:00<00:00, 9774.11it/s]
+
+Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 12.25it/s]
+Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 12.35it/s]
+[Phase 64 Backbone] stage=4  device=cuda  seed=42
+[Phase 64 Backbone] Stage 1 ckpt: checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Loading dataset from toy/data_objaverse...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  dataset size: 180
+  train=145  val=35
+
+[Phase 64 Backbone] Stage 4 — SDXL transfer adapter training...
+[Phase 64 Backbone] Loading SDXL pipeline...
+[Phase 64 Backbone] SDXL pipeline loaded on cuda
+[stage4] Loaded scene prior from checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Starting SDXL adapter from scratch.
+[stage4] Training SDXL adapter  epochs=20  steps/epoch=30
+  [sdxl epoch 1] loss=nan
+  [sdxl epoch 2] loss=nan
+  [sdxl epoch 3] loss=nan
+  [sdxl epoch 4] loss=nan
+  [sdxl epoch 5] loss=nan
+  [sdxl epoch 6] loss=nan
+  [sdxl epoch 7] loss=nan
+  [sdxl epoch 8] loss=nan
+  [sdxl epoch 9] loss=nan
+  [sdxl epoch 10] loss=nan
+  [sdxl epoch 11] loss=nan
+  [sdxl epoch 12] loss=nan
+  [sdxl epoch 13] loss=nan
+  [sdxl epoch 14] loss=nan
+  [sdxl epoch 15] loss=nan
+  [sdxl epoch 16] loss=nan
+  [sdxl epoch 17] loss=nan
+  [sdxl epoch 18] loss=nan
+  [sdxl epoch 19] loss=nan
+  [sdxl epoch 20] loss=nan
+[stage4] SDXL adapter saved → checkpoints/phase64/p64_stage4_sdxl/sdxl_adapter.pt
+[stage4] Transfer eval saved → checkpoints/phase64/p64_stage4_sdxl/transfer_eval.json
+
+============================================================
+Stage 4 Transfer Evaluation Summary
+============================================================
+  visible_iou_min                           baseline=0.0233  guided=0.3735  Δ=+0.3501
+  visible_survival_min                      baseline=1.0000  guided=0.7429  Δ=-0.2571
+  chimera_rate                              baseline=0.0000  guided=0.2857  Δ=+0.2857
+============================================================
+  [stage4] DONE  2026-04-16 13:10:49
+
+============================================================
+  [eval_transfer] START  2026-04-16 13:10:49
+  CMD: python scripts/eval_phase64_transfer.py --config config/phase64/stage3.yaml --stage1_ckpt checkpoints/phase64/p64_stage1/best_scene_prior.pt --stage3_ckpt checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0029.pt --stage4_ckpt checkpoints/phase64/p64_stage4_sdxl/sdxl_adapter.pt --out outputs/phase64/eval_transfer_final
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+Traceback (most recent call last):
+  File "/home/dongwoo44/papers/raymarching/scripts/eval_phase64_transfer.py", line 481, in <module>
+    main()
+  File "/home/dongwoo44/papers/raymarching/scripts/eval_phase64_transfer.py", line 398, in main
+    scene_prior = ScenePriorModule(
+TypeError: ScenePriorModule.__init__() got an unexpected keyword argument 'hidden_dim'
+ERROR conda.cli.main_run:execute(142): `conda run python scripts/eval_phase64_transfer.py --config config/phase64/stage3.yaml --stage1_ckpt checkpoints/phase64/p64_stage1/best_scene_prior.pt --stage3_ckpt checkpoints/phase64/p64_stage3_animatediff/stage3_epoch0029.pt --stage4_ckpt checkpoints/phase64/p64_stage4_sdxl/sdxl_adapter.pt --out outputs/phase64/eval_transfer_final` failed. (See above for error)
+[Transfer Eval] Stage 1  : checkpoints/phase64/p64_stage1/best_scene_prior.pt
+[Transfer Eval] Stage 3  : NOT FOUND
+[Transfer Eval] Stage 4  : checkpoints/phase64/p64_stage4_sdxl/sdxl_adapter.pt
+[Transfer Eval] device   : cuda
+[Transfer Eval] Loading dataset from toy/data_objaverse...
+ObjaverseTrainDataset: 180 samples (data_root=toy/data_objaverse)
+  val=35
+[Transfer Eval] Building scene prior...
+  [eval_transfer] WARNING: exit code=1  2026-04-16 13:10:54
+
+=== Phase 64 Full Pipeline COMPLETE  Thu Apr 16 01:10:54 PM KST 2026 ===
+=== Logs: logs/phase64 ===
+=== Results: outputs/phase64/eval_transfer_final ===

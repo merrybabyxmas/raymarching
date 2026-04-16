@@ -1,0 +1,47 @@
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/papers/raymarching/scripts/viz_phase64.py:158: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  ri = Image.fromarray((r * 255).clip(0, 255).astype(np.uint8), "L")
+/home/dongwoo44/papers/raymarching/scripts/viz_phase64.py:69: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  m_img = Image.fromarray((m * 255).astype(np.uint8), "L")
+Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt  (epoch=40)
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+Visualizing 35 val samples → outputs/phase64_scaled/viz
+  [  0] person+person → sample_0002_person_person
+  [  1] cat+dog → sample_0003_cat_dog
+  [  2] sword+sword → sample_0004_sword_sword
+  [  3] sword+sword → sample_0005_sword_sword
+  [  4] wolf+dog → sample_0013_wolf_dog
+  [  5] cat+dog → sample_0015_cat_dog
+  [  6] cat+snake → sample_0016_cat_snake
+  [  7] cat+snake → sample_0021_cat_snake
+  [  8] lion+bear → sample_0029_lion_bear
+  [  9] snake+sword → sample_0030_snake_sword
+  [ 10] lion+bear → sample_0036_lion_bear
+  [ 11] cat+sword → sample_0042_cat_sword
+  [ 12] cat+snake → sample_0045_cat_snake
+  [ 13] person+snake → sample_0046_person_snake
+  [ 14] wolf+dog → sample_0049_wolf_dog
+  [ 15] snake+sword → sample_0055_snake_sword
+  [ 16] person+person → sample_0064_person_person
+  [ 17] lion+bear → sample_0074_lion_bear
+  [ 18] person+snake → sample_0084_person_snake
+  [ 19] sword+sword → sample_0088_sword_sword
+  [ 20] snake+alligator → sample_0091_snake_alligator
+  [ 21] snake+alligator → sample_0096_snake_alligator
+  [ 22] person+snake → sample_0106_person_snake
+  [ 23] wolf+dog → sample_0107_wolf_dog
+  [ 24] lion+sword → sample_0108_lion_sword
+  [ 25] cat+sword → sample_0114_cat_sword
+  [ 26] cat+sword → sample_0119_cat_sword
+  [ 27] snake+sword → sample_0123_snake_sword
+  [ 28] sword+sword → sample_0130_sword_sword
+  [ 29] lion+sword → sample_0146_lion_sword
+  [ 30] person+person → sample_0148_person_person
+  [ 31] lion+bear → sample_0154_lion_bear
+  [ 32] dog+sword → sample_0156_dog_sword
+  [ 33] lion+bear → sample_0161_lion_bear
+  [ 34] cat+dog → sample_0177_cat_dog
+
+Overview GIF saved: outputs/phase64_scaled/viz/overview.gif  (35 frames)
+
+All visualizations saved to: outputs/phase64_scaled/viz

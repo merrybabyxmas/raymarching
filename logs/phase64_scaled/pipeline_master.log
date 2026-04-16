@@ -1,0 +1,1640 @@
+bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by bash)
+=== Phase 64 SCALED Pipeline  GPU=0  START Thu Apr 16 01:43:14 PM KST 2026 ===
+
+============================================================
+  [stage0_1] START  2026-04-16 13:43:14
+  CMD: python scripts/train_phase64_scene.py --config config/phase64_scaled/stage1.yaml
+============================================================
+[Phase 64 Scene] device=cuda  seed=42
+[Phase 64 Scene] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34  O=224  C=12  R=0  X=0
+
+[Phase 64 Stage 0] Running dataset validation...
+[stage0] Stats saved → outputs/phase64/stage0/dataset_stats.json
+[stage0] Histogram saved → outputs/phase64/stage0/histograms.png
+============================================================
+Phase 64 — Stage 0 Dataset Validation  (n=236)
+============================================================
+  Visible coverage e0: mean=0.0305  std=0.0231
+  Visible coverage e1: mean=0.0286  std=0.0294
+  Hidden fraction e0:  mean=0.0128  std=0.0736
+  Hidden fraction e1:  mean=0.0196  std=0.0884
+  Overlap IoU:         mean=0.0151  std=0.0482
+  Depth gap (std):     mean=0.1597  std=0.0741
+  Mean GT objects/frame: 1.517
+    count=0: 32 frames
+    count=1: 50 frames
+    count=2: 154 frames
+    count=3: 0 frames
+  Split breakdown:
+    O: 224  (47.5%)
+    C: 12  (2.5%)
+    R: 0  (0.0%)
+    X: 0  (0.0%)
+    train: 202  (42.8%)
+    val: 34  (7.2%)
+============================================================
+[Phase 64 Stage 0] Stats saved. oracle_amo_iou=0.0000
+
+[Phase 64 Stage 1] Building Stage1Trainer...
+[Phase 64 Stage 1] Starting from scratch.
+[stage1] Training  epochs=200  steps/epoch=100  n_train=202
+  epoch 1/200  step 20/100  loss=37.3783
+  epoch 1/200  step 40/100  loss=25.7564
+  epoch 1/200  step 60/100  loss=21.3678
+  epoch 1/200  step 80/100  loss=28.7664
+  epoch 1/200  step 100/100  loss=19.9408
+[epoch 1] loss=30.4644  vis_iou_e0=0.1067  vis_iou_e1=0.0345
+  epoch 2/200  step 20/100  loss=15.7419
+  epoch 2/200  step 40/100  loss=20.3632
+  epoch 2/200  step 60/100  loss=14.3396
+  epoch 2/200  step 80/100  loss=15.8848
+  epoch 2/200  step 100/100  loss=12.5566
+[epoch 2] loss=16.4147  vis_iou_e0=0.2075  vis_iou_e1=0.1518
+  epoch 3/200  step 20/100  loss=14.9736
+  epoch 3/200  step 40/100  loss=11.9500
+  epoch 3/200  step 60/100  loss=15.3031
+  epoch 3/200  step 80/100  loss=16.0249
+  epoch 3/200  step 100/100  loss=15.8566
+[epoch 3] loss=15.0287  vis_iou_e0=0.3037  vis_iou_e1=0.2388
+  epoch 4/200  step 20/100  loss=11.6814
+  epoch 4/200  step 40/100  loss=14.7507
+  epoch 4/200  step 60/100  loss=15.6422
+  epoch 4/200  step 80/100  loss=13.1298
+  epoch 4/200  step 100/100  loss=13.5501
+[epoch 4] loss=13.8429  vis_iou_e0=0.3096  vis_iou_e1=0.2689
+  epoch 5/200  step 20/100  loss=13.3852
+  epoch 5/200  step 40/100  loss=12.5924
+  epoch 5/200  step 60/100  loss=16.1324
+  epoch 5/200  step 80/100  loss=12.6258
+  epoch 5/200  step 100/100  loss=12.0427
+[epoch 5] loss=13.1939  vis_iou_e0=0.3388  vis_iou_e1=0.2651
+  epoch 6/200  step 20/100  loss=11.1530
+  epoch 6/200  step 40/100  loss=12.6992
+  epoch 6/200  step 60/100  loss=11.1498
+  epoch 6/200  step 80/100  loss=14.7062
+  epoch 6/200  step 100/100  loss=13.4516
+[epoch 6] loss=13.2251  vis_iou_e0=0.3337  vis_iou_e1=0.2547
+  epoch 7/200  step 20/100  loss=14.6241
+  epoch 7/200  step 40/100  loss=12.8444
+  epoch 7/200  step 60/100  loss=13.0555
+  epoch 7/200  step 80/100  loss=13.1041
+  epoch 7/200  step 100/100  loss=13.2981
+[epoch 7] loss=13.2369  vis_iou_e0=0.3359  vis_iou_e1=0.2798
+  epoch 8/200  step 20/100  loss=12.9835
+  epoch 8/200  step 40/100  loss=14.3574
+  epoch 8/200  step 60/100  loss=12.0197
+  epoch 8/200  step 80/100  loss=13.7914
+  epoch 8/200  step 100/100  loss=10.7161
+[epoch 8] loss=12.9391  vis_iou_e0=0.3445  vis_iou_e1=0.2975
+  epoch 9/200  step 20/100  loss=12.1538
+  epoch 9/200  step 40/100  loss=13.5332
+  epoch 9/200  step 60/100  loss=13.0721
+  epoch 9/200  step 80/100  loss=12.3774
+  epoch 9/200  step 100/100  loss=12.1409
+[epoch 9] loss=12.1171  vis_iou_e0=0.3370  vis_iou_e1=0.2741
+  epoch 10/200  step 20/100  loss=13.2951
+  epoch 10/200  step 40/100  loss=12.8140
+  epoch 10/200  step 60/100  loss=13.5312
+  epoch 10/200  step 80/100  loss=13.0932
+  epoch 10/200  step 100/100  loss=12.6088
+[epoch 10] loss=13.1428  vis_iou_e0=0.3640  vis_iou_e1=0.2902
+  [val epoch 10] vis_iou_min=0.3085  amo_iou_min=0.3029  surv_min=0.7647
+  [val] New best vis_iou_min=0.3085 → saved to checkpoints/p64s_stage1/best_scene_prior.pt
+  epoch 11/200  step 20/100  loss=12.2860
+  epoch 11/200  step 40/100  loss=10.5238
+  epoch 11/200  step 60/100  loss=14.3993
+  epoch 11/200  step 80/100  loss=11.4374
+  epoch 11/200  step 100/100  loss=11.4440
+[epoch 11] loss=11.9252  vis_iou_e0=0.3333  vis_iou_e1=0.2870
+  epoch 12/200  step 20/100  loss=13.0400
+  epoch 12/200  step 40/100  loss=12.8368
+  epoch 12/200  step 60/100  loss=12.4396
+  epoch 12/200  step 80/100  loss=10.2038
+  epoch 12/200  step 100/100  loss=13.5876
+[epoch 12] loss=12.4235  vis_iou_e0=0.3721  vis_iou_e1=0.2791
+  epoch 13/200  step 20/100  loss=14.0137
+  epoch 13/200  step 40/100  loss=14.1558
+  epoch 13/200  step 60/100  loss=10.5302
+  epoch 13/200  step 80/100  loss=10.1329
+  epoch 13/200  step 100/100  loss=12.8679
+[epoch 13] loss=12.1254  vis_iou_e0=0.3464  vis_iou_e1=0.2810
+  epoch 14/200  step 20/100  loss=12.9521
+  epoch 14/200  step 40/100  loss=11.7676
+  epoch 14/200  step 60/100  loss=12.1740
+  epoch 14/200  step 80/100  loss=10.5826
+  epoch 14/200  step 100/100  loss=13.8785
+[epoch 14] loss=12.2549  vis_iou_e0=0.3601  vis_iou_e1=0.3062
+  epoch 15/200  step 20/100  loss=14.3682
+  epoch 15/200  step 40/100  loss=13.6131
+  epoch 15/200  step 60/100  loss=10.9201
+  epoch 15/200  step 80/100  loss=12.3858
+  epoch 15/200  step 100/100  loss=11.0467
+[epoch 15] loss=12.3135  vis_iou_e0=0.3718  vis_iou_e1=0.2921
+  epoch 16/200  step 20/100  loss=11.5630
+  epoch 16/200  step 40/100  loss=12.4504
+  epoch 16/200  step 60/100  loss=9.3675
+  epoch 16/200  step 80/100  loss=9.0862
+  epoch 16/200  step 100/100  loss=13.8397
+[epoch 16] loss=11.8374  vis_iou_e0=0.3222  vis_iou_e1=0.2859
+  epoch 17/200  step 20/100  loss=12.5587
+  epoch 17/200  step 40/100  loss=12.5711
+  epoch 17/200  step 60/100  loss=11.3075
+  epoch 17/200  step 80/100  loss=12.5267
+  epoch 17/200  step 100/100  loss=13.4535
+[epoch 17] loss=11.9445  vis_iou_e0=0.3505  vis_iou_e1=0.3113
+  epoch 18/200  step 20/100  loss=10.4398
+  epoch 18/200  step 40/100  loss=12.7543
+  epoch 18/200  step 60/100  loss=12.3930
+  epoch 18/200  step 80/100  loss=11.0825
+  epoch 18/200  step 100/100  loss=12.3747
+[epoch 18] loss=11.9248  vis_iou_e0=0.3788  vis_iou_e1=0.2975
+  epoch 19/200  step 20/100  loss=12.2041
+  epoch 19/200  step 40/100  loss=11.9781
+  epoch 19/200  step 60/100  loss=12.0872
+  epoch 19/200  step 80/100  loss=10.5315
+  epoch 19/200  step 100/100  loss=10.1802
+[epoch 19] loss=11.5150  vis_iou_e0=0.3919  vis_iou_e1=0.3167
+  epoch 20/200  step 20/100  loss=11.7166
+  epoch 20/200  step 40/100  loss=11.6035
+  epoch 20/200  step 60/100  loss=12.9116
+  epoch 20/200  step 80/100  loss=11.4482
+  epoch 20/200  step 100/100  loss=12.1909
+[epoch 20] loss=11.7659  vis_iou_e0=0.3690  vis_iou_e1=0.2990
+  [val epoch 20] vis_iou_min=0.3525  amo_iou_min=0.3477  surv_min=0.6765
+  [val] New best vis_iou_min=0.3525 → saved to checkpoints/p64s_stage1/best_scene_prior.pt
+  epoch 21/200  step 20/100  loss=13.3310
+  epoch 21/200  step 40/100  loss=11.8044
+  epoch 21/200  step 60/100  loss=10.2235
+  epoch 21/200  step 80/100  loss=12.9988
+  epoch 21/200  step 100/100  loss=11.6689
+[epoch 21] loss=11.8752  vis_iou_e0=0.3589  vis_iou_e1=0.3096
+  epoch 22/200  step 20/100  loss=13.3755
+  epoch 22/200  step 40/100  loss=9.7638
+  epoch 22/200  step 60/100  loss=11.4159
+  epoch 22/200  step 80/100  loss=11.1339
+  epoch 22/200  step 100/100  loss=11.1896
+[epoch 22] loss=11.6292  vis_iou_e0=0.3754  vis_iou_e1=0.3166
+  epoch 23/200  step 20/100  loss=11.0578
+  epoch 23/200  step 40/100  loss=11.4957
+  epoch 23/200  step 60/100  loss=12.3088
+  epoch 23/200  step 80/100  loss=13.0909
+  epoch 23/200  step 100/100  loss=9.9334
+[epoch 23] loss=11.6924  vis_iou_e0=0.3904  vis_iou_e1=0.3159
+  epoch 24/200  step 20/100  loss=12.5361
+  epoch 24/200  step 40/100  loss=11.3064
+  epoch 24/200  step 60/100  loss=12.6178
+  epoch 24/200  step 80/100  loss=10.1087
+  epoch 24/200  step 100/100  loss=9.9158
+[epoch 24] loss=11.3794  vis_iou_e0=0.3461  vis_iou_e1=0.3154
+  epoch 25/200  step 20/100  loss=12.1950
+  epoch 25/200  step 40/100  loss=11.2992
+  epoch 25/200  step 60/100  loss=13.2024
+  epoch 25/200  step 80/100  loss=8.5300
+  epoch 25/200  step 100/100  loss=12.2362
+[epoch 25] loss=11.6289  vis_iou_e0=0.3621  vis_iou_e1=0.3267
+  epoch 26/200  step 20/100  loss=10.8648
+  epoch 26/200  step 40/100  loss=10.5219
+  epoch 26/200  step 60/100  loss=12.1698
+  epoch 26/200  step 80/100  loss=11.4871
+  epoch 26/200  step 100/100  loss=12.5239
+[epoch 26] loss=11.8536  vis_iou_e0=0.3876  vis_iou_e1=0.2988
+  epoch 27/200  step 20/100  loss=12.8104
+  epoch 27/200  step 40/100  loss=11.6229
+  epoch 27/200  step 60/100  loss=13.0629
+  epoch 27/200  step 80/100  loss=12.4142
+  epoch 27/200  step 100/100  loss=10.2118
+[epoch 27] loss=11.4785  vis_iou_e0=0.3655  vis_iou_e1=0.3123
+  epoch 28/200  step 20/100  loss=11.6951
+  epoch 28/200  step 40/100  loss=12.4110
+  epoch 28/200  step 60/100  loss=11.1722
+  epoch 28/200  step 80/100  loss=11.1848
+  epoch 28/200  step 100/100  loss=13.1468
+[epoch 28] loss=11.9120  vis_iou_e0=0.3688  vis_iou_e1=0.3160
+  epoch 29/200  step 20/100  loss=10.8369
+  epoch 29/200  step 40/100  loss=13.4071
+  epoch 29/200  step 60/100  loss=10.4584
+  epoch 29/200  step 80/100  loss=10.7978
+  epoch 29/200  step 100/100  loss=13.8898
+[epoch 29] loss=11.7618  vis_iou_e0=0.3635  vis_iou_e1=0.3215
+  epoch 30/200  step 20/100  loss=12.5064
+  epoch 30/200  step 40/100  loss=11.2125
+  epoch 30/200  step 60/100  loss=11.2465
+  epoch 30/200  step 80/100  loss=12.3430
+  epoch 30/200  step 100/100  loss=12.0179
+[epoch 30] loss=11.7971  vis_iou_e0=0.3815  vis_iou_e1=0.3271
+  [val epoch 30] vis_iou_min=0.3525  amo_iou_min=0.3523  surv_min=0.6765
+  [val] New best vis_iou_min=0.3525 → saved to checkpoints/p64s_stage1/best_scene_prior.pt
+  epoch 31/200  step 20/100  loss=11.6004
+  epoch 31/200  step 40/100  loss=13.3430
+  epoch 31/200  step 60/100  loss=9.4333
+  epoch 31/200  step 80/100  loss=11.0316
+  epoch 31/200  step 100/100  loss=11.4670
+[epoch 31] loss=11.4968  vis_iou_e0=0.3671  vis_iou_e1=0.3272
+  epoch 32/200  step 20/100  loss=10.5755
+  epoch 32/200  step 40/100  loss=11.3279
+  epoch 32/200  step 60/100  loss=12.0322
+  epoch 32/200  step 80/100  loss=11.6340
+  epoch 32/200  step 100/100  loss=12.4569
+[epoch 32] loss=11.7549  vis_iou_e0=0.3972  vis_iou_e1=0.3320
+  epoch 33/200  step 20/100  loss=11.2808
+  epoch 33/200  step 40/100  loss=11.6547
+  epoch 33/200  step 60/100  loss=10.6221
+  epoch 33/200  step 80/100  loss=13.4552
+  epoch 33/200  step 100/100  loss=11.1980
+[epoch 33] loss=11.7904  vis_iou_e0=0.3918  vis_iou_e1=0.3525
+  epoch 34/200  step 20/100  loss=12.1466
+  epoch 34/200  step 40/100  loss=11.9761
+  epoch 34/200  step 60/100  loss=11.2946
+  epoch 34/200  step 80/100  loss=12.7899
+  epoch 34/200  step 100/100  loss=12.4655
+[epoch 34] loss=11.9267  vis_iou_e0=0.3786  vis_iou_e1=0.3133
+  epoch 35/200  step 20/100  loss=13.7540
+  epoch 35/200  step 40/100  loss=13.3831
+  epoch 35/200  step 60/100  loss=10.7957
+  epoch 35/200  step 80/100  loss=11.9236
+  epoch 35/200  step 100/100  loss=10.4685
+[epoch 35] loss=11.7430  vis_iou_e0=0.3799  vis_iou_e1=0.3089
+  epoch 36/200  step 20/100  loss=11.6200
+  epoch 36/200  step 40/100  loss=11.3098
+  epoch 36/200  step 60/100  loss=10.9261
+  epoch 36/200  step 80/100  loss=12.4644
+  epoch 36/200  step 100/100  loss=12.3504
+[epoch 36] loss=11.4816  vis_iou_e0=0.4000  vis_iou_e1=0.3258
+  epoch 37/200  step 20/100  loss=11.9553
+  epoch 37/200  step 40/100  loss=10.7089
+  epoch 37/200  step 60/100  loss=11.9912
+  epoch 37/200  step 80/100  loss=10.5778
+  epoch 37/200  step 100/100  loss=12.7204
+[epoch 37] loss=11.2887  vis_iou_e0=0.4024  vis_iou_e1=0.3338
+  epoch 38/200  step 20/100  loss=11.0315
+  epoch 38/200  step 40/100  loss=10.6108
+  epoch 38/200  step 60/100  loss=11.2513
+  epoch 38/200  step 80/100  loss=10.9471
+  epoch 38/200  step 100/100  loss=12.0208
+[epoch 38] loss=11.2969  vis_iou_e0=0.3929  vis_iou_e1=0.3161
+  epoch 39/200  step 20/100  loss=11.3168
+  epoch 39/200  step 40/100  loss=13.2384
+  epoch 39/200  step 60/100  loss=9.3893
+  epoch 39/200  step 80/100  loss=10.4312
+  epoch 39/200  step 100/100  loss=12.7880
+[epoch 39] loss=11.3286  vis_iou_e0=0.3428  vis_iou_e1=0.2904
+  epoch 40/200  step 20/100  loss=10.6619
+  epoch 40/200  step 40/100  loss=11.2884
+  epoch 40/200  step 60/100  loss=13.2343
+  epoch 40/200  step 80/100  loss=11.6921
+  epoch 40/200  step 100/100  loss=11.9057
+[epoch 40] loss=11.4832  vis_iou_e0=0.3700  vis_iou_e1=0.3256
+  [val epoch 40] vis_iou_min=0.3632  amo_iou_min=0.3617  surv_min=0.6176
+  [val] New best vis_iou_min=0.3632 → saved to checkpoints/p64s_stage1/best_scene_prior.pt
+  epoch 41/200  step 20/100  loss=12.7470
+  epoch 41/200  step 40/100  loss=10.7513
+  epoch 41/200  step 60/100  loss=10.7942
+  epoch 41/200  step 80/100  loss=12.8752
+  epoch 41/200  step 100/100  loss=12.9456
+[epoch 41] loss=11.6654  vis_iou_e0=0.3717  vis_iou_e1=0.3532
+  epoch 42/200  step 20/100  loss=12.3164
+  epoch 42/200  step 40/100  loss=12.5444
+  epoch 42/200  step 60/100  loss=13.5955
+  epoch 42/200  step 80/100  loss=12.0979
+  epoch 42/200  step 100/100  loss=11.3069
+[epoch 42] loss=11.9908  vis_iou_e0=0.4029  vis_iou_e1=0.3513
+  epoch 43/200  step 20/100  loss=10.5759
+  epoch 43/200  step 40/100  loss=11.3270
+  epoch 43/200  step 60/100  loss=10.7492
+  epoch 43/200  step 80/100  loss=11.9902
+  epoch 43/200  step 100/100  loss=13.1190
+[epoch 43] loss=11.4057  vis_iou_e0=0.3916  vis_iou_e1=0.2972
+  epoch 44/200  step 20/100  loss=13.7115
+  epoch 44/200  step 40/100  loss=11.0643
+  epoch 44/200  step 60/100  loss=11.6292
+  epoch 44/200  step 80/100  loss=12.5103
+  epoch 44/200  step 100/100  loss=11.4902
+[epoch 44] loss=11.8916  vis_iou_e0=0.4064  vis_iou_e1=0.3245
+  epoch 45/200  step 20/100  loss=10.8925
+  epoch 45/200  step 40/100  loss=10.6296
+  epoch 45/200  step 60/100  loss=13.1524
+  epoch 45/200  step 80/100  loss=11.0095
+  epoch 45/200  step 100/100  loss=9.8432
+[epoch 45] loss=11.5531  vis_iou_e0=0.4164  vis_iou_e1=0.3526
+  epoch 46/200  step 20/100  loss=9.8454
+  epoch 46/200  step 40/100  loss=10.8587
+  epoch 46/200  step 60/100  loss=8.3490
+  epoch 46/200  step 80/100  loss=12.4221
+  epoch 46/200  step 100/100  loss=11.7752
+[epoch 46] loss=11.1896  vis_iou_e0=0.3982  vis_iou_e1=0.3102
+  epoch 47/200  step 20/100  loss=12.5430
+  epoch 47/200  step 40/100  loss=10.6204
+  epoch 47/200  step 60/100  loss=10.4128
+  epoch 47/200  step 80/100  loss=11.8635
+  epoch 47/200  step 100/100  loss=10.1807
+[epoch 47] loss=11.8035  vis_iou_e0=0.4173  vis_iou_e1=0.3224
+  epoch 48/200  step 20/100  loss=10.9148
+  epoch 48/200  step 40/100  loss=12.2407
+  epoch 48/200  step 60/100  loss=10.1530
+  epoch 48/200  step 80/100  loss=11.9636
+  epoch 48/200  step 100/100  loss=11.9469
+[epoch 48] loss=11.1436  vis_iou_e0=0.3743  vis_iou_e1=0.3544
+  epoch 49/200  step 20/100  loss=11.9811
+  epoch 49/200  step 40/100  loss=11.5012
+  epoch 49/200  step 60/100  loss=12.4917
+  epoch 49/200  step 80/100  loss=12.2598
+  epoch 49/200  step 100/100  loss=10.5997
+[epoch 49] loss=11.5603  vis_iou_e0=0.4074  vis_iou_e1=0.3502
+  epoch 50/200  step 20/100  loss=11.9671
+  epoch 50/200  step 40/100  loss=9.8514
+  epoch 50/200  step 60/100  loss=12.5225
+  epoch 50/200  step 80/100  loss=9.8976
+  epoch 50/200  step 100/100  loss=11.5917
+[epoch 50] loss=10.9911  vis_iou_e0=0.3709  vis_iou_e1=0.3149
+  [val epoch 50] vis_iou_min=0.3580  amo_iou_min=0.3595  surv_min=0.5588
+  epoch 51/200  step 20/100  loss=11.5806
+  epoch 51/200  step 40/100  loss=10.8848
+  epoch 51/200  step 60/100  loss=11.5241
+  epoch 51/200  step 80/100  loss=12.9968
+  epoch 51/200  step 100/100  loss=12.1329
+[epoch 51] loss=11.2720  vis_iou_e0=0.3676  vis_iou_e1=0.3173
+  epoch 52/200  step 20/100  loss=11.4849
+  epoch 52/200  step 40/100  loss=12.6357
+  epoch 52/200  step 60/100  loss=11.6839
+  epoch 52/200  step 80/100  loss=9.6442
+  epoch 52/200  step 100/100  loss=12.2216
+[epoch 52] loss=11.5523  vis_iou_e0=0.3891  vis_iou_e1=0.3218
+  epoch 53/200  step 20/100  loss=12.0410
+  epoch 53/200  step 40/100  loss=11.7041
+  epoch 53/200  step 60/100  loss=10.8074
+  epoch 53/200  step 80/100  loss=10.1310
+  epoch 53/200  step 100/100  loss=10.9816
+[epoch 53] loss=11.0747  vis_iou_e0=0.3909  vis_iou_e1=0.3125
+  epoch 54/200  step 20/100  loss=11.5154
+  epoch 54/200  step 40/100  loss=12.0991
+  epoch 54/200  step 60/100  loss=12.4570
+  epoch 54/200  step 80/100  loss=11.4975
+  epoch 54/200  step 100/100  loss=10.5936
+[epoch 54] loss=11.1184  vis_iou_e0=0.3936  vis_iou_e1=0.3354
+  epoch 55/200  step 20/100  loss=10.8371
+  epoch 55/200  step 40/100  loss=11.5884
+  epoch 55/200  step 60/100  loss=12.5064
+  epoch 55/200  step 80/100  loss=11.1642
+  epoch 55/200  step 100/100  loss=9.8686
+[epoch 55] loss=11.5133  vis_iou_e0=0.4008  vis_iou_e1=0.3641
+  epoch 56/200  step 20/100  loss=11.1245
+  epoch 56/200  step 40/100  loss=11.1711
+  epoch 56/200  step 60/100  loss=10.8017
+  epoch 56/200  step 80/100  loss=11.2437
+  epoch 56/200  step 100/100  loss=11.6991
+[epoch 56] loss=11.1388  vis_iou_e0=0.4035  vis_iou_e1=0.3361
+  epoch 57/200  step 20/100  loss=10.3333
+  epoch 57/200  step 40/100  loss=12.1682
+  epoch 57/200  step 60/100  loss=10.7687
+  epoch 57/200  step 80/100  loss=11.4093
+  epoch 57/200  step 100/100  loss=8.5208
+[epoch 57] loss=10.9450  vis_iou_e0=0.3823  vis_iou_e1=0.3183
+  epoch 58/200  step 20/100  loss=10.0415
+  epoch 58/200  step 40/100  loss=10.2724
+  epoch 58/200  step 60/100  loss=10.0487
+  epoch 58/200  step 80/100  loss=12.4359
+  epoch 58/200  step 100/100  loss=11.3011
+[epoch 58] loss=11.2412  vis_iou_e0=0.3909  vis_iou_e1=0.3389
+  epoch 59/200  step 20/100  loss=11.0428
+  epoch 59/200  step 40/100  loss=12.5787
+  epoch 59/200  step 60/100  loss=9.4790
+  epoch 59/200  step 80/100  loss=9.3128
+  epoch 59/200  step 100/100  loss=13.2283
+[epoch 59] loss=11.2408  vis_iou_e0=0.3896  vis_iou_e1=0.3197
+  epoch 60/200  step 20/100  loss=12.5482
+  epoch 60/200  step 40/100  loss=10.2766
+  epoch 60/200  step 60/100  loss=10.3984
+  epoch 60/200  step 80/100  loss=13.3981
+  epoch 60/200  step 100/100  loss=12.4825
+[epoch 60] loss=11.7389  vis_iou_e0=0.3975  vis_iou_e1=0.3283
+  [val epoch 60] vis_iou_min=0.3506  amo_iou_min=0.3519  surv_min=0.5588
+  epoch 61/200  step 20/100  loss=12.9362
+  epoch 61/200  step 40/100  loss=10.5958
+  epoch 61/200  step 60/100  loss=10.9499
+  epoch 61/200  step 80/100  loss=10.6426
+  epoch 61/200  step 100/100  loss=10.9985
+[epoch 61] loss=11.0199  vis_iou_e0=0.3744  vis_iou_e1=0.3230
+  epoch 62/200  step 20/100  loss=11.4240
+  epoch 62/200  step 40/100  loss=12.1342
+  epoch 62/200  step 60/100  loss=7.7029
+  epoch 62/200  step 80/100  loss=11.2699
+  epoch 62/200  step 100/100  loss=9.6295
+[epoch 62] loss=10.7221  vis_iou_e0=0.3931  vis_iou_e1=0.3020
+  epoch 63/200  step 20/100  loss=12.6568
+  epoch 63/200  step 40/100  loss=11.5020
+  epoch 63/200  step 60/100  loss=11.3550
+  epoch 63/200  step 80/100  loss=12.2684
+  epoch 63/200  step 100/100  loss=12.1374
+[epoch 63] loss=11.6179  vis_iou_e0=0.4049  vis_iou_e1=0.3537
+  epoch 64/200  step 20/100  loss=11.1636
+  epoch 64/200  step 40/100  loss=12.4384
+  epoch 64/200  step 60/100  loss=12.2896
+  epoch 64/200  step 80/100  loss=9.7540
+  epoch 64/200  step 100/100  loss=11.5828
+[epoch 64] loss=11.3275  vis_iou_e0=0.3795  vis_iou_e1=0.3408
+  epoch 65/200  step 20/100  loss=11.0000
+  epoch 65/200  step 40/100  loss=10.9896
+  epoch 65/200  step 60/100  loss=11.4922
+  epoch 65/200  step 80/100  loss=11.4522
+  epoch 65/200  step 100/100  loss=9.9389
+[epoch 65] loss=11.3610  vis_iou_e0=0.4060  vis_iou_e1=0.3652
+  epoch 66/200  step 20/100  loss=10.4307
+  epoch 66/200  step 40/100  loss=13.8885
+  epoch 66/200  step 60/100  loss=12.1276
+  epoch 66/200  step 80/100  loss=10.9009
+  epoch 66/200  step 100/100  loss=12.1115
+[epoch 66] loss=11.3046  vis_iou_e0=0.4244  vis_iou_e1=0.3633
+  epoch 67/200  step 20/100  loss=11.0775
+  epoch 67/200  step 40/100  loss=11.4006
+  epoch 67/200  step 60/100  loss=11.8728
+  epoch 67/200  step 80/100  loss=11.8586
+  epoch 67/200  step 100/100  loss=10.7375
+[epoch 67] loss=11.5017  vis_iou_e0=0.4020  vis_iou_e1=0.3360
+  epoch 68/200  step 20/100  loss=11.4797
+  epoch 68/200  step 40/100  loss=11.0417
+  epoch 68/200  step 60/100  loss=11.6351
+  epoch 68/200  step 80/100  loss=9.9887
+  epoch 68/200  step 100/100  loss=11.4511
+[epoch 68] loss=11.0397  vis_iou_e0=0.3992  vis_iou_e1=0.3278
+  epoch 69/200  step 20/100  loss=12.0172
+  epoch 69/200  step 40/100  loss=11.8980
+  epoch 69/200  step 60/100  loss=12.8088
+  epoch 69/200  step 80/100  loss=11.9344
+  epoch 69/200  step 100/100  loss=11.8459
+[epoch 69] loss=11.3793  vis_iou_e0=0.3968  vis_iou_e1=0.3427
+  epoch 70/200  step 20/100  loss=12.5423
+  epoch 70/200  step 40/100  loss=10.6438
+  epoch 70/200  step 60/100  loss=10.1924
+  epoch 70/200  step 80/100  loss=14.0561
+  epoch 70/200  step 100/100  loss=11.8400
+[epoch 70] loss=11.6735  vis_iou_e0=0.4132  vis_iou_e1=0.3265
+  [val epoch 70] vis_iou_min=0.3607  amo_iou_min=0.3617  surv_min=0.5000
+  epoch 71/200  step 20/100  loss=12.7753
+  epoch 71/200  step 40/100  loss=11.0334
+  epoch 71/200  step 60/100  loss=11.2674
+  epoch 71/200  step 80/100  loss=10.6169
+  epoch 71/200  step 100/100  loss=9.7456
+[epoch 71] loss=11.1219  vis_iou_e0=0.3884  vis_iou_e1=0.3305
+  epoch 72/200  step 20/100  loss=11.5736
+  epoch 72/200  step 40/100  loss=11.7767
+  epoch 72/200  step 60/100  loss=12.3016
+  epoch 72/200  step 80/100  loss=11.2155
+  epoch 72/200  step 100/100  loss=9.3370
+[epoch 72] loss=10.9250  vis_iou_e0=0.3852  vis_iou_e1=0.3223
+  epoch 73/200  step 20/100  loss=10.5481
+  epoch 73/200  step 40/100  loss=10.7656
+  epoch 73/200  step 60/100  loss=11.2585
+  epoch 73/200  step 80/100  loss=11.9366
+  epoch 73/200  step 100/100  loss=12.0927
+[epoch 73] loss=11.4872  vis_iou_e0=0.4224  vis_iou_e1=0.3644
+  epoch 74/200  step 20/100  loss=11.4928
+  epoch 74/200  step 40/100  loss=10.2446
+  epoch 74/200  step 60/100  loss=11.8707
+  epoch 74/200  step 80/100  loss=11.3855
+  epoch 74/200  step 100/100  loss=12.4899
+[epoch 74] loss=11.3804  vis_iou_e0=0.4169  vis_iou_e1=0.3542
+  epoch 75/200  step 20/100  loss=10.3743
+  epoch 75/200  step 40/100  loss=10.4390
+  epoch 75/200  step 60/100  loss=10.2421
+  epoch 75/200  step 80/100  loss=10.8305
+  epoch 75/200  step 100/100  loss=12.1520
+[epoch 75] loss=11.2624  vis_iou_e0=0.4259  vis_iou_e1=0.3374
+  epoch 76/200  step 20/100  loss=11.4356
+  epoch 76/200  step 40/100  loss=9.4728
+  epoch 76/200  step 60/100  loss=12.3477
+  epoch 76/200  step 80/100  loss=10.2733
+  epoch 76/200  step 100/100  loss=11.3540
+[epoch 76] loss=11.1483  vis_iou_e0=0.4257  vis_iou_e1=0.3530
+  epoch 77/200  step 20/100  loss=12.5946
+  epoch 77/200  step 40/100  loss=10.6906
+  epoch 77/200  step 60/100  loss=11.0144
+  epoch 77/200  step 80/100  loss=9.2988
+  epoch 77/200  step 100/100  loss=12.0196
+[epoch 77] loss=11.0297  vis_iou_e0=0.4071  vis_iou_e1=0.3542
+  epoch 78/200  step 20/100  loss=10.8913
+  epoch 78/200  step 40/100  loss=11.5685
+  epoch 78/200  step 60/100  loss=11.8270
+  epoch 78/200  step 80/100  loss=10.5783
+  epoch 78/200  step 100/100  loss=10.8934
+[epoch 78] loss=11.2754  vis_iou_e0=0.4067  vis_iou_e1=0.3549
+  epoch 79/200  step 20/100  loss=10.9479
+  epoch 79/200  step 40/100  loss=11.2520
+  epoch 79/200  step 60/100  loss=11.0840
+  epoch 79/200  step 80/100  loss=11.9039
+  epoch 79/200  step 100/100  loss=11.9899
+[epoch 79] loss=11.1740  vis_iou_e0=0.4218  vis_iou_e1=0.3488
+  epoch 80/200  step 20/100  loss=9.7601
+  epoch 80/200  step 40/100  loss=11.7537
+  epoch 80/200  step 60/100  loss=11.2807
+  epoch 80/200  step 80/100  loss=11.6464
+  epoch 80/200  step 100/100  loss=10.7431
+[epoch 80] loss=11.4744  vis_iou_e0=0.4139  vis_iou_e1=0.3555
+  [val epoch 80] vis_iou_min=0.3599  amo_iou_min=0.3609  surv_min=0.5882
+  epoch 81/200  step 20/100  loss=11.5279
+  epoch 81/200  step 40/100  loss=10.7964
+  epoch 81/200  step 60/100  loss=11.7132
+  epoch 81/200  step 80/100  loss=11.5708
+  epoch 81/200  step 100/100  loss=10.7948
+[epoch 81] loss=11.4643  vis_iou_e0=0.4050  vis_iou_e1=0.3504
+  epoch 82/200  step 20/100  loss=10.5494
+  epoch 82/200  step 40/100  loss=12.5198
+  epoch 82/200  step 60/100  loss=10.7944
+  epoch 82/200  step 80/100  loss=12.6030
+  epoch 82/200  step 100/100  loss=12.8260
+[epoch 82] loss=11.4929  vis_iou_e0=0.4132  vis_iou_e1=0.3558
+  epoch 83/200  step 20/100  loss=11.5449
+  epoch 83/200  step 40/100  loss=11.4644
+  epoch 83/200  step 60/100  loss=11.7613
+  epoch 83/200  step 80/100  loss=9.0302
+  epoch 83/200  step 100/100  loss=11.2698
+[epoch 83] loss=11.1085  vis_iou_e0=0.4247  vis_iou_e1=0.3387
+  epoch 84/200  step 20/100  loss=11.6005
+  epoch 84/200  step 40/100  loss=12.7700
+  epoch 84/200  step 60/100  loss=10.9801
+  epoch 84/200  step 80/100  loss=11.3184
+  epoch 84/200  step 100/100  loss=11.9804
+[epoch 84] loss=11.4704  vis_iou_e0=0.4237  vis_iou_e1=0.3667
+  epoch 85/200  step 20/100  loss=11.8795
+  epoch 85/200  step 40/100  loss=10.9799
+  epoch 85/200  step 60/100  loss=11.8217
+  epoch 85/200  step 80/100  loss=11.1520
+  epoch 85/200  step 100/100  loss=12.2494
+[epoch 85] loss=11.3452  vis_iou_e0=0.4178  vis_iou_e1=0.3783
+  epoch 86/200  step 20/100  loss=10.2007
+  epoch 86/200  step 40/100  loss=11.6947
+  epoch 86/200  step 60/100  loss=11.2897
+  epoch 86/200  step 80/100  loss=9.2127
+  epoch 86/200  step 100/100  loss=11.3261
+[epoch 86] loss=10.9723  vis_iou_e0=0.4086  vis_iou_e1=0.3571
+  epoch 87/200  step 20/100  loss=9.6346
+  epoch 87/200  step 40/100  loss=13.1793
+  epoch 87/200  step 60/100  loss=9.3614
+  epoch 87/200  step 80/100  loss=11.0837
+  epoch 87/200  step 100/100  loss=10.9824
+[epoch 87] loss=10.8342  vis_iou_e0=0.3917  vis_iou_e1=0.3283
+  epoch 88/200  step 20/100  loss=10.2613
+  epoch 88/200  step 40/100  loss=11.5539
+  epoch 88/200  step 60/100  loss=10.8063
+  epoch 88/200  step 80/100  loss=10.3001
+  epoch 88/200  step 100/100  loss=10.4462
+[epoch 88] loss=10.7668  vis_iou_e0=0.4026  vis_iou_e1=0.3599
+  epoch 89/200  step 20/100  loss=9.8310
+  epoch 89/200  step 40/100  loss=11.4636
+  epoch 89/200  step 60/100  loss=10.3038
+  epoch 89/200  step 80/100  loss=11.8293
+  epoch 89/200  step 100/100  loss=10.2656
+[epoch 89] loss=10.7268  vis_iou_e0=0.4095  vis_iou_e1=0.3450
+  epoch 90/200  step 20/100  loss=8.7693
+  epoch 90/200  step 40/100  loss=11.8928
+  epoch 90/200  step 60/100  loss=13.4490
+  epoch 90/200  step 80/100  loss=11.3984
+  epoch 90/200  step 100/100  loss=12.2261
+[epoch 90] loss=11.4745  vis_iou_e0=0.3990  vis_iou_e1=0.3653
+  [val epoch 90] vis_iou_min=0.3531  amo_iou_min=0.3540  surv_min=0.5588
+  epoch 91/200  step 20/100  loss=10.2902
+  epoch 91/200  step 40/100  loss=10.6651
+  epoch 91/200  step 60/100  loss=10.3703
+  epoch 91/200  step 80/100  loss=13.4048
+  epoch 91/200  step 100/100  loss=11.4977
+[epoch 91] loss=11.2165  vis_iou_e0=0.4146  vis_iou_e1=0.3475
+  epoch 92/200  step 20/100  loss=12.5090
+  epoch 92/200  step 40/100  loss=11.2187
+  epoch 92/200  step 60/100  loss=11.2170
+  epoch 92/200  step 80/100  loss=10.8423
+  epoch 92/200  step 100/100  loss=10.2751
+[epoch 92] loss=11.0381  vis_iou_e0=0.4030  vis_iou_e1=0.3752
+  epoch 93/200  step 20/100  loss=8.6773
+  epoch 93/200  step 40/100  loss=11.6777
+  epoch 93/200  step 60/100  loss=11.9805
+  epoch 93/200  step 80/100  loss=10.5196
+  epoch 93/200  step 100/100  loss=11.1761
+[epoch 93] loss=11.4031  vis_iou_e0=0.4048  vis_iou_e1=0.3737
+  epoch 94/200  step 20/100  loss=10.3962
+  epoch 94/200  step 40/100  loss=10.5107
+  epoch 94/200  step 60/100  loss=12.5396
+  epoch 94/200  step 80/100  loss=9.8564
+  epoch 94/200  step 100/100  loss=11.0696
+[epoch 94] loss=11.1955  vis_iou_e0=0.4341  vis_iou_e1=0.3523
+  epoch 95/200  step 20/100  loss=12.0519
+  epoch 95/200  step 40/100  loss=11.6766
+  epoch 95/200  step 60/100  loss=11.4780
+  epoch 95/200  step 80/100  loss=9.6793
+  epoch 95/200  step 100/100  loss=10.8056
+[epoch 95] loss=11.2475  vis_iou_e0=0.4113  vis_iou_e1=0.3785
+  epoch 96/200  step 20/100  loss=9.1803
+  epoch 96/200  step 40/100  loss=10.9464
+  epoch 96/200  step 60/100  loss=12.3503
+  epoch 96/200  step 80/100  loss=11.3714
+  epoch 96/200  step 100/100  loss=10.2540
+[epoch 96] loss=11.0786  vis_iou_e0=0.4295  vis_iou_e1=0.3510
+  epoch 97/200  step 20/100  loss=11.4591
+  epoch 97/200  step 40/100  loss=10.3025
+  epoch 97/200  step 60/100  loss=11.2307
+  epoch 97/200  step 80/100  loss=11.0298
+  epoch 97/200  step 100/100  loss=11.1949
+[epoch 97] loss=10.9972  vis_iou_e0=0.4003  vis_iou_e1=0.3394
+  epoch 98/200  step 20/100  loss=10.1835
+  epoch 98/200  step 40/100  loss=12.2656
+  epoch 98/200  step 60/100  loss=11.8800
+  epoch 98/200  step 80/100  loss=11.6272
+  epoch 98/200  step 100/100  loss=12.4749
+[epoch 98] loss=11.2779  vis_iou_e0=0.4080  vis_iou_e1=0.3586
+  epoch 99/200  step 20/100  loss=11.7750
+  epoch 99/200  step 40/100  loss=10.3312
+  epoch 99/200  step 60/100  loss=11.8672
+  epoch 99/200  step 80/100  loss=10.7525
+  epoch 99/200  step 100/100  loss=12.1569
+[epoch 99] loss=11.3538  vis_iou_e0=0.4171  vis_iou_e1=0.3721
+  epoch 100/200  step 20/100  loss=11.0802
+  epoch 100/200  step 40/100  loss=12.2295
+  epoch 100/200  step 60/100  loss=10.6354
+  epoch 100/200  step 80/100  loss=12.1407
+  epoch 100/200  step 100/100  loss=11.2795
+[epoch 100] loss=11.2464  vis_iou_e0=0.4318  vis_iou_e1=0.3498
+  [val epoch 100] vis_iou_min=0.3526  amo_iou_min=0.3529  surv_min=0.5882
+  epoch 101/200  step 20/100  loss=11.3633
+  epoch 101/200  step 40/100  loss=10.8779
+  epoch 101/200  step 60/100  loss=9.7382
+  epoch 101/200  step 80/100  loss=11.4349
+  epoch 101/200  step 100/100  loss=10.9815
+[epoch 101] loss=10.8295  vis_iou_e0=0.4089  vis_iou_e1=0.3481
+  epoch 102/200  step 20/100  loss=12.1276
+  epoch 102/200  step 40/100  loss=10.6668
+  epoch 102/200  step 60/100  loss=11.0898
+  epoch 102/200  step 80/100  loss=10.5286
+  epoch 102/200  step 100/100  loss=10.7119
+[epoch 102] loss=10.9534  vis_iou_e0=0.4090  vis_iou_e1=0.3649
+  epoch 103/200  step 20/100  loss=10.4031
+  epoch 103/200  step 40/100  loss=11.2404
+  epoch 103/200  step 60/100  loss=10.1176
+  epoch 103/200  step 80/100  loss=12.1026
+  epoch 103/200  step 100/100  loss=11.5400
+[epoch 103] loss=11.3364  vis_iou_e0=0.4251  vis_iou_e1=0.3433
+  epoch 104/200  step 20/100  loss=10.0971
+  epoch 104/200  step 40/100  loss=11.5324
+  epoch 104/200  step 60/100  loss=11.6072
+  epoch 104/200  step 80/100  loss=10.1351
+  epoch 104/200  step 100/100  loss=10.6658
+[epoch 104] loss=11.1022  vis_iou_e0=0.4086  vis_iou_e1=0.3537
+  epoch 105/200  step 20/100  loss=10.7947
+  epoch 105/200  step 40/100  loss=9.1427
+  epoch 105/200  step 60/100  loss=10.7600
+  epoch 105/200  step 80/100  loss=11.1258
+  epoch 105/200  step 100/100  loss=12.2244
+[epoch 105] loss=10.9584  vis_iou_e0=0.4103  vis_iou_e1=0.3728
+  epoch 106/200  step 20/100  loss=10.2364
+  epoch 106/200  step 40/100  loss=10.2591
+  epoch 106/200  step 60/100  loss=12.0100
+  epoch 106/200  step 80/100  loss=8.1322
+  epoch 106/200  step 100/100  loss=10.7812
+[epoch 106] loss=10.7677  vis_iou_e0=0.4150  vis_iou_e1=0.3404
+  epoch 107/200  step 20/100  loss=9.4892
+  epoch 107/200  step 40/100  loss=9.8096
+  epoch 107/200  step 60/100  loss=10.8205
+  epoch 107/200  step 80/100  loss=11.4661
+  epoch 107/200  step 100/100  loss=12.8905
+[epoch 107] loss=10.6850  vis_iou_e0=0.3849  vis_iou_e1=0.3373
+  epoch 108/200  step 20/100  loss=12.8757
+  epoch 108/200  step 40/100  loss=9.1613
+  epoch 108/200  step 60/100  loss=9.4746
+  epoch 108/200  step 80/100  loss=11.5800
+  epoch 108/200  step 100/100  loss=11.8784
+[epoch 108] loss=11.1842  vis_iou_e0=0.4195  vis_iou_e1=0.3612
+  epoch 109/200  step 20/100  loss=11.6183
+  epoch 109/200  step 40/100  loss=11.0531
+  epoch 109/200  step 60/100  loss=11.0795
+  epoch 109/200  step 80/100  loss=9.4959
+  epoch 109/200  step 100/100  loss=9.9504
+[epoch 109] loss=10.8310  vis_iou_e0=0.4038  vis_iou_e1=0.3351
+  epoch 110/200  step 20/100  loss=10.7229
+  epoch 110/200  step 40/100  loss=11.5924
+  epoch 110/200  step 60/100  loss=10.8888
+  epoch 110/200  step 80/100  loss=10.6546
+  epoch 110/200  step 100/100  loss=11.9434
+[epoch 110] loss=11.1277  vis_iou_e0=0.4055  vis_iou_e1=0.3309
+  [val epoch 110] vis_iou_min=0.3557  amo_iou_min=0.3561  surv_min=0.5294
+  epoch 111/200  step 20/100  loss=9.1263
+  epoch 111/200  step 40/100  loss=10.2303
+  epoch 111/200  step 60/100  loss=12.0432
+  epoch 111/200  step 80/100  loss=8.7126
+  epoch 111/200  step 100/100  loss=11.6788
+[epoch 111] loss=10.9252  vis_iou_e0=0.4166  vis_iou_e1=0.3385
+  epoch 112/200  step 20/100  loss=10.9992
+  epoch 112/200  step 40/100  loss=12.2251
+  epoch 112/200  step 60/100  loss=12.7743
+  epoch 112/200  step 80/100  loss=11.1559
+  epoch 112/200  step 100/100  loss=12.5768
+[epoch 112] loss=11.3931  vis_iou_e0=0.4149  vis_iou_e1=0.3623
+  epoch 113/200  step 20/100  loss=10.4299
+  epoch 113/200  step 40/100  loss=10.7952
+  epoch 113/200  step 60/100  loss=9.8595
+  epoch 113/200  step 80/100  loss=10.8218
+  epoch 113/200  step 100/100  loss=10.5082
+[epoch 113] loss=10.8504  vis_iou_e0=0.3966  vis_iou_e1=0.3530
+  epoch 114/200  step 20/100  loss=12.1345
+  epoch 114/200  step 40/100  loss=11.0884
+  epoch 114/200  step 60/100  loss=12.3956
+  epoch 114/200  step 80/100  loss=11.7197
+  epoch 114/200  step 100/100  loss=12.1646
+[epoch 114] loss=11.3922  vis_iou_e0=0.4284  vis_iou_e1=0.3566
+  epoch 115/200  step 20/100  loss=12.1457
+  epoch 115/200  step 40/100  loss=10.8246
+  epoch 115/200  step 60/100  loss=11.6350
+  epoch 115/200  step 80/100  loss=9.0424
+  epoch 115/200  step 100/100  loss=9.8059
+[epoch 115] loss=11.0342  vis_iou_e0=0.4177  vis_iou_e1=0.3474
+  epoch 116/200  step 20/100  loss=10.5716
+  epoch 116/200  step 40/100  loss=11.5093
+  epoch 116/200  step 60/100  loss=10.3546
+  epoch 116/200  step 80/100  loss=9.4474
+  epoch 116/200  step 100/100  loss=11.8149
+[epoch 116] loss=11.0259  vis_iou_e0=0.4127  vis_iou_e1=0.3568
+  epoch 117/200  step 20/100  loss=11.6844
+  epoch 117/200  step 40/100  loss=11.9218
+  epoch 117/200  step 60/100  loss=11.3766
+  epoch 117/200  step 80/100  loss=10.7290
+  epoch 117/200  step 100/100  loss=9.2229
+[epoch 117] loss=10.9891  vis_iou_e0=0.4266  vis_iou_e1=0.3718
+  epoch 118/200  step 20/100  loss=12.3542
+  epoch 118/200  step 40/100  loss=10.5833
+  epoch 118/200  step 60/100  loss=12.4160
+  epoch 118/200  step 80/100  loss=11.3198
+  epoch 118/200  step 100/100  loss=9.9573
+[epoch 118] loss=10.9671  vis_iou_e0=0.4198  vis_iou_e1=0.3514
+  epoch 119/200  step 20/100  loss=11.3085
+  epoch 119/200  step 40/100  loss=11.4148
+  epoch 119/200  step 60/100  loss=11.4282
+  epoch 119/200  step 80/100  loss=11.2399
+  epoch 119/200  step 100/100  loss=11.4932
+[epoch 119] loss=11.2131  vis_iou_e0=0.4209  vis_iou_e1=0.3453
+  epoch 120/200  step 20/100  loss=11.1648
+  epoch 120/200  step 40/100  loss=13.1608
+  epoch 120/200  step 60/100  loss=11.7679
+  epoch 120/200  step 80/100  loss=10.4265
+  epoch 120/200  step 100/100  loss=10.3839
+[epoch 120] loss=11.1549  vis_iou_e0=0.4124  vis_iou_e1=0.3766
+  [val epoch 120] vis_iou_min=0.3482  amo_iou_min=0.3491  surv_min=0.5588
+  epoch 121/200  step 20/100  loss=11.3705
+  epoch 121/200  step 40/100  loss=11.8422
+  epoch 121/200  step 60/100  loss=10.6984
+  epoch 121/200  step 80/100  loss=9.5043
+  epoch 121/200  step 100/100  loss=12.4911
+[epoch 121] loss=11.1597  vis_iou_e0=0.4186  vis_iou_e1=0.3587
+  epoch 122/200  step 20/100  loss=11.0178
+  epoch 122/200  step 40/100  loss=11.3890
+  epoch 122/200  step 60/100  loss=10.0836
+  epoch 122/200  step 80/100  loss=12.1175
+  epoch 122/200  step 100/100  loss=12.0058
+[epoch 122] loss=11.1883  vis_iou_e0=0.4247  vis_iou_e1=0.3801
+  epoch 123/200  step 20/100  loss=11.5719
+  epoch 123/200  step 40/100  loss=10.5254
+  epoch 123/200  step 60/100  loss=10.8772
+  epoch 123/200  step 80/100  loss=9.7620
+  epoch 123/200  step 100/100  loss=12.4531
+[epoch 123] loss=10.9316  vis_iou_e0=0.4224  vis_iou_e1=0.3540
+  epoch 124/200  step 20/100  loss=12.7451
+  epoch 124/200  step 40/100  loss=12.2610
+  epoch 124/200  step 60/100  loss=10.6429
+  epoch 124/200  step 80/100  loss=8.3291
+  epoch 124/200  step 100/100  loss=10.9275
+[epoch 124] loss=11.0326  vis_iou_e0=0.4269  vis_iou_e1=0.3580
+  epoch 125/200  step 20/100  loss=12.4937
+  epoch 125/200  step 40/100  loss=10.5135
+  epoch 125/200  step 60/100  loss=11.1077
+  epoch 125/200  step 80/100  loss=11.0712
+  epoch 125/200  step 100/100  loss=10.4989
+[epoch 125] loss=11.0763  vis_iou_e0=0.4305  vis_iou_e1=0.3591
+  epoch 126/200  step 20/100  loss=10.6758
+  epoch 126/200  step 40/100  loss=8.1636
+  epoch 126/200  step 60/100  loss=12.8424
+  epoch 126/200  step 80/100  loss=11.1518
+  epoch 126/200  step 100/100  loss=11.7054
+[epoch 126] loss=11.0264  vis_iou_e0=0.4153  vis_iou_e1=0.3690
+  epoch 127/200  step 20/100  loss=12.5412
+  epoch 127/200  step 40/100  loss=10.2978
+  epoch 127/200  step 60/100  loss=11.3766
+  epoch 127/200  step 80/100  loss=10.3439
+  epoch 127/200  step 100/100  loss=10.7713
+[epoch 127] loss=11.1846  vis_iou_e0=0.4197  vis_iou_e1=0.3839
+  epoch 128/200  step 20/100  loss=11.5762
+  epoch 128/200  step 40/100  loss=10.9112
+  epoch 128/200  step 60/100  loss=10.1877
+  epoch 128/200  step 80/100  loss=9.8913
+  epoch 128/200  step 100/100  loss=10.8231
+[epoch 128] loss=10.7649  vis_iou_e0=0.4218  vis_iou_e1=0.3611
+  epoch 129/200  step 20/100  loss=11.3962
+  epoch 129/200  step 40/100  loss=10.7476
+  epoch 129/200  step 60/100  loss=12.3705
+  epoch 129/200  step 80/100  loss=9.4542
+  epoch 129/200  step 100/100  loss=11.2003
+[epoch 129] loss=10.7777  vis_iou_e0=0.4208  vis_iou_e1=0.3869
+  epoch 130/200  step 20/100  loss=11.2914
+  epoch 130/200  step 40/100  loss=10.7751
+  epoch 130/200  step 60/100  loss=10.8544
+  epoch 130/200  step 80/100  loss=13.0743
+  epoch 130/200  step 100/100  loss=10.4514
+[epoch 130] loss=10.9446  vis_iou_e0=0.3959  vis_iou_e1=0.3744
+  [val epoch 130] vis_iou_min=0.3526  amo_iou_min=0.3522  surv_min=0.5588
+  epoch 131/200  step 20/100  loss=12.2470
+  epoch 131/200  step 40/100  loss=11.5311
+  epoch 131/200  step 60/100  loss=11.6258
+  epoch 131/200  step 80/100  loss=11.6046
+  epoch 131/200  step 100/100  loss=10.2598
+[epoch 131] loss=10.9937  vis_iou_e0=0.4221  vis_iou_e1=0.3523
+  epoch 132/200  step 20/100  loss=10.9653
+  epoch 132/200  step 40/100  loss=12.4405
+  epoch 132/200  step 60/100  loss=10.2323
+  epoch 132/200  step 80/100  loss=10.9286
+  epoch 132/200  step 100/100  loss=10.4660
+[epoch 132] loss=11.0235  vis_iou_e0=0.4290  vis_iou_e1=0.3648
+  epoch 133/200  step 20/100  loss=11.9407
+  epoch 133/200  step 40/100  loss=10.6479
+  epoch 133/200  step 60/100  loss=11.2412
+  epoch 133/200  step 80/100  loss=10.1770
+  epoch 133/200  step 100/100  loss=9.0873
+[epoch 133] loss=10.9128  vis_iou_e0=0.4099  vis_iou_e1=0.3732
+  epoch 134/200  step 20/100  loss=10.5856
+  epoch 134/200  step 40/100  loss=13.0312
+  epoch 134/200  step 60/100  loss=9.6940
+  epoch 134/200  step 80/100  loss=10.2257
+  epoch 134/200  step 100/100  loss=10.3185
+[epoch 134] loss=10.6840  vis_iou_e0=0.4148  vis_iou_e1=0.3561
+  epoch 135/200  step 20/100  loss=10.4851
+  epoch 135/200  step 40/100  loss=11.2738
+  epoch 135/200  step 60/100  loss=11.8356
+  epoch 135/200  step 80/100  loss=12.7059
+  epoch 135/200  step 100/100  loss=12.4304
+[epoch 135] loss=11.2500  vis_iou_e0=0.4371  vis_iou_e1=0.3601
+  epoch 136/200  step 20/100  loss=11.9768
+  epoch 136/200  step 40/100  loss=10.9977
+  epoch 136/200  step 60/100  loss=11.0370
+  epoch 136/200  step 80/100  loss=11.7161
+  epoch 136/200  step 100/100  loss=9.7862
+[epoch 136] loss=11.0407  vis_iou_e0=0.4413  vis_iou_e1=0.3786
+  epoch 137/200  step 20/100  loss=10.1395
+  epoch 137/200  step 40/100  loss=11.1587
+  epoch 137/200  step 60/100  loss=12.6900
+  epoch 137/200  step 80/100  loss=10.9779
+  epoch 137/200  step 100/100  loss=11.2795
+[epoch 137] loss=11.2144  vis_iou_e0=0.4269  vis_iou_e1=0.3586
+  epoch 138/200  step 20/100  loss=11.1555
+  epoch 138/200  step 40/100  loss=10.7750
+  epoch 138/200  step 60/100  loss=9.4430
+  epoch 138/200  step 80/100  loss=11.1238
+  epoch 138/200  step 100/100  loss=11.0215
+[epoch 138] loss=10.8206  vis_iou_e0=0.4165  vis_iou_e1=0.3403
+  epoch 139/200  step 20/100  loss=9.8183
+  epoch 139/200  step 40/100  loss=12.3435
+  epoch 139/200  step 60/100  loss=11.7402
+  epoch 139/200  step 80/100  loss=9.4276
+  epoch 139/200  step 100/100  loss=10.3103
+[epoch 139] loss=11.2026  vis_iou_e0=0.4004  vis_iou_e1=0.3842
+  epoch 140/200  step 20/100  loss=11.6421
+  epoch 140/200  step 40/100  loss=10.8345
+  epoch 140/200  step 60/100  loss=10.8566
+  epoch 140/200  step 80/100  loss=8.1544
+  epoch 140/200  step 100/100  loss=11.3094
+[epoch 140] loss=10.9764  vis_iou_e0=0.4356  vis_iou_e1=0.3777
+  [val epoch 140] vis_iou_min=0.3482  amo_iou_min=0.3491  surv_min=0.5588
+  epoch 141/200  step 20/100  loss=11.9623
+  epoch 141/200  step 40/100  loss=11.1126
+  epoch 141/200  step 60/100  loss=12.2537
+  epoch 141/200  step 80/100  loss=10.6811
+  epoch 141/200  step 100/100  loss=11.0753
+[epoch 141] loss=11.3549  vis_iou_e0=0.4198  vis_iou_e1=0.3914
+  epoch 142/200  step 20/100  loss=9.6686
+  epoch 142/200  step 40/100  loss=11.6773
+  epoch 142/200  step 60/100  loss=11.4560
+  epoch 142/200  step 80/100  loss=10.3159
+  epoch 142/200  step 100/100  loss=12.4139
+[epoch 142] loss=11.0512  vis_iou_e0=0.4314  vis_iou_e1=0.3687
+  epoch 143/200  step 20/100  loss=10.1903
+  epoch 143/200  step 40/100  loss=12.0421
+  epoch 143/200  step 60/100  loss=10.0038
+  epoch 143/200  step 80/100  loss=12.8549
+  epoch 143/200  step 100/100  loss=11.6618
+[epoch 143] loss=11.3803  vis_iou_e0=0.4367  vis_iou_e1=0.3847
+  epoch 144/200  step 20/100  loss=12.3307
+  epoch 144/200  step 40/100  loss=11.4374
+  epoch 144/200  step 60/100  loss=10.8419
+  epoch 144/200  step 80/100  loss=10.0105
+  epoch 144/200  step 100/100  loss=9.8945
+[epoch 144] loss=10.9007  vis_iou_e0=0.4170  vis_iou_e1=0.3660
+  epoch 145/200  step 20/100  loss=12.2210
+  epoch 145/200  step 40/100  loss=11.8232
+  epoch 145/200  step 60/100  loss=11.9540
+  epoch 145/200  step 80/100  loss=10.9987
+  epoch 145/200  step 100/100  loss=11.8443
+[epoch 145] loss=11.3454  vis_iou_e0=0.4446  vis_iou_e1=0.3938
+  epoch 146/200  step 20/100  loss=10.8397
+  epoch 146/200  step 40/100  loss=11.4395
+  epoch 146/200  step 60/100  loss=10.0096
+  epoch 146/200  step 80/100  loss=10.5801
+  epoch 146/200  step 100/100  loss=10.6725
+[epoch 146] loss=10.8794  vis_iou_e0=0.4324  vis_iou_e1=0.3691
+  epoch 147/200  step 20/100  loss=11.1071
+  epoch 147/200  step 40/100  loss=12.5750
+  epoch 147/200  step 60/100  loss=11.6339
+  epoch 147/200  step 80/100  loss=8.7153
+  epoch 147/200  step 100/100  loss=10.2834
+[epoch 147] loss=10.9008  vis_iou_e0=0.4161  vis_iou_e1=0.3570
+  epoch 148/200  step 20/100  loss=9.5826
+  epoch 148/200  step 40/100  loss=11.6683
+  epoch 148/200  step 60/100  loss=10.7973
+  epoch 148/200  step 80/100  loss=9.9852
+  epoch 148/200  step 100/100  loss=11.9494
+[epoch 148] loss=10.9762  vis_iou_e0=0.4071  vis_iou_e1=0.3383
+  epoch 149/200  step 20/100  loss=11.3372
+  epoch 149/200  step 40/100  loss=10.6086
+  epoch 149/200  step 60/100  loss=11.5606
+  epoch 149/200  step 80/100  loss=12.2941
+  epoch 149/200  step 100/100  loss=10.1924
+[epoch 149] loss=11.2083  vis_iou_e0=0.4398  vis_iou_e1=0.3818
+  epoch 150/200  step 20/100  loss=11.4660
+  epoch 150/200  step 40/100  loss=10.7094
+  epoch 150/200  step 60/100  loss=11.2736
+  epoch 150/200  step 80/100  loss=11.6511
+  epoch 150/200  step 100/100  loss=12.4855
+[epoch 150] loss=11.1426  vis_iou_e0=0.4173  vis_iou_e1=0.3692
+  [val epoch 150] vis_iou_min=0.3482  amo_iou_min=0.3495  surv_min=0.5294
+  epoch 151/200  step 20/100  loss=12.5614
+  epoch 151/200  step 40/100  loss=11.8038
+  epoch 151/200  step 60/100  loss=9.1901
+  epoch 151/200  step 80/100  loss=11.0792
+  epoch 151/200  step 100/100  loss=10.4331
+[epoch 151] loss=10.9579  vis_iou_e0=0.4292  vis_iou_e1=0.3494
+  epoch 152/200  step 20/100  loss=10.6315
+  epoch 152/200  step 40/100  loss=10.7586
+  epoch 152/200  step 60/100  loss=9.6932
+  epoch 152/200  step 80/100  loss=11.6192
+  epoch 152/200  step 100/100  loss=11.8429
+[epoch 152] loss=10.9861  vis_iou_e0=0.4261  vis_iou_e1=0.3470
+  epoch 153/200  step 20/100  loss=10.5201
+  epoch 153/200  step 40/100  loss=10.0287
+  epoch 153/200  step 60/100  loss=10.9971
+  epoch 153/200  step 80/100  loss=12.3615
+  epoch 153/200  step 100/100  loss=10.4348
+[epoch 153] loss=10.7096  vis_iou_e0=0.4063  vis_iou_e1=0.3665
+  epoch 154/200  step 20/100  loss=12.0662
+  epoch 154/200  step 40/100  loss=12.0872
+  epoch 154/200  step 60/100  loss=12.0163
+  epoch 154/200  step 80/100  loss=11.7629
+  epoch 154/200  step 100/100  loss=10.1535
+[epoch 154] loss=11.4000  vis_iou_e0=0.4670  vis_iou_e1=0.3819
+  epoch 155/200  step 20/100  loss=10.4095
+  epoch 155/200  step 40/100  loss=11.7560
+  epoch 155/200  step 60/100  loss=11.3658
+  epoch 155/200  step 80/100  loss=10.1732
+  epoch 155/200  step 100/100  loss=11.6108
+[epoch 155] loss=11.0672  vis_iou_e0=0.4126  vis_iou_e1=0.3783
+  epoch 156/200  step 20/100  loss=8.6347
+  epoch 156/200  step 40/100  loss=10.2128
+  epoch 156/200  step 60/100  loss=12.1554
+  epoch 156/200  step 80/100  loss=11.1234
+  epoch 156/200  step 100/100  loss=11.2316
+[epoch 156] loss=10.9660  vis_iou_e0=0.4186  vis_iou_e1=0.3556
+  epoch 157/200  step 20/100  loss=10.1829
+  epoch 157/200  step 40/100  loss=12.3736
+  epoch 157/200  step 60/100  loss=10.3664
+  epoch 157/200  step 80/100  loss=10.0966
+  epoch 157/200  step 100/100  loss=10.1245
+[epoch 157] loss=10.6243  vis_iou_e0=0.4144  vis_iou_e1=0.3645
+  epoch 158/200  step 20/100  loss=10.8839
+  epoch 158/200  step 40/100  loss=11.7130
+  epoch 158/200  step 60/100  loss=10.0331
+  epoch 158/200  step 80/100  loss=11.3324
+  epoch 158/200  step 100/100  loss=10.9481
+[epoch 158] loss=10.9390  vis_iou_e0=0.4137  vis_iou_e1=0.3526
+  epoch 159/200  step 20/100  loss=10.0052
+  epoch 159/200  step 40/100  loss=10.5945
+  epoch 159/200  step 60/100  loss=10.7032
+  epoch 159/200  step 80/100  loss=11.7924
+  epoch 159/200  step 100/100  loss=9.2650
+[epoch 159] loss=10.7886  vis_iou_e0=0.4107  vis_iou_e1=0.3662
+  epoch 160/200  step 20/100  loss=10.5181
+  epoch 160/200  step 40/100  loss=11.2080
+  epoch 160/200  step 60/100  loss=8.8748
+  epoch 160/200  step 80/100  loss=11.5195
+  epoch 160/200  step 100/100  loss=11.0204
+[epoch 160] loss=10.9927  vis_iou_e0=0.4092  vis_iou_e1=0.3604
+  [val epoch 160] vis_iou_min=0.3566  amo_iou_min=0.3585  surv_min=0.5294
+  epoch 161/200  step 20/100  loss=10.9178
+  epoch 161/200  step 40/100  loss=9.6929
+  epoch 161/200  step 60/100  loss=11.0797
+  epoch 161/200  step 80/100  loss=11.4086
+  epoch 161/200  step 100/100  loss=11.5408
+[epoch 161] loss=10.9176  vis_iou_e0=0.4153  vis_iou_e1=0.3614
+  epoch 162/200  step 20/100  loss=11.1916
+  epoch 162/200  step 40/100  loss=9.8345
+  epoch 162/200  step 60/100  loss=11.2682
+  epoch 162/200  step 80/100  loss=11.2413
+  epoch 162/200  step 100/100  loss=12.0857
+[epoch 162] loss=11.0599  vis_iou_e0=0.4077  vis_iou_e1=0.3798
+  epoch 163/200  step 20/100  loss=11.2134
+  epoch 163/200  step 40/100  loss=11.2188
+  epoch 163/200  step 60/100  loss=11.8065
+  epoch 163/200  step 80/100  loss=10.6784
+  epoch 163/200  step 100/100  loss=12.0722
+[epoch 163] loss=11.0846  vis_iou_e0=0.4219  vis_iou_e1=0.3733
+  epoch 164/200  step 20/100  loss=10.8210
+  epoch 164/200  step 40/100  loss=11.9888
+  epoch 164/200  step 60/100  loss=11.2930
+  epoch 164/200  step 80/100  loss=10.1793
+  epoch 164/200  step 100/100  loss=9.7983
+[epoch 164] loss=11.0341  vis_iou_e0=0.4360  vis_iou_e1=0.3909
+  epoch 165/200  step 20/100  loss=11.8242
+  epoch 165/200  step 40/100  loss=11.8694
+  epoch 165/200  step 60/100  loss=11.5219
+  epoch 165/200  step 80/100  loss=10.5130
+  epoch 165/200  step 100/100  loss=10.5251
+[epoch 165] loss=11.1580  vis_iou_e0=0.4261  vis_iou_e1=0.3538
+  epoch 166/200  step 20/100  loss=10.0231
+  epoch 166/200  step 40/100  loss=12.5550
+  epoch 166/200  step 60/100  loss=10.1045
+  epoch 166/200  step 80/100  loss=12.2485
+  epoch 166/200  step 100/100  loss=11.4990
+[epoch 166] loss=11.0423  vis_iou_e0=0.4073  vis_iou_e1=0.3590
+  epoch 167/200  step 20/100  loss=10.1711
+  epoch 167/200  step 40/100  loss=11.4194
+  epoch 167/200  step 60/100  loss=12.3653
+  epoch 167/200  step 80/100  loss=8.9734
+  epoch 167/200  step 100/100  loss=11.5807
+[epoch 167] loss=11.0043  vis_iou_e0=0.4120  vis_iou_e1=0.3595
+  epoch 168/200  step 20/100  loss=11.9274
+  epoch 168/200  step 40/100  loss=10.6092
+  epoch 168/200  step 60/100  loss=10.9613
+  epoch 168/200  step 80/100  loss=11.7186
+  epoch 168/200  step 100/100  loss=11.1772
+[epoch 168] loss=11.0160  vis_iou_e0=0.4184  vis_iou_e1=0.3712
+  epoch 169/200  step 20/100  loss=12.3548
+  epoch 169/200  step 40/100  loss=11.9001
+  epoch 169/200  step 60/100  loss=9.4197
+  epoch 169/200  step 80/100  loss=12.8669
+  epoch 169/200  step 100/100  loss=11.2470
+[epoch 169] loss=11.0828  vis_iou_e0=0.4235  vis_iou_e1=0.3577
+  epoch 170/200  step 20/100  loss=9.6778
+  epoch 170/200  step 40/100  loss=11.8824
+  epoch 170/200  step 60/100  loss=11.9450
+  epoch 170/200  step 80/100  loss=11.5704
+  epoch 170/200  step 100/100  loss=11.4929
+[epoch 170] loss=11.1491  vis_iou_e0=0.4238  vis_iou_e1=0.3626
+  [val epoch 170] vis_iou_min=0.3527  amo_iou_min=0.3539  surv_min=0.5294
+  epoch 171/200  step 20/100  loss=11.2411
+  epoch 171/200  step 40/100  loss=10.9135
+  epoch 171/200  step 60/100  loss=9.8797
+  epoch 171/200  step 80/100  loss=10.5510
+  epoch 171/200  step 100/100  loss=11.5413
+[epoch 171] loss=10.8699  vis_iou_e0=0.4189  vis_iou_e1=0.3759
+  epoch 172/200  step 20/100  loss=12.0718
+  epoch 172/200  step 40/100  loss=10.7508
+  epoch 172/200  step 60/100  loss=11.3986
+  epoch 172/200  step 80/100  loss=11.0656
+  epoch 172/200  step 100/100  loss=12.1565
+[epoch 172] loss=11.1955  vis_iou_e0=0.4475  vis_iou_e1=0.3892
+  epoch 173/200  step 20/100  loss=11.4330
+  epoch 173/200  step 40/100  loss=9.9042
+  epoch 173/200  step 60/100  loss=8.3959
+  epoch 173/200  step 80/100  loss=11.5260
+  epoch 173/200  step 100/100  loss=10.9122
+[epoch 173] loss=10.8429  vis_iou_e0=0.4287  vis_iou_e1=0.3663
+  epoch 174/200  step 20/100  loss=11.0456
+  epoch 174/200  step 40/100  loss=12.0612
+  epoch 174/200  step 60/100  loss=11.4180
+  epoch 174/200  step 80/100  loss=10.3405
+  epoch 174/200  step 100/100  loss=10.7184
+[epoch 174] loss=11.0207  vis_iou_e0=0.4202  vis_iou_e1=0.3617
+  epoch 175/200  step 20/100  loss=9.8727
+  epoch 175/200  step 40/100  loss=12.3590
+  epoch 175/200  step 60/100  loss=11.8298
+  epoch 175/200  step 80/100  loss=10.1727
+  epoch 175/200  step 100/100  loss=10.7862
+[epoch 175] loss=11.0686  vis_iou_e0=0.4414  vis_iou_e1=0.3689
+  epoch 176/200  step 20/100  loss=11.4835
+  epoch 176/200  step 40/100  loss=12.5600
+  epoch 176/200  step 60/100  loss=10.4622
+  epoch 176/200  step 80/100  loss=11.7364
+  epoch 176/200  step 100/100  loss=10.5116
+[epoch 176] loss=11.2903  vis_iou_e0=0.4230  vis_iou_e1=0.3531
+  epoch 177/200  step 20/100  loss=11.9561
+  epoch 177/200  step 40/100  loss=12.4292
+  epoch 177/200  step 60/100  loss=11.3028
+  epoch 177/200  step 80/100  loss=12.1299
+  epoch 177/200  step 100/100  loss=9.8420
+[epoch 177] loss=10.9988  vis_iou_e0=0.4435  vis_iou_e1=0.3835
+  epoch 178/200  step 20/100  loss=11.3722
+  epoch 178/200  step 40/100  loss=9.8357
+  epoch 178/200  step 60/100  loss=12.0535
+  epoch 178/200  step 80/100  loss=11.5434
+  epoch 178/200  step 100/100  loss=10.6976
+[epoch 178] loss=10.9926  vis_iou_e0=0.4246  vis_iou_e1=0.3639
+  epoch 179/200  step 20/100  loss=9.9312
+  epoch 179/200  step 40/100  loss=12.1422
+  epoch 179/200  step 60/100  loss=10.9256
+  epoch 179/200  step 80/100  loss=11.0185
+  epoch 179/200  step 100/100  loss=11.1564
+[epoch 179] loss=10.8743  vis_iou_e0=0.4272  vis_iou_e1=0.3751
+  epoch 180/200  step 20/100  loss=9.6013
+  epoch 180/200  step 40/100  loss=11.8524
+  epoch 180/200  step 60/100  loss=11.3518
+  epoch 180/200  step 80/100  loss=11.3975
+  epoch 180/200  step 100/100  loss=10.6760
+[epoch 180] loss=11.0197  vis_iou_e0=0.4393  vis_iou_e1=0.3560
+  [val epoch 180] vis_iou_min=0.3504  amo_iou_min=0.3506  surv_min=0.5294
+  epoch 181/200  step 20/100  loss=11.9728
+  epoch 181/200  step 40/100  loss=10.5423
+  epoch 181/200  step 60/100  loss=11.4482
+  epoch 181/200  step 80/100  loss=11.2369
+  epoch 181/200  step 100/100  loss=11.7628
+[epoch 181] loss=11.2868  vis_iou_e0=0.4404  vis_iou_e1=0.3880
+  epoch 182/200  step 20/100  loss=11.4840
+  epoch 182/200  step 40/100  loss=10.4835
+  epoch 182/200  step 60/100  loss=10.8311
+  epoch 182/200  step 80/100  loss=11.0360
+  epoch 182/200  step 100/100  loss=11.3924
+[epoch 182] loss=11.0271  vis_iou_e0=0.4240  vis_iou_e1=0.3719
+  epoch 183/200  step 20/100  loss=11.0412
+  epoch 183/200  step 40/100  loss=12.2525
+  epoch 183/200  step 60/100  loss=10.4168
+  epoch 183/200  step 80/100  loss=11.5667
+  epoch 183/200  step 100/100  loss=11.0810
+[epoch 183] loss=11.1260  vis_iou_e0=0.4247  vis_iou_e1=0.3915
+  epoch 184/200  step 20/100  loss=10.2239
+  epoch 184/200  step 40/100  loss=12.2724
+  epoch 184/200  step 60/100  loss=10.9986
+  epoch 184/200  step 80/100  loss=8.7696
+  epoch 184/200  step 100/100  loss=11.9580
+[epoch 184] loss=11.0452  vis_iou_e0=0.4165  vis_iou_e1=0.3813
+  epoch 185/200  step 20/100  loss=10.3922
+  epoch 185/200  step 40/100  loss=11.4224
+  epoch 185/200  step 60/100  loss=11.4605
+  epoch 185/200  step 80/100  loss=10.3411
+  epoch 185/200  step 100/100  loss=10.1641
+[epoch 185] loss=11.0393  vis_iou_e0=0.4384  vis_iou_e1=0.3684
+  epoch 186/200  step 20/100  loss=12.4367
+  epoch 186/200  step 40/100  loss=11.2032
+  epoch 186/200  step 60/100  loss=11.6027
+  epoch 186/200  step 80/100  loss=11.3448
+  epoch 186/200  step 100/100  loss=9.5825
+[epoch 186] loss=11.3497  vis_iou_e0=0.4253  vis_iou_e1=0.3808
+  epoch 187/200  step 20/100  loss=9.9843
+  epoch 187/200  step 40/100  loss=10.8687
+  epoch 187/200  step 60/100  loss=11.6392
+  epoch 187/200  step 80/100  loss=9.6646
+  epoch 187/200  step 100/100  loss=11.4477
+[epoch 187] loss=11.0528  vis_iou_e0=0.4428  vis_iou_e1=0.3702
+  epoch 188/200  step 20/100  loss=9.5436
+  epoch 188/200  step 40/100  loss=10.2155
+  epoch 188/200  step 60/100  loss=11.5782
+  epoch 188/200  step 80/100  loss=10.0225
+  epoch 188/200  step 100/100  loss=12.1743
+[epoch 188] loss=10.7925  vis_iou_e0=0.4027  vis_iou_e1=0.3734
+  epoch 189/200  step 20/100  loss=10.1010
+  epoch 189/200  step 40/100  loss=12.4763
+  epoch 189/200  step 60/100  loss=11.6175
+  epoch 189/200  step 80/100  loss=10.9979
+  epoch 189/200  step 100/100  loss=11.9455
+[epoch 189] loss=11.3585  vis_iou_e0=0.4277  vis_iou_e1=0.3910
+  epoch 190/200  step 20/100  loss=10.9651
+  epoch 190/200  step 40/100  loss=10.1972
+  epoch 190/200  step 60/100  loss=11.3777
+  epoch 190/200  step 80/100  loss=11.6146
+  epoch 190/200  step 100/100  loss=11.2615
+[epoch 190] loss=11.0768  vis_iou_e0=0.4238  vis_iou_e1=0.3791
+  [val epoch 190] vis_iou_min=0.3619  amo_iou_min=0.3630  surv_min=0.5882
+  epoch 191/200  step 20/100  loss=12.3969
+  epoch 191/200  step 40/100  loss=9.8081
+  epoch 191/200  step 60/100  loss=11.8239
+  epoch 191/200  step 80/100  loss=10.1973
+  epoch 191/200  step 100/100  loss=19.7452
+[epoch 191] loss=11.6872  vis_iou_e0=0.4417  vis_iou_e1=0.3845
+  epoch 192/200  step 20/100  loss=9.7641
+  epoch 192/200  step 40/100  loss=9.2588
+  epoch 192/200  step 60/100  loss=12.5882
+  epoch 192/200  step 80/100  loss=11.0384
+  epoch 192/200  step 100/100  loss=10.8804
+[epoch 192] loss=10.9922  vis_iou_e0=0.4264  vis_iou_e1=0.3674
+  epoch 193/200  step 20/100  loss=11.3895
+  epoch 193/200  step 40/100  loss=10.4887
+  epoch 193/200  step 60/100  loss=11.7564
+  epoch 193/200  step 80/100  loss=10.5100
+  epoch 193/200  step 100/100  loss=11.8896
+[epoch 193] loss=10.7227  vis_iou_e0=0.4096  vis_iou_e1=0.3269
+  epoch 194/200  step 20/100  loss=10.5689
+  epoch 194/200  step 40/100  loss=9.3183
+  epoch 194/200  step 60/100  loss=10.8033
+  epoch 194/200  step 80/100  loss=11.1176
+  epoch 194/200  step 100/100  loss=11.6175
+[epoch 194] loss=10.8511  vis_iou_e0=0.4237  vis_iou_e1=0.3497
+  epoch 195/200  step 20/100  loss=10.8422
+  epoch 195/200  step 40/100  loss=12.2034
+  epoch 195/200  step 60/100  loss=10.0575
+  epoch 195/200  step 80/100  loss=10.8291
+  epoch 195/200  step 100/100  loss=10.9630
+[epoch 195] loss=11.2055  vis_iou_e0=0.4080  vis_iou_e1=0.3551
+  epoch 196/200  step 20/100  loss=11.7066
+  epoch 196/200  step 40/100  loss=10.9844
+  epoch 196/200  step 60/100  loss=10.5347
+  epoch 196/200  step 80/100  loss=10.2061
+  epoch 196/200  step 100/100  loss=10.5725
+[epoch 196] loss=11.0528  vis_iou_e0=0.4403  vis_iou_e1=0.3826
+  epoch 197/200  step 20/100  loss=10.2445
+  epoch 197/200  step 40/100  loss=12.0737
+  epoch 197/200  step 60/100  loss=11.5300
+  epoch 197/200  step 80/100  loss=9.8696
+  epoch 197/200  step 100/100  loss=11.9033
+[epoch 197] loss=10.9067  vis_iou_e0=0.4179  vis_iou_e1=0.3604
+  epoch 198/200  step 20/100  loss=11.6530
+  epoch 198/200  step 40/100  loss=10.4895
+  epoch 198/200  step 60/100  loss=12.7588
+  epoch 198/200  step 80/100  loss=11.8824
+  epoch 198/200  step 100/100  loss=10.4623
+[epoch 198] loss=11.0716  vis_iou_e0=0.4314  vis_iou_e1=0.3753
+  epoch 199/200  step 20/100  loss=11.1929
+  epoch 199/200  step 40/100  loss=9.6028
+  epoch 199/200  step 60/100  loss=10.0500
+  epoch 199/200  step 80/100  loss=10.7803
+  epoch 199/200  step 100/100  loss=11.5783
+[epoch 199] loss=10.8769  vis_iou_e0=0.4262  vis_iou_e1=0.3713
+  epoch 200/200  step 20/100  loss=12.2189
+  epoch 200/200  step 40/100  loss=10.7071
+  epoch 200/200  step 60/100  loss=11.5582
+  epoch 200/200  step 80/100  loss=10.3175
+  epoch 200/200  step 100/100  loss=12.2199
+[epoch 200] loss=11.3229  vis_iou_e0=0.4322  vis_iou_e1=0.4033
+  [val epoch 200] vis_iou_min=0.3485  amo_iou_min=0.3489  surv_min=0.5294
+[stage1] Training complete.  Best vis_iou_min=0.3632
+[stage1] Logs saved to checkpoints/p64s_stage1
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+  [stage0_1] DONE  2026-04-16 13:47:24
+Stage 1 OK: checkpoints/p64s_stage1/best_scene_prior.pt
+
+============================================================
+  [stage2] START  2026-04-16 13:47:24
+  CMD: python scripts/train_phase64_decoder.py --config config/phase64_scaled/stage2.yaml --stage1_ckpt checkpoints/p64s_stage1/best_scene_prior.pt
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+[Phase 64 Decoder] device=cuda  seed=42
+[Phase 64 Decoder] Stage 1 ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Decoder] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34
+
+[Phase 64 Decoder] Building Stage2Trainer...
+[stage2] Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Decoder] Starting decoder from scratch.
+[stage2] Training decoder  epochs=80  steps/epoch=100  n_train=202
+[epoch 1] total=0.1885  rec=0.1670
+[epoch 2] total=0.0402  rec=0.0210
+[epoch 3] total=0.0163  rec=0.0131
+[epoch 4] total=0.0119  rec=0.0101
+[epoch 5] total=0.0105  rec=0.0092
+[epoch 6] total=0.0103  rec=0.0087
+[epoch 7] total=0.0103  rec=0.0091
+[epoch 8] total=0.0097  rec=0.0083
+[epoch 9] total=0.0086  rec=0.0078
+[epoch 10] total=0.0083  rec=0.0073
+  [val epoch 10] PSNR=29.15 dB  L1=0.0070
+  [val] New best PSNR=29.15 dB → saved to checkpoints/p64s_stage2/best_decoder.pt
+[epoch 11] total=0.0091  rec=0.0085
+[epoch 12] total=0.0091  rec=0.0080
+[epoch 13] total=0.0086  rec=0.0075
+[epoch 14] total=0.0084  rec=0.0075
+[epoch 15] total=0.0079  rec=0.0070
+[epoch 16] total=0.0084  rec=0.0075
+[epoch 17] total=0.0080  rec=0.0072
+[epoch 18] total=0.0079  rec=0.0069
+[epoch 19] total=0.0087  rec=0.0077
+[epoch 20] total=0.0073  rec=0.0068
+  [val epoch 20] PSNR=29.04 dB  L1=0.0063
+[epoch 21] total=0.0078  rec=0.0069
+[epoch 22] total=0.0078  rec=0.0070
+[epoch 23] total=0.0078  rec=0.0071
+[epoch 24] total=0.0072  rec=0.0067
+[epoch 25] total=0.0073  rec=0.0067
+[epoch 26] total=0.0070  rec=0.0067
+[epoch 27] total=0.0075  rec=0.0067
+[epoch 28] total=0.0075  rec=0.0067
+[epoch 29] total=0.0073  rec=0.0070
+[epoch 30] total=0.0077  rec=0.0071
+  [val epoch 30] PSNR=29.46 dB  L1=0.0060
+  [val] New best PSNR=29.46 dB → saved to checkpoints/p64s_stage2/best_decoder.pt
+[epoch 31] total=0.0079  rec=0.0071
+[epoch 32] total=0.0070  rec=0.0066
+[epoch 33] total=0.0069  rec=0.0065
+[epoch 34] total=0.0070  rec=0.0067
+[epoch 35] total=0.0065  rec=0.0065
+[epoch 36] total=0.0069  rec=0.0064
+[epoch 37] total=0.0075  rec=0.0070
+[epoch 38] total=0.0069  rec=0.0065
+[epoch 39] total=0.0068  rec=0.0067
+[epoch 40] total=0.0067  rec=0.0063
+  [val epoch 40] PSNR=29.12 dB  L1=0.0059
+[epoch 41] total=0.0067  rec=0.0066
+[epoch 42] total=0.0065  rec=0.0061
+[epoch 43] total=0.0066  rec=0.0061
+[epoch 44] total=0.0069  rec=0.0063
+[epoch 45] total=0.0067  rec=0.0063
+[epoch 46] total=0.0069  rec=0.0064
+[epoch 47] total=0.0070  rec=0.0065
+[epoch 48] total=0.0070  rec=0.0066
+[epoch 49] total=0.0065  rec=0.0062
+[epoch 50] total=0.0071  rec=0.0066
+  [val epoch 50] PSNR=29.21 dB  L1=0.0059
+[epoch 51] total=0.0061  rec=0.0057
+[epoch 52] total=0.0061  rec=0.0060
+[epoch 53] total=0.0068  rec=0.0067
+[epoch 54] total=0.0067  rec=0.0064
+[epoch 55] total=0.0068  rec=0.0063
+[epoch 56] total=0.0066  rec=0.0061
+[epoch 57] total=0.0063  rec=0.0060
+[epoch 58] total=0.0065  rec=0.0062
+[epoch 59] total=0.0064  rec=0.0061
+[epoch 60] total=0.0066  rec=0.0062
+  [val epoch 60] PSNR=29.23 dB  L1=0.0056
+[epoch 61] total=0.0065  rec=0.0061
+[epoch 62] total=0.0065  rec=0.0062
+[epoch 63] total=0.0064  rec=0.0062
+[epoch 64] total=0.0065  rec=0.0063
+[epoch 65] total=0.0061  rec=0.0057
+[epoch 66] total=0.0062  rec=0.0061
+[epoch 67] total=0.0065  rec=0.0059
+[epoch 68] total=0.0063  rec=0.0063
+[epoch 69] total=0.0068  rec=0.0062
+[epoch 70] total=0.0061  rec=0.0058
+  [val epoch 70] PSNR=29.16 dB  L1=0.0056
+[epoch 71] total=0.0065  rec=0.0062
+[epoch 72] total=0.0062  rec=0.0061
+[epoch 73] total=0.0065  rec=0.0062
+[epoch 74] total=0.0064  rec=0.0062
+[epoch 75] total=0.0062  rec=0.0061
+[epoch 76] total=0.0063  rec=0.0058
+[epoch 77] total=0.0062  rec=0.0057
+[epoch 78] total=0.0058  rec=0.0055
+[epoch 79] total=0.0063  rec=0.0063
+[epoch 80] total=0.0063  rec=0.0062
+  [val epoch 80] PSNR=29.54 dB  L1=0.0054
+  [val] New best PSNR=29.54 dB → saved to checkpoints/p64s_stage2/best_decoder.pt
+[stage2] Complete.  Best PSNR=29.54 dB
+[stage2] Logs → checkpoints/p64s_stage2
+[stage2] Decoder PSNR 29.54 ≥ 18.0 — OK to proceed to Stage 3.
+  [stage2] DONE  2026-04-16 13:48:42
+Stage 2 OK: checkpoints/p64s_stage2/best_decoder.pt
+
+============================================================
+  [stage3] START  2026-04-16 13:48:42
+  CMD: python scripts/train_phase64_backbone.py --config config/phase64_scaled/stage3.yaml --stage 3 --stage1_ckpt checkpoints/p64s_stage1/best_scene_prior.pt --stage2_ckpt checkpoints/p64s_stage2/best_decoder.pt
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]
+
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 196/196 [00:00<00:00, 7121.37it/s]
+[1mCLIPTextModel LOAD REPORT[0m from: /home/dongwoo44/.cache/huggingface/hub/models--emilianJR--epiCRealism/snapshots/6522cf856b8c8e14638a0aaa7bd89b1b098aed17/text_encoder
+Key                                | Status     |  | 
+-----------------------------------+------------+--+-
+text_model.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+
+Loading pipeline components...:  50%|█████     | 3/6 [00:00<00:00,  8.51it/s]CLIPFeatureExtractor appears to have been deprecated in transformers. Using CLIPImageProcessor instead.
+
+Loading pipeline components...: 100%|██████████| 6/6 [00:00<00:00, 13.27it/s]
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/diffusers/pipelines/pipeline_utils.py:2263: FutureWarning: `enable_vae_slicing` is deprecated and will be removed in version 0.40.0. Calling `enable_vae_slicing()` on a `AnimateDiffPipeline` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_slicing()`.
+  deprecate(
+[Phase 64 Backbone] stage=3  device=cuda  seed=42
+[Phase 64 Backbone] Stage 1 ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Stage 2 ckpt: checkpoints/p64s_stage2/best_decoder.pt
+[Phase 64 Backbone] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34
+
+[Phase 64 Backbone] Stage 3 — AnimateDiff adapter training...
+[Phase 64 Backbone] Loading AnimateDiff pipeline...
+Loading MotionAdapter...
+Loading base model (emilianJR/epiCRealism)...
+Pipeline on cuda, dtype=torch.float16
+[Phase 64 Backbone] Pipeline loaded on cuda
+[stage3] Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt
+[stage3] Loaded decoder from checkpoints/p64s_stage2/best_decoder.pt
+[Phase 64 Backbone] Starting adapter from scratch.
+[stage3] Training adapter  epochs=60  steps/epoch=100  n_train=202
+[epoch 1] total=0.1904  diff=0.1844
+[epoch 2] total=0.1877  diff=0.1798
+[epoch 3] total=0.1823  diff=0.1713
+[epoch 4] total=0.1384  diff=0.1318
+[epoch 5] total=0.1874  diff=0.1780
+[epoch 6] total=0.1307  diff=0.1233
+[epoch 7] total=0.1588  diff=0.1501
+[epoch 8] total=0.1771  diff=0.1691
+[epoch 9] total=0.1711  diff=0.1628
+[epoch 10] total=0.1989  diff=0.1910
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0010.pt
+[epoch 11] total=0.1703  diff=0.1631
+[epoch 12] total=0.1752  diff=0.1666
+[epoch 13] total=0.1484  diff=0.1407
+[epoch 14] total=0.1413  diff=0.1334
+[epoch 15] total=0.1498  diff=0.1415
+[epoch 16] total=0.1433  diff=0.1361
+[epoch 17] total=0.1591  diff=0.1514
+[epoch 18] total=0.1579  diff=0.1499
+[epoch 19] total=0.1536  diff=0.1442
+[epoch 20] total=0.1594  diff=0.1521
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0020.pt
+[epoch 21] total=0.1211  diff=0.1137
+[epoch 22] total=0.1538  diff=0.1477
+[epoch 23] total=0.1537  diff=0.1462
+[epoch 24] total=0.1270  diff=0.1193
+[epoch 25] total=0.1463  diff=0.1389
+[epoch 26] total=0.1467  diff=0.1396
+[epoch 27] total=0.1624  diff=0.1524
+[epoch 28] total=0.1329  diff=0.1245
+[epoch 29] total=0.1448  diff=0.1363
+[epoch 30] total=0.1636  diff=0.1550
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0030.pt
+[epoch 31] total=0.1335  diff=0.1237
+[epoch 32] total=0.1284  diff=0.1199
+[epoch 33] total=0.1577  diff=0.1492
+[epoch 34] total=0.1377  diff=0.1289
+[epoch 35] total=0.1188  diff=0.1112
+[epoch 36] total=0.1430  diff=0.1357
+[epoch 37] total=0.1475  diff=0.1389
+[epoch 38] total=0.1262  diff=0.1177
+[epoch 39] total=0.1316  diff=0.1221
+[epoch 40] total=0.1202  diff=0.1127
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0040.pt
+[epoch 41] total=0.1361  diff=0.1291
+[epoch 42] total=0.1334  diff=0.1250
+[epoch 43] total=0.1265  diff=0.1183
+[epoch 44] total=0.1657  diff=0.1563
+[epoch 45] total=0.1593  diff=0.1525
+[epoch 46] total=0.1477  diff=0.1398
+[epoch 47] total=0.1076  diff=0.1005
+[epoch 48] total=0.1224  diff=0.1137
+[epoch 49] total=0.1285  diff=0.1216
+[epoch 50] total=0.1368  diff=0.1287
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0050.pt
+[epoch 51] total=0.1200  diff=0.1116
+[epoch 52] total=0.1037  diff=0.0966
+[epoch 53] total=0.1317  diff=0.1226
+[epoch 54] total=0.1203  diff=0.1131
+[epoch 55] total=0.1224  diff=0.1143
+[epoch 56] total=0.1171  diff=0.1085
+[epoch 57] total=0.1014  diff=0.0936
+[epoch 58] total=0.1161  diff=0.1090
+[epoch 59] total=0.1108  diff=0.1039
+[epoch 60] total=0.0977  diff=0.0915
+  [stage3] Checkpoint → checkpoints/p64s_stage3_animatediff/stage3_epoch0060.pt
+[stage3] Complete.  Logs → checkpoints/p64s_stage3_animatediff
+  [stage3] DONE  2026-04-16 13:59:04
+
+============================================================
+  [stage4] START  2026-04-16 13:59:04
+  CMD: python scripts/train_phase64_backbone.py --config config/phase64_scaled/stage4.yaml --stage 4 --stage1_ckpt checkpoints/p64s_stage1/best_scene_prior.pt
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/miniconda3/envs/paper_env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+
+Loading pipeline components...:   0%|          | 0/7 [00:00<?, ?it/s]
+Loading pipeline components...:  14%|█▍        | 1/7 [00:00<00:00,  8.25it/s]
+
+Loading weights:   0%|          | 0/517 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 517/517 [00:00<00:00, 11883.96it/s]
+
+Loading pipeline components...:  43%|████▎     | 3/7 [00:00<00:00,  6.75it/s]
+
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][A
+Loading weights: 100%|██████████| 196/196 [00:00<00:00, 9746.56it/s]
+
+Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 14.99it/s]
+Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 12.74it/s]
+[Phase 64 Backbone] stage=4  device=cuda  seed=42
+[Phase 64 Backbone] Stage 1 ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Loading dataset from toy/data_objaverse_full...
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+  dataset size: 236
+  train=202  val=34
+
+[Phase 64 Backbone] Stage 4 — SDXL transfer adapter training...
+[Phase 64 Backbone] Loading SDXL pipeline...
+[Phase 64 Backbone] SDXL pipeline loaded on cuda
+[stage4] Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt
+[Phase 64 Backbone] Starting SDXL adapter from scratch.
+[stage4] Training SDXL adapter  epochs=40  steps/epoch=100
+  [sdxl epoch 1] loss=nan
+  [sdxl epoch 2] loss=nan
+  [sdxl epoch 3] loss=nan
+  [sdxl epoch 4] loss=nan
+  [sdxl epoch 5] loss=nan
+  [sdxl epoch 6] loss=nan
+  [sdxl epoch 7] loss=nan
+  [sdxl epoch 8] loss=nan
+  [sdxl epoch 9] loss=nan
+  [sdxl epoch 10] loss=nan
+  [sdxl epoch 11] loss=nan
+  [sdxl epoch 12] loss=nan
+  [sdxl epoch 13] loss=nan
+  [sdxl epoch 14] loss=nan
+  [sdxl epoch 15] loss=nan
+  [sdxl epoch 16] loss=nan
+  [sdxl epoch 17] loss=nan
+  [sdxl epoch 18] loss=nan
+  [sdxl epoch 19] loss=nan
+  [sdxl epoch 20] loss=nan
+  [sdxl epoch 21] loss=nan
+  [sdxl epoch 22] loss=nan
+  [sdxl epoch 23] loss=nan
+  [sdxl epoch 24] loss=nan
+  [sdxl epoch 25] loss=nan
+  [sdxl epoch 26] loss=nan
+  [sdxl epoch 27] loss=nan
+  [sdxl epoch 28] loss=nan
+  [sdxl epoch 29] loss=nan
+  [sdxl epoch 30] loss=nan
+  [sdxl epoch 31] loss=nan
+  [sdxl epoch 32] loss=nan
+  [sdxl epoch 33] loss=nan
+  [sdxl epoch 34] loss=nan
+  [sdxl epoch 35] loss=nan
+  [sdxl epoch 36] loss=nan
+  [sdxl epoch 37] loss=nan
+  [sdxl epoch 38] loss=nan
+  [sdxl epoch 39] loss=nan
+  [sdxl epoch 40] loss=nan
+[stage4] SDXL adapter saved → checkpoints/p64s_stage4_sdxl/sdxl_adapter.pt
+[stage4] Transfer eval saved → checkpoints/p64s_stage4_sdxl/transfer_eval.json
+
+============================================================
+Stage 4 Transfer Evaluation Summary
+============================================================
+  visible_iou_min                           baseline=0.0282  guided=0.3632  Δ=+0.3350
+  visible_survival_min                      baseline=1.0000  guided=0.6176  Δ=-0.3824
+  chimera_rate                              baseline=0.0000  guided=0.5000  Δ=+0.5000
+============================================================
+  [stage4] DONE  2026-04-16 14:04:48
+
+============================================================
+  [viz] START  2026-04-16 14:04:48
+  CMD: python scripts/viz_phase64.py --config config/phase64_scaled/stage1.yaml --stage1_ckpt checkpoints/p64s_stage1/best_scene_prior.pt --out outputs/phase64_scaled/viz --n_samples 35
+============================================================
+/usr/bin/bash: /home/dongwoo44/miniconda3/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/dongwoo44/papers/raymarching/scripts/viz_phase64.py:158: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  ri = Image.fromarray((r * 255).clip(0, 255).astype(np.uint8), "L")
+/home/dongwoo44/papers/raymarching/scripts/viz_phase64.py:69: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  m_img = Image.fromarray((m * 255).astype(np.uint8), "L")
+Loaded scene prior from checkpoints/p64s_stage1/best_scene_prior.pt  (epoch=40)
+ObjaverseTrainDataset: 236 samples (data_root=toy/data_objaverse_full)
+Visualizing 35 val samples → outputs/phase64_scaled/viz
+  [  0] person+person → sample_0002_person_person
+  [  1] cat+dog → sample_0003_cat_dog
+  [  2] sword+sword → sample_0004_sword_sword
+  [  3] sword+sword → sample_0005_sword_sword
+  [  4] wolf+dog → sample_0013_wolf_dog
+  [  5] cat+dog → sample_0015_cat_dog
+  [  6] cat+snake → sample_0016_cat_snake
+  [  7] cat+snake → sample_0021_cat_snake
+  [  8] lion+bear → sample_0029_lion_bear
+  [  9] snake+sword → sample_0030_snake_sword
+  [ 10] lion+bear → sample_0036_lion_bear
+  [ 11] cat+sword → sample_0042_cat_sword
+  [ 12] cat+snake → sample_0045_cat_snake
+  [ 13] person+snake → sample_0046_person_snake
+  [ 14] wolf+dog → sample_0049_wolf_dog
+  [ 15] snake+sword → sample_0055_snake_sword
+  [ 16] person+person → sample_0064_person_person
+  [ 17] lion+bear → sample_0074_lion_bear
+  [ 18] person+snake → sample_0084_person_snake
+  [ 19] sword+sword → sample_0088_sword_sword
+  [ 20] snake+alligator → sample_0091_snake_alligator
+  [ 21] snake+alligator → sample_0096_snake_alligator
+  [ 22] person+snake → sample_0106_person_snake
+  [ 23] wolf+dog → sample_0107_wolf_dog
+  [ 24] lion+sword → sample_0108_lion_sword
+  [ 25] cat+sword → sample_0114_cat_sword
+  [ 26] cat+sword → sample_0119_cat_sword
+  [ 27] snake+sword → sample_0123_snake_sword
+  [ 28] sword+sword → sample_0130_sword_sword
+  [ 29] lion+sword → sample_0146_lion_sword
+  [ 30] person+person → sample_0148_person_person
+  [ 31] lion+bear → sample_0154_lion_bear
+  [ 32] dog+sword → sample_0156_dog_sword
+  [ 33] lion+bear → sample_0161_lion_bear
+  [ 34] cat+dog → sample_0177_cat_dog
+
+Overview GIF saved: outputs/phase64_scaled/viz/overview.gif  (35 frames)
+
+All visualizations saved to: outputs/phase64_scaled/viz
+  [viz] DONE  2026-04-16 14:04:56
+
+=== Phase 64 SCALED Pipeline COMPLETE  Thu Apr 16 02:04:56 PM KST 2026 ===
+=== Logs   : logs/phase64_scaled ===
+=== Results: outputs/phase64_scaled/viz/ ===

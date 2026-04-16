@@ -13,4 +13,5 @@ checkpoints/
 toy/assets/
 toy/data/
 toy/data_objaverse/
+toy/data_objaverse_full/
 .tmp_*

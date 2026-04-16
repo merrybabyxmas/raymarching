@@ -1,0 +1,51 @@
+# Phase 64 Scaled — Stage 3: AnimateDiff Adapter
+run_name: p64s_stage3_animatediff
+
+model:
+  depth_bins: 16
+  hidden_dim: 128
+  id_dim: 256
+  pose_dim: 64
+  spatial_h: 64
+  spatial_w: 64
+  slot_dim: 256
+  ctx_dim: 128
+  # adapter
+  adapter_guide_ch: 128
+  guide_max_ratio: 0.15
+  inject_blocks: ["up1", "up2", "up3"]
+  lora_rank: 8
+
+training:
+  epochs: 60
+  steps_per_epoch: 100
+  eval_every: 10
+  lr_adapter: 1.0e-4
+  lr_field:   2.0e-5
+  lr_lora:    1.0e-5
+  grad_clip: 1.0
+  t_max: 500
+  n_frames: 1
+  height: 256
+  width:  256
+  seed: 42
+  lambda_diff:     1.0
+  lambda_surv:     2.0
+  lambda_contrast: 0.3
+  contrast_margin: 0.02
+
+out_dir: checkpoints/p64s_stage3_animatediff
+stage1_ckpt: checkpoints/p64s_stage1/best_scene_prior.pt
+stage2_ckpt: checkpoints/p64s_stage2/best_decoder.pt
+
+eval:
+  visible_survival_thresh: 0.02
+  min_survival: 0.03
+
+data:
+  data_root: toy/data_objaverse_full
+  val_frac: 0.15
+
+backbone:
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3
