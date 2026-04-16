@@ -15,6 +15,10 @@ from phase65_min3d.scene_module import SceneModule
 from phase65_min3d.trainer_stage2 import Stage2Batch, Stage2Trainer
 
 
+def _mean_metrics(epoch_metrics: list[dict]) -> dict:
+    return {k: float(sum(m[k] for m in epoch_metrics) / max(len(epoch_metrics), 1)) for k in epoch_metrics[0].keys()}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
@@ -77,7 +81,7 @@ def main() -> int:
             frames = batch["frames"].to(device)
             visible = batch["visible_masks"].to(device)
             amodal = batch["amodal_masks"].to(device)
-            B, T = frames.shape[:2]
+            _B, T = frames.shape[:2]
             for t in range(T):
                 step_batch = Stage2Batch(
                     entity_names=batch["entity_names"][0],
@@ -91,21 +95,39 @@ def main() -> int:
                 )
                 metrics, prev_state, _pred_rgb = trainer.step(step_batch, prev_state=prev_state)
                 epoch_metrics.append(metrics)
-        mean_metrics = {k: float(sum(m[k] for m in epoch_metrics) / max(len(epoch_metrics), 1)) for k in epoch_metrics[0].keys()}
+
+        mean_metrics = _mean_metrics(epoch_metrics)
         mean_metrics["epoch"] = epoch + 1
         history.append(mean_metrics)
-        score = mean_metrics.get("visible_iou_min", 0.0) + 0.5 * mean_metrics.get("amodal_iou_min", 0.0) + 0.25 * mean_metrics.get("visible_survival_min", 0.0)
+        score = trainer.evaluator.score_for_checkpoint(mean_metrics)
+
+        latest_payload = {
+            "scene_module": model.state_dict(),
+            "adapter": adapter.state_dict(),
+            "backbone": backbone.state_dict(),
+            "config": cfg,
+            "metrics": mean_metrics,
+            "history": history,
+            "best_score_so_far": best_score,
+        }
+        torch.save(latest_payload, out_dir / "latest_stage2.pt")
+
         if score > best_score:
             best_score = score
-            torch.save({
+            best_payload = {
                 "scene_module": model.state_dict(),
                 "adapter": adapter.state_dict(),
                 "backbone": backbone.state_dict(),
                 "config": cfg,
                 "metrics": mean_metrics,
-            }, out_dir / "best_stage2.pt")
+                "history": history,
+                "score": score,
+            }
+            torch.save(best_payload, out_dir / "best_stage2.pt")
+
         (out_dir / "history.json").write_text(json.dumps(history, indent=2))
-        print(f"[epoch {epoch+1}] {mean_metrics}")
+        (out_dir / "last_metrics.json").write_text(json.dumps(mean_metrics, indent=2))
+        print(f"[epoch {epoch+1}] score={score:.4f} metrics={mean_metrics}")
 
     return 0
 
