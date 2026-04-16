@@ -68,21 +68,21 @@ class Stage4TransferEval:
 
         _stage1_ckpt = stage1_ckpt or scene_prior_ckpt
 
-        from scene_prior import ScenePriorModule, EntityRenderer
+        from scene_prior import ScenePriorModule
         from adapters import SceneGuideEncoder, SDXLAdapter
 
         model_cfg = config.model
+        # NOTE: ScenePriorModule uses `hidden` (not `hidden_dim`); renders internally
         self.scene_prior = ScenePriorModule(
-            depth_bins=model_cfg.depth_bins,
-            hidden_dim=getattr(model_cfg, "hidden_dim", 64),
-            id_dim=model_cfg.id_dim,
-            pose_dim=model_cfg.pose_dim,
-            spatial_h=model_cfg.spatial_h,
-            spatial_w=model_cfg.spatial_w,
-            slot_dim=getattr(model_cfg, "slot_dim", 64),
+            depth_bins=int(model_cfg.depth_bins),
+            hidden=int(getattr(model_cfg, "hidden_dim", 64)),
+            id_dim=int(model_cfg.id_dim),
+            pose_dim=int(model_cfg.pose_dim),
+            ctx_dim=int(getattr(model_cfg, "ctx_dim", getattr(model_cfg, "hidden_dim", 64))),
+            spatial_h=int(model_cfg.spatial_h),
+            spatial_w=int(model_cfg.spatial_w),
+            slot_dim=int(getattr(model_cfg, "slot_dim", 64)),
         ).to(self.device)
-
-        self.renderer = EntityRenderer(depth_bins=model_cfg.depth_bins).to(self.device)
 
         # Load Stage 1 — frozen throughout Stage 4
         ckpt = torch.load(_stage1_ckpt, weights_only=False, map_location=self.device)
@@ -95,27 +95,22 @@ class Stage4TransferEval:
             self.scene_prior.load_state_dict(ckpt[_sp_key])
         else:
             self.scene_prior.load_state_dict(ckpt)
-        if "renderer" in ckpt:
-            self.renderer.load_state_dict(ckpt["renderer"])
         print(f"[stage4] Loaded scene prior from {_stage1_ckpt}")
 
         for p in self.scene_prior.parameters():
             p.requires_grad_(False)
-        for p in self.renderer.parameters():
-            p.requires_grad_(False)
         self.scene_prior.eval()
-        self.renderer.eval()
 
         # NEW SDXL adapter — fresh weights
         self.guide_encoder = SceneGuideEncoder(
             in_ch=8,
-            hidden=getattr(model_cfg, "hidden_dim", 64),
+            hidden=int(getattr(model_cfg, "hidden_dim", 64)),
         ).to(self.device)
 
         self.sdxl_adapter = SDXLAdapter(
-            guide_channels=getattr(model_cfg, "hidden_dim", 64),
+            in_ch=int(getattr(model_cfg, "hidden_dim", 64)),
             guide_max_ratio=float(getattr(model_cfg, "guide_max_ratio", 0.1)),
-            inject_blocks=list(getattr(model_cfg, "inject_blocks", ["up0", "up1", "up2"])),
+            inject_blocks=tuple(getattr(model_cfg, "inject_blocks", ["up0", "up1", "up2"])),
         ).to(self.device)
 
         train_cfg = config.training
@@ -222,18 +217,17 @@ class Stage4TransferEval:
 
         r0 = torch.from_numpy(routing_e0.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
         r1 = torch.from_numpy(routing_e1.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
-        routing_hints = torch.cat([r0, r1], dim=1)
-
-        entity_names = [
-            str(meta.get("keyword0", "entity0")),
-            str(meta.get("keyword1", "entity1")),
-        ]
+        entity_name_e0 = str(meta.get("keyword0", "unknown"))
+        entity_name_e1 = str(meta.get("keyword1", "unknown"))
 
         with torch.no_grad():
-            density_fields = self.scene_prior(
-                img=img_chw, entity_names=entity_names, routing_hints=routing_hints,
+            scene_out, _, _ = self.scene_prior(
+                img=img_chw,
+                entity_name_e0=entity_name_e0,
+                entity_name_e1=entity_name_e1,
+                routing_hint_e0=r0,
+                routing_hint_e1=r1,
             )
-            scene_out = self.renderer(density_fields)
 
         scene_tensor = scene_out.to_canonical_tensor()
         guide_features = self.guide_encoder(scene_tensor)
@@ -330,16 +324,16 @@ class Stage4TransferEval:
 
                 r0 = torch.from_numpy(routing_e0.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
                 r1 = torch.from_numpy(routing_e1.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
-                routing_hints = torch.cat([r0, r1], dim=1)
-                entity_names = [
-                    str(meta.get("keyword0", "entity0")),
-                    str(meta.get("keyword1", "entity1")),
-                ]
+                entity_name_e0 = str(meta.get("keyword0", "unknown"))
+                entity_name_e1 = str(meta.get("keyword1", "unknown"))
 
-                density_fields = self.scene_prior(
-                    img=img_chw, entity_names=entity_names, routing_hints=routing_hints,
+                scene_out, _, _ = self.scene_prior(
+                    img=img_chw,
+                    entity_name_e0=entity_name_e0,
+                    entity_name_e1=entity_name_e1,
+                    routing_hint_e0=r0,
+                    routing_hint_e1=r1,
                 )
-                scene_out = self.renderer(density_fields)
                 scene_tensor = scene_out.to_canonical_tensor()
                 guide_features = self.guide_encoder(scene_tensor)
 

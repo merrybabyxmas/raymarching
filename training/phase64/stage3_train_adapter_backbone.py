@@ -200,7 +200,9 @@ class Stage3Trainer:
     ) -> torch.Tensor:
         """Encode frames to VAE latents using the pipeline's VAE.
 
-        Returns: (1, 4, h_lat, w_lat) float16 latents.
+        AnimateDiff UNet expects 5D input (B, C, T, H, W), so we add T=1.
+
+        Returns: (1, 4, 1, h_lat, w_lat) float16 latents.
         """
         from PIL import Image
 
@@ -213,7 +215,8 @@ class Stage3Trainer:
         with torch.no_grad():
             latents = self.pipe.vae.encode(img_t.half()).latent_dist.sample()
             latents = latents * self.pipe.vae.config.scaling_factor
-        return latents  # (1, 4, h, w)
+        # Add temporal dimension: (1, 4, h, w) → (1, 4, 1, h, w)
+        return latents.unsqueeze(2)
 
     def _add_noise(
         self,
