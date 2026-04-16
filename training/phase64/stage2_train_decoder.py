@@ -156,22 +156,22 @@ class Stage2Trainer:
         # Resolve checkpoint path (new name takes priority)
         _stage1_ckpt = stage1_ckpt or scene_prior_ckpt
 
-        from scene_prior import ScenePriorModule, EntityRenderer
+        from scene_prior import ScenePriorModule
 
         model_cfg = config.model
+        # NOTE: ScenePriorModule uses `hidden` (not `hidden_dim`); contains renderer internally
         self.scene_prior = ScenePriorModule(
-            depth_bins=model_cfg.depth_bins,
-            hidden_dim=model_cfg.hidden_dim,
-            id_dim=model_cfg.id_dim,
-            pose_dim=model_cfg.pose_dim,
-            spatial_h=model_cfg.spatial_h,
-            spatial_w=model_cfg.spatial_w,
-            slot_dim=getattr(model_cfg, "slot_dim", 64),
+            depth_bins=int(model_cfg.depth_bins),
+            hidden=int(model_cfg.hidden_dim),
+            id_dim=int(model_cfg.id_dim),
+            pose_dim=int(model_cfg.pose_dim),
+            ctx_dim=int(getattr(model_cfg, "ctx_dim", model_cfg.hidden_dim)),
+            spatial_h=int(model_cfg.spatial_h),
+            spatial_w=int(model_cfg.spatial_w),
+            slot_dim=int(getattr(model_cfg, "slot_dim", 64)),
         ).to(device)
 
-        self.renderer = EntityRenderer(depth_bins=model_cfg.depth_bins).to(device)
-
-        # Load Stage 1 checkpoint (accept multiple common key layouts)
+        # Load Stage 1 checkpoint
         ckpt = torch.load(_stage1_ckpt, weights_only=False, map_location=self.device)
         _sp_key = next(
             (k for k in ("scene_prior", "scene_prior_state", "field_state",
@@ -181,19 +181,13 @@ class Stage2Trainer:
         if _sp_key is not None:
             self.scene_prior.load_state_dict(ckpt[_sp_key])
         else:
-            # direct state dict
             self.scene_prior.load_state_dict(ckpt)
-        if "renderer" in ckpt:
-            self.renderer.load_state_dict(ckpt["renderer"])
         print(f"[stage2] Loaded scene prior from {_stage1_ckpt}")
 
-        # Freeze scene prior + renderer
+        # Freeze scene prior (ScenePriorModule renders internally)
         for p in self.scene_prior.parameters():
             p.requires_grad_(False)
-        for p in self.renderer.parameters():
-            p.requires_grad_(False)
         self.scene_prior.eval()
-        self.renderer.eval()
 
         # Decoder (the only trainable module in Stage 2)
         self.decoder = StructuredDecoder(
@@ -209,7 +203,8 @@ class Stage2Trainer:
         )
 
         self.evaluator = Phase64Evaluator()
-        self.out_dir = Path(getattr(config, "out_dir", "outputs/phase64/stage2"))
+        run_name = getattr(config, "run_name", "p64_stage2")
+        self.out_dir = Path(f"checkpoints/phase64/{run_name}")
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self._best_psnr: float = 0.0
@@ -239,20 +234,19 @@ class Stage2Trainer:
 
         r0 = torch.from_numpy(routing_e0.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
         r1 = torch.from_numpy(routing_e1.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
-        routing_hints = torch.cat([r0, r1], dim=1)
+        # r0/r1 passed individually to scene_prior; routing_hints no longer needed
 
-        entity_names = [
-            str(meta.get("keyword0", "entity0")),
-            str(meta.get("keyword1", "entity1")),
-        ]
+        entity_name_e0 = str(meta.get("keyword0", "unknown"))
+        entity_name_e1 = str(meta.get("keyword1", "unknown"))
 
         with torch.no_grad():
-            density_fields = self.scene_prior(
+            scene_out, _, _ = self.scene_prior(
                 img=img_chw,
-                entity_names=entity_names,
-                routing_hints=routing_hints,
+                entity_name_e0=entity_name_e0,
+                entity_name_e1=entity_name_e1,
+                routing_hint_e0=r0,
+                routing_hint_e1=r1,
             )
-            scene_out = self.renderer(density_fields)
 
         scene_tensor = scene_out.to_canonical_tensor()  # (1, 8, H, W)
 
@@ -315,17 +309,17 @@ class Stage2Trainer:
 
                 r0 = torch.from_numpy(routing_e0.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
                 r1 = torch.from_numpy(routing_e1.mean(axis=0)).float().to(self.device).unsqueeze(0).unsqueeze(0)
-                routing_hints = torch.cat([r0, r1], dim=1)
+                # r0/r1 passed individually to scene_prior; routing_hints no longer needed
+                entity_name_e0 = str(meta.get("keyword0", "unknown"))
+                entity_name_e1 = str(meta.get("keyword1", "unknown"))
 
-                entity_names = [
-                    str(meta.get("keyword0", "entity0")),
-                    str(meta.get("keyword1", "entity1")),
-                ]
-
-                density_fields = self.scene_prior(
-                    img=img_chw, entity_names=entity_names, routing_hints=routing_hints,
+                scene_out, _, _ = self.scene_prior(
+                    img=img_chw,
+                    entity_name_e0=entity_name_e0,
+                    entity_name_e1=entity_name_e1,
+                    routing_hint_e0=r0,
+                    routing_hint_e1=r1,
                 )
-                scene_out = self.renderer(density_fields)
                 scene_tensor = scene_out.to_canonical_tensor()
                 pred_rgb = self.decoder(scene_tensor)  # (1, 3, H, W)
 

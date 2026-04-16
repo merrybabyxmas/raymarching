@@ -1,0 +1,23 @@
+{
+  "keyword0": "cat",
+  "keyword1": "cat",
+  "mesh0_path": "toy/assets/animals/cat/05c4159854f14bf88fac70a50b8cbd98.glb",
+  "mesh1_path": "toy/assets/animals/cat/76de7241865a4b0cbf9fc6c0d16b00c5.glb",
+  "prompt_full": "a red cat and a blue cat tangled together",
+  "prompt_entity0": "a red cat",
+  "prompt_entity1": "a blue cat",
+  "color0": [
+    0.85,
+    0.15,
+    0.1
+  ],
+  "color1": [
+    0.1,
+    0.25,
+    0.85
+  ],
+  "mode": "layered",
+  "camera": "front_left",
+  "n_frames": 16,
+  "scene_type": "occ"
+}

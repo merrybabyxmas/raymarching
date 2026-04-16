@@ -1,1381 +1,942 @@
-근본적으로는 **모델이 아니라 “문제 정의”가 먼저 꼬여 있습니다.**
-지금 막힌 핵심은 세 가지예요.
+# Raymarching 프로젝트 전면 재설계 제안서
 
-1. **목표와 구현이 서로 다릅니다.**
-   업로드한 정리에서는 원래 목표가 “충돌해도 두 entity가 각자 정체성을 잃지 않고 함께 렌더링”이고, 이를 위해 `sigma`와 `T[z]`를 쓰는 ray-marching식 가림을 상정하고 있습니다. 즉, 앞 entity가 뒤를 가리더라도 뒤 entity의 존재 자체는 volume 안에 남아 있어야 한다는 철학입니다. 
-   그런데 현재 저장소의 Phase 62 아키텍처는 반대로 **first-hit projection**, **one pixel = one entity**, **no transparency / no alpha compositing**를 명시하고 있습니다. 즉 한 픽셀에서는 앞쪽 클래스 하나만 살아남는 설계입니다. ([GitHub][1])
-   이 둘은 비슷해 보이지만, 실제로는 **서로 다른 세계관**입니다.
+## 목표: **두 개의 독립 entity가 뒹굴고 가려져도 최종 2D 비디오에서 chimera 없이 identity가 유지되는 생성 시스템**
 
-2. **contract가 현재 데이터와 물리 모델에 맞지 않습니다.**
-   `winner ≤ 0.45`는 수학적으로 불가능하고, `compact ≥ 0.60`, `D_amo ≥ 0.40`는 현재 same-depth toy 데이터에서는 oracle도 못 넘습니다. 이것은 단순히 성능이 낮은 게 아니라, **평가식이 문제 세팅과 불일치**라는 뜻입니다.  
+이 문서는 **현재 코드에서 과감히 삭제할 부분**, **반드시 유지할 부분**, **본질적으로 새로 추가해야 할 부분**, 그리고 **데이터셋 / 학습 / 추론 / 평가 / 실험 세팅**까지 한 번에 재설계한 제안서다.
+목표는 하나다.
 
-3. **현재 성공/실패 신호가 섞여 있습니다.**
-   이미 `diff_mse`, `P_2obj`, `R_chimera`, `M_id`는 통과했는데, 일부는 불가능한 threshold 때문에 실패로 분류되고, 일부는 진짜 구조 문제(`render_iou`, isolated rollout)입니다. 그래서 v39를 아무리 튜닝해도, “무엇을 고쳐야 하는지” 피드백이 오염됩니다.  
-
-결론부터 말하면, **근본 해결책은 하이퍼파라미터 조정이 아니라 ‘문제 분해’입니다.**
+> **“cat + dog rolling together” 같은 동적 shot에서, 각 객체가 접촉·가림·재등장을 반복해도 최종 composite video가 두 개의 독립 객체로 보이게 만들기.**
 
 ---
 
-## 지금 가장 먼저 해야 할 결정
+# 0. 최종 결론 먼저
 
-### 1) 당신이 진짜 풀고 싶은 현상을 하나로 고정해야 합니다
+현재 코드베이스는 “3D-aware 구조”를 일부 갖추고 있지만, 아직은 **representation을 잘 배우는 시스템**에 더 가깝고, **two-entity dynamic rendering을 강제하는 시스템**은 아니다.
+특히 현재 구현은 이미
 
-현재 목표에는 사실 두 개의 다른 문제가 섞여 있습니다.
+* transmittance 기반 visible/amodal projection
+* four-stream guide
+* guide gate gradient fix
+* V_gt from rendered depth/masks
 
-**A. layered occlusion 문제**
-앞/뒤 depth가 있는 상황에서 앞 entity가 뒤를 가리더라도 identity가 유지되는가
+를 갖고 있으므로, 아이디어의 핵심은 살아 있다. `GuideFeatureAssembler`는 `front_only`, `dual`, `four_stream` guide family를 지원하고, `four_stream`은 visible/amodal 분리를 이미 사용한다. 
+또 `FirstHitProjector`는 현재 실제로는 transmittance를 사용해 `visible`, `amodal`, `front_probs`, `back_probs`를 계산하고 있다. 
+그리고 GT volume은 rendered depth + entity masks + depth order로부터 구성된다. 
 
-**B. same-depth collision 문제**
-두 entity가 거의 같은 depth에서 접촉/겹침할 때 chimera 없이 분리되는가
+하지만 지금 시스템의 핵심 병목은 다음이다.
 
-현재 Phase 62의 first-hit projection은 **A에는 맞고, B에는 본질적으로 불리합니다.**
-왜냐하면 “one pixel = one entity”이기 때문입니다. same-depth 겹침에서 두 entity의 정보를 같은 픽셀에서 동시에 표현할 방법이 거의 없습니다. 반면 업로드한 원래 아이디어의 ray-marching/transmittance 스타일은 **A를 volume 차원에서 더 자연스럽게 표현**합니다. ([GitHub][1]) 
+1. **entity 표현이 여전히 경쟁적이다**
+   현재 projector는 entity probability를 기반으로 visible winner를 만들고, guide는 그 visible/amodal 신호를 backbone feature와 곱해 UNet에 주입한다. 이 과정에서 **dominant entity가 guide scale까지 더 크게 가져가는 양성 피드백**이 생기기 쉽다. `conditioning.py`의 `four_stream`이 바로 그 핵심 경로다. 
 
-그래서 먼저 둘 중 하나를 명확히 정해야 합니다.
+2. **학습 목표가 최종 사용자 목표를 직접 강제하지 않는다**
+   현재 trainer는 diffusion loss, structure loss, feature separation, spatial coherence, fg prior, permutation consistency, temporal centroid consistency 등 다양한 surrogate를 최적화한다. 그러나 이 조합은 **“최종 composite에서 두 entity가 동시에 독립적으로 보이는가”**를 가장 강하게 강제하지 않는다. 
 
-* **“나는 물리적 occlusion을 풀고 싶다”** → depth-separated 데이터로 가고, amodal/visible 평가를 유지
-* **“나는 same-depth 접촉에서도 chimera 없이 분리하고 싶다”** → first-hit 단일 소유권만으로는 부족하고, 픽셀 단위 ownership 외에 **instance-consistent feature field**나 **slot-based separation**이 추가로 필요
+3. **현재 volume은 진짜 object-centric field보다 “projection에 유리한 sparse evidence”로 학습되기 쉽다**
+   지금 구조는 최종적으로 `visible_class` 및 guide 품질을 좋게 만들려는 방향으로 수렴할 수 있고, 이 경우 실제 3D objectness보다 **가시성에 유리한 점상/희박한 구조**로도 높은 점수를 얻는다.
 
----
+따라서 이 문서의 제안은 다음 한 줄로 요약된다.
 
-## 내가 보기에 가장 현실적인 근본 해법
-
-### 해법: 문제를 2-stage benchmark로 분리하고, 모델도 그에 맞춰 나눠라
-
-#### Track 1. Occlusion benchmark
-
-목표: 앞뒤 관계가 있는 장면에서 entity identity 유지
-
-여기서는 현재 Phase 62의 **volume + first-hit**가 맞는 방향입니다.
-대신 반드시 다음을 해야 합니다.
-
-* 데이터셋을 **depth-separated scene**으로 다시 만듭니다.
-* `compact`, `D_amo`, `visible/amodal IoU`는 이 트랙에서만 씁니다.
-* checkpoint selection도 `projected_class_iou`, `iou_min` 중심으로 갑니다. 이것도 현재 아키텍처 문서와 일치합니다. ([GitHub][1])
-
-즉, 지금의 `compact`, `D_amo`가 틀린 metric이 아니라, **잘못된 데이터에 붙어 있는 것**입니다. 
-
-#### Track 2. Collision benchmark
-
-목표: 같은 depth 또는 매우 가까운 depth에서 chimera 없이 두 entity 분리
-
-여기서는 `compact`, `D_amo`를 버리고, 아래처럼 바꿔야 합니다.
-
-* entity-wise feature separation
-* per-entity consistency across overlap frames
-* identity preservation under overlap
-* boundary purity / chimera rate / instance embedding margin
-* isolated rollout equivalence gap
-
-즉 same-depth benchmark에서는 “amodal depth disentanglement”가 아니라, **identity disentanglement**를 재야 합니다.
+> **현재의 “class volume + guide injection” 시스템을, “entity-centric dynamic field + amodal/visible dual rendering + structured video refinement” 시스템으로 재구성해야 한다.**
 
 ---
 
-## contract는 이렇게 고쳐야 합니다
+# 1. 무엇을 유지하고, 무엇을 삭제하고, 무엇을 추가할 것인가
 
-지금 contract는 “올바른 과학적 실패”와 “정의 오류”를 구분하지 못합니다.
-그래서 다음처럼 재작성하는 게 맞습니다.
+## 1.1 유지할 것
 
-### C_topo를 두 개로 분리
+### A. **Rendered depth/mask 기반 GT 생성 파이프라인**
 
-* **C_topo_occ**: depth-separated scenes 전용
+이 부분은 매우 중요하다.
+`scripts/build_volume_gt.py`는 depth map, entity masks, depth order로부터 V_gt를 만든다. overlap에서는 front entity를 더 가까운 bin, back entity를 더 먼 bin에 배치한다. 이건 **학습 가능한 3D supervision**의 출발점으로 매우 좋다. 
 
-  * visible IoU
-  * amodal IoU
-  * front/back ordering accuracy
-  * compactness
+**유지 이유**
 
-* **C_topo_col**: same-depth collision 전용
-
-  * connected component purity
-  * identity separation score
-  * overlap-frame chimera rate
-  * cross-frame entity consistency
-
-### C_guide 수정
-
-`winner ≤ 0.45`는 폐기해야 합니다.
-이건 threshold를 0.55로 바꾸는 수준보다, 아예 **대칭성 metric**으로 바꾸는 게 맞습니다.
-
-예를 들면:
-
-* `balance = 1 - |vis_e0 - vis_e1| / (vis_e0 + vis_e1 + eps)`
-  이 값이 1에 가까울수록 균형
-* 혹은 `min(vis_e0, vis_e1) / max(vis_e0, vis_e1)`
-
-지금의 winner는 정의상 0.5 미만이 불가능하므로, 통과/실패 신호로 쓰면 안 됩니다.  
-
-### C_render 수정
-
-`render_iou`는 isolated rollout이 실제 분리 기능을 켜지 못하면 무의미합니다.
-업로드한 요약대로 지금은 gate가 거의 0이라 isolated와 composite가 사실상 같아서, 이 metric은 구조 검증이 아니라 **dead-path 탐지기** 역할만 하고 있습니다. 
-그러므로 먼저:
-
-* guide injection magnitude
-* per-block activation norm
-* isolated vs composite feature delta
-* gate open ratio
-
-를 로그로 잡고, 이게 살아난 뒤에만 render_iou를 contract에 포함해야 합니다.
+* synthetic / rendered scene의 기하 정보를 잘 활용함
+* 2D segmentation만 쓰는 것보다 훨씬 낫다
+* collision/occlusion에 대한 supervision이 가능하다
 
 ---
 
-## 아키텍처 쪽에서 진짜 손봐야 할 부분
+### B. **Transmittance 기반 projector의 큰 철학**
 
-### 1) first-hit만으로 끝내지 말고 “visible head + latent amodal head”를 분리
+현재 `models/phase62/projection.py`는 temperature-scaled entity probabilities로 occupancy를 만들고, transmittance를 누적하여 `front_probs`, `back_probs`, `visible`, `amodal`을 계산한다. 
 
-현재 아키텍처는 first-hit visible projection에는 강하지만, same-depth collision에서 뒤 entity의 identity를 유지할 통로가 빈약합니다. ([GitHub][1])
-그래서 구조적으로는:
+이건 유지해야 한다.
+다만 “current class-volume version”을 그대로 유지하는 게 아니라, **entity-centric density field renderer**로 일반화해서 유지해야 한다.
 
-* **visible projection head**: first-hit 유지
-* **entity latent field head**: entity별 독립 표현 유지
-* **consistency loss**: overlap 전후 프레임에서 같은 entity embedding이 유지되도록 제약
+**유지 이유**
 
-이렇게 분리하는 것이 좋습니다.
-
-즉 렌더링은 one-pixel-one-entity로 하더라도, **내부 표현까지 one-entity-only가 되면 안 됩니다.**
-
-### 2) factorized_fg_id는 계속 보되, id branch supervision을 강화
-
-저장소 문서에서도 `factorized_fg_id`는 개선 가능성이 있지만 asymmetric drift와 `iou_min` collapse가 남아 있다고 적혀 있습니다. ([GitHub][1])
-그러면 이건 architecture를 폐기할 문제라기보다,
-
-* id logits regularization
-* entity permutation-consistent supervision
-* per-entity occupancy prior
-* all-bg collapse 방지용 foreground prior
-
-를 추가해서 **id branch를 직접 안정화**해야 합니다.
-
-### 3) guide injection dead path를 먼저 복구
-
-지금 render_iou가 안 오르는 가장 직접 원인은 이쪽입니다. 
-근본 조치는:
-
-* stage1에서 gate 초기값을 0 근처가 아니라 작은 양수로 시작
-* guide path에 residual scaling 파라미터를 두고 warm-up
-* injection block별 gradient norm 모니터링
-* isolated rollout 시 실제로 다른 guide tensor가 들어가는지 assertion 추가
-
-이 부분은 “평가”보다 먼저 “회로가 연결돼 있는지” 보는 디버깅 문제입니다.
+* 네 원래 아이디어와 가장 잘 맞음
+* visible/amodal 분리를 자연스럽게 제공
+* contact/occlusion shot에서 필수적임
 
 ---
 
-## 그래서 v39는 어떻게 가야 하냐
+### C. **UNet에 structured condition을 주입하는 방식**
 
-제가 추천하는 **근본적 v39 방향**은 이겁니다.
+현재 `GuideFeatureAssembler` + `GuideInjectionManager` 구조는 매우 유용하다. block별 projector, multiscale injection, gate after normalization 등은 그대로 살릴 가치가 크다. 
 
-### v39-A: contract cleanup run
+**유지 이유**
 
-모델 변경 거의 없이 다음만 수행
-
-* `winner` 정의 교체
-* `compact`, `D_amo`를 same-depth toy에서 제외
-* `render_iou`는 gate activation sanity check 통과 후만 활성화
-* `cosF`는 `la_feature_sep` 활성화 후 재측정
-
-이 실험의 목적은 “현재 모델이 실제로 어디까지 되는지”를 깨끗하게 재측정하는 것입니다.
-지금은 평가식이 오염돼 있어서 실력 측정 자체가 안 됩니다. 
-
-### v39-B: data split run
-
-데이터를 둘로 나눔
-
-* same-depth collision toy
-* front/back depth-separated toy
-
-그리고 contract를 분리 적용합니다.
-이 단계가 되어야 “이 모델은 occlusion에는 강한데 collision에는 약하다” 같은 결론이 나옵니다.
-
-### v39-C: injection repair run
-
-아키텍처 변경은 오직 여기서
-
-* gate warm start
-* isolated/composite delta logging
-* id branch stabilization
-* `la_feature_sep` on
-
-이건 진짜 구조 개선 실험입니다.
+* diffusion backbone을 직접 갈아엎지 않아도 됨
+* structured scene signal을 비디오 생성에 주입할 수 있음
+* engineering cost 대비 효과가 큼
 
 ---
 
-## 한 문장으로 요약하면
+## 1.2 과감히 삭제할 것
 
-**지금의 근본 문제는 모델이 약해서가 아니라, “same-depth collision”과 “depth occlusion”이라는 서로 다른 문제를 하나의 contract로 재고 있고, 저장소 구현은 first-hit 철학인데 평가는 ray-marching/amodal 철학을 기대하고 있어서, 성공과 실패 판정이 구조적으로 꼬여 있다는 점입니다.** ([GitHub][1])  
+### A. **legacy / 미사용 파일**
 
-즉, **제일 먼저 고칠 것은 모델이 아니라 benchmark와 contract입니다.**
-그 다음이 데이터 분리, 그 다음이 guide injection 복구입니다.
+업로드된 교정 메모 기준으로, 실제 실행 경로가 아닌 옛 파일은 정리해야 한다.
+특히 `models/phase62_conditioning.py` 같은 구 버전/비실행 파일은 제거 대상이다. 
 
-원하시면 다음 답변에서 제가 바로 **“v39 실험 설계안”**을 표 형태로 짜드릴게요.
+**삭제 이유**
 
-[1]: https://raw.githubusercontent.com/merrybabyxmas/raymarching/main/ARCHITECTURE.md "raw.githubusercontent.com"
-
-
-
-
-좋습니다.
-그럼 v39 이후를 포함해서, **지금 이 프로젝트를 “실패하는 실험의 반복”에서 “판단 가능한 연구 프로그램”으로 바꾸는 수준**으로 실험 설계안을 최대한 길고 상세하게 정리해보겠습니다.
-
-핵심 전제부터 다시 고정하겠습니다.
-
-현재 저장소의 Phase 62는 문서상 명확하게 **soft blending / transparency / transmittance를 버리고**, `3D entity volume + first-hit projection`으로 설계되어 있습니다. 즉 한 픽셀에서는 앞쪽에서 처음 맞은 클래스가 승리하는 **hard visible ownership** 체계입니다. 또한 현재 주된 정량 평가는 `projected class IoU`, `volume accuracy`, `collision frame separate eval`, `iou_min` 같은 hard projection 기반 지표에 맞춰져 있습니다. ([GitHub][1])
-반면 사용자가 정리한 문제 서술은 원래 동기 면에서 ray-marching식 가림, 독립 entity 보존, chimera 방지, amodal identity 유지라는 문제를 포함하고 있고, 현재 실패 원인으로는 불가능한 `winner` 정의, same-depth toy 데이터와 맞지 않는 `compact / D_amo`, 비활성화된 `la_feature_sep`, dead-path에 가까운 isolated rollout이 지목되어 있습니다.  
-
-그래서 이 설계안의 목표는 단순합니다.
-**“무엇이 진짜 모델 한계이고, 무엇이 평가/데이터/설정 오류인지 분리해서, 각 실험이 명확한 yes/no 정보를 주도록 바꾸는 것.”**
-지금 필요한 것은 성능 향상이 아니라 먼저 **실험 체계의 식별성(identifiability)** 회복입니다. 
+* 혼동 유발
+* 분석/디버깅 효율 저하
+* 잘못된 patch가 들어갈 위험 증가
 
 ---
 
-# 0. 최상위 목표 재정의
+### B. **guide family 다중 분기 (`none`, `front_only`, `dual`)**
 
-이 프로젝트의 최종 연구 목표는 다음처럼 한 문장으로 다시 쓰는 것이 좋습니다.
+현재 `GuideFeatureAssembler`는 `none`, `front_only`, `dual`, `four_stream`을 지원한다. 
+이건 연구 실험용으로는 좋았지만, 이제는 아키텍처를 고정해야 할 시점이다.
 
-> **“두 개의 독립 entity가 시공간적으로 충돌하거나 가려지는 장면에서, visible rendering은 단일 소유권을 유지하면서도 내부 표현에서는 각 entity의 identity를 붕괴시키지 않는 조건부 비디오 생성 구조를 만든다.”**
+**삭제/비활성화 권장**
 
-이 문장이 중요한 이유는 두 층을 분리하기 때문입니다.
+* `none`: baseline용만 남기고 mainline에서 제거
+* `front_only`: 명백히 정보 부족
+* `dual`: entity 분리가 약하고 두 객체가 섞여 들어가기 쉬움
 
-* **렌더링 층**: 한 픽셀은 결국 하나의 visible owner를 가져야 함
-* **표현 층**: 하지만 가려진 entity 또는 겹친 entity의 identity 표현은 내부적으로 사라지면 안 됨
+**남길 것**
 
-현재 Phase 62는 문서상 visible ownership에는 강하게 맞춰져 있지만, same-depth collision에서 내부 identity 보존이 충분히 측정되고 있는지는 불분명합니다. `FirstHitProjector`는 visible/front/back/amodal map을 산출하도록 설계되어 있지만, 핵심 추론은 hard argmax first-hit입니다. ([GitHub][1])
-따라서 실험 설계도 반드시 **visible correctness**와 **latent identity preservation**를 분리해서 측정해야 합니다.
+* `four_stream` 철학을 일반화한 **entity-centric multi-stream guide**
 
----
+  * visible_e0
+  * visible_e1
+  * hidden/amodal_e0
+  * hidden/amodal_e1
+  * optional depth/order cue
 
-# 1. 가장 먼저 해야 할 것: 문제를 두 개의 benchmark로 쪼개기
-
-지금 가장 큰 구조적 문제는 하나의 contract가 사실 두 종류의 서로 다른 난제를 동시에 재고 있다는 점입니다.
-
-## 1-1. Benchmark A: Occlusion benchmark
-
-이 트랙은 **앞/뒤 깊이 차가 실제로 존재하는 장면**을 다룹니다.
-
-질문은 이것입니다.
-
-* 앞 entity가 뒤 entity를 가릴 때 visible rendering이 올바른가
-* 뒤 entity는 내부 표현에서 유지되는가
-* front/back ordering이 안정적인가
-* amodal/visible projection이 일관적인가
-
-이 트랙은 현재 저장소의 Phase 62 철학과 비교적 잘 맞습니다.
-왜냐하면 현재 구조는 `V_gt`를 depth + mask에서 구성하고, first-hit depth scan으로 visible/front/back을 뽑도록 설계되어 있기 때문입니다. ([GitHub][1])
-
-## 1-2. Benchmark B: Collision benchmark
-
-이 트랙은 **같은 depth 또는 거의 같은 depth에서 두 entity가 접촉/중첩**하는 장면을 다룹니다.
-
-질문은 이것입니다.
-
-* 두 entity가 붙어도 chimera가 생기지 않는가
-* one pixel = one entity 렌더링 하에서도 내부 표현은 분리되어 있는가
-* overlap frame에서 identity drift가 생기지 않는가
-* composite 생성과 isolated 생성의 차이가 실제로 entity별 통제를 반영하는가
-
-이 트랙은 현재 first-hit visible projection만으로는 자동 해결되지 않습니다.
-즉 이것은 단순 occlusion이 아니라 **identity disentanglement under contact** 문제입니다.
+즉 **guide family를 하나로 고정**해라.
 
 ---
 
-# 2. contract를 전체 재설계해야 하는 이유
+### C. **bg-class 중심 voxel softmax 세계관**
 
-사용자가 정리한 현 상태에서, `winner ≤ 0.45`는 정의상 불가능하고, `compact ≥ 0.60`, `D_amo ≥ 0.40`은 same-depth toy에서는 oracle도 도달하지 못하며, `render_iou`는 isolated rollout dead-path 때문에 아직 의미가 흐려져 있습니다.  
-이런 상태에서 contract를 유지하면 모델 개선 여부를 판정할 수 없습니다.
+초기 분석에서 보였듯, 예전 `EntityVolumePredictor`는 `(bg, e0, e1)` class softmax 기반이었고 bg bias도 강했다. 
+현재 실실행 아키텍처는 이보다 진화했지만, 여전히 설계의 뿌리가 “class assignment”에 가깝다.
 
-그래서 contract는 아래처럼 쪼개야 합니다.
+이걸 근본적으로 버려야 한다.
 
----
+**삭제 이유**
 
-# 3. 새 contract 체계 제안
+* bg vs entity 경쟁, entity0 vs entity1 경쟁이 동시에 생김
+* same-depth/contact에서 한쪽 승자독식이 쉬움
+* “존재”와 “가시성”을 같은 축에서 다루게 됨
 
-## 3-1. C_topo_occ — depth-separated topology contract
+**대체**
 
-적용 대상: Occlusion benchmark만
-
-목표: 예측된 3D volume과 first-hit projection이 **앞/뒤 관계를 물리적으로 일관되게 표현**하는지 검증
-
-권장 지표:
-
-1. **projected_class_iou**
-
-   * visible_class와 gt_visible mask IoU
-   * 현재 저장소의 기본 평가 철학과 일치합니다. ([GitHub][1])
-
-2. **front_order_accuracy**
-
-   * overlap 픽셀에서 GT front entity와 predicted front entity 일치율
-
-3. **back_presence_recall**
-
-   * 뒤 entity가 amodal 또는 latent volume에서 완전히 소실되지 않았는지 측정
-
-4. **voxel_class_accuracy**
-
-   * `V_logits` argmax vs `V_gt` class match
-
-5. **iou_min**
-
-   * 두 entity 중 약한 쪽의 최소 IoU
-   * late collapse 감지에 유용함. 저장소 문서에서도 best checkpoint에 `iou_min`이 중요하게 언급됩니다. ([GitHub][1])
-
-6. **compact_occ**
-
-   * 단, depth-separated 장면에서만 사용
-   * same-depth에서는 금지
-
-7. **D_amo_occ**
-
-   * amodal 분리 정도
-   * same-depth에서는 금지
-
-합격 예시:
-
-* projected_class_iou ≥ 0.55
-* front_order_accuracy ≥ 0.90
-* back_presence_recall ≥ 0.80
-* iou_min ≥ 0.30
-* compact_occ, D_amo_occ는 pilot oracle 분포 기반으로 threshold 재설정
-
-여기서 중요한 점은 `compact`, `D_amo` 자체를 버리자는 것이 아닙니다.
-**같은 depth toy에는 쓰지 말고, depth-separated benchmark 전용으로 격리하자**는 것입니다. 
+* 각 entity는 **독립 density field**
+* background는 entity absence로 정의
+* visible은 ray compositing으로 나중에 계산
 
 ---
 
-## 3-2. C_id_col — collision identity contract
+### D. **현재 contract-driven selection 로직**
 
-적용 대상: Collision benchmark만
+현재 best checkpoint selection은 contract score와 val score의 혼합이다. `_save_checkpoint()`가 그 흐름을 쓴다. 
+이건 이제 버려야 한다.
 
-목표: same-depth 또는 near-depth collision에서 **chimera 없이 identity가 유지되는지** 검증
+**삭제 이유**
 
-권장 지표:
-
-1. **chimera_rate**
-
-   * composite frame에서 두 클래스 특징이 뒤섞인 실패율
-   * 이미 사용자 요약에서는 `R_chimera=0.000`으로 잘 잡히고 있으므로 유지 가치가 큽니다. 
-
-2. **two_object_presence**
-
-   * `P_2obj`
-   * 두 object가 모두 살아남는가
-   * 이미 현재 통과 중이므로 계속 봐야 합니다. 
-
-3. **entity_identity_margin**
-
-   * frame-level embedding에서 entity0/1 간 cosine margin
-   * 현재 `cosF`가 이 계열 역할을 하고 있는데, `la_feature_sep`가 0이라 사실상 metric이 아닌 설정 오류 탐지기가 되어버렸습니다. 따라서 이 지표는 유지하되 **loss on 상태에서만 contract에 포함**해야 합니다. 
-
-4. **balance score**
-
-   * 기존 `winner` 대체 지표
-   * 추천식:
-     [
-     \text{balance} = 1 - \frac{|vis_{e0} - vis_{e1}|}{vis_{e0}+vis_{e1}+\epsilon}
-     ]
-   * 완전 균형이면 1, 한쪽 쏠림이 심하면 0에 가까움
-   * 또는 `min/max` 비율 사용
-
-5. **trajectory identity consistency**
-
-   * overlap 이전/중/이후 프레임에서 같은 entity의 embedding drift 측정
-
-6. **isolation controllability gap**
-
-   * isolated rollout과 composite rollout 사이의 entity-specific delta
-   * isolated와 composite가 거의 같다면, control path는 죽어 있는 것입니다
-
-합격 예시:
-
-* chimera_rate ≤ 0.05
-* two_object_presence ≥ 0.90
-* entity_identity_margin ≥ pilot percentile 75
-* balance ≥ 0.75
-* isolation controllability gap ≥ δ_min
-
-여기서 핵심은 `winner ≤ 0.45` 같은 부정확한 threshold가 아니라, **대칭성**과 **분리성**을 직접 재자는 점입니다. 
+* 현재 contract는 최종 사용자 목표와 완전히 일치하지 않음
+* visible e0/e1가 한쪽 죽어도 통과하는 구조가 있었음
+* “잘 최적화된 잘못된 해법”을 best로 뽑을 수 있음
 
 ---
 
-## 3-3. C_bind — guide injection binding contract
+## 1.3 본질적으로 추가할 것
 
-적용 대상: 모든 benchmark 공통
+### A. **Entity-centric dynamic field**
 
-목표: guide path가 실제로 UNet generation에 영향을 주는지 검증
+핵심 추가다.
 
-이건 지금 굉장히 중요합니다.
-사용자 요약에 따르면 `render_iou`는 낮고, isolated rollout은 stage1에서 gate≈0이라 실제 차이를 거의 못 만들고 있습니다. 
-그렇다면 render_iou 자체보다 먼저 **control path 생존 여부**를 재야 합니다.
+현재는 “scene → class volume → projection”에 가깝다.
+앞으로는 다음이어야 한다.
 
-권장 지표:
+[
+\text{entity } i \text{ at time } t
+;\rightarrow;
+f_{i,t}(\mathbf{p}) = (\sigma_{i,t}(\mathbf{p}), a_{i,t}(\mathbf{p}), e_i)
+]
 
-1. **gate_open_ratio**
+여기서
 
-   * 각 injection block에서 gate 값이 실질적으로 0인지 아닌지
+* (\sigma_{i,t}): density / occupancy
+* (a_{i,t}): appearance feature
+* (e_i): time-invariant identity embedding
 
-2. **guide_feature_norm**
-
-   * injection 전에 assembler output norm
-
-3. **injected_delta_norm**
-
-   * injection 후 feature map 변화량
-
-4. **grad_norm_on_guide_path**
-
-   * backward 시 guide projection / gate 파라미터 gradient
-
-5. **isolated_vs_composite_feature_delta**
-
-   * composite guide와 isolated guide가 실제로 중간 feature를 다르게 만드는지
-
-합격 예시:
-
-* gate_open_ratio > 0.2
-* injected_delta_norm > ε
-* grad_norm_on_guide_path > ε
-* isolated_vs_composite_feature_delta > ε
-
-이 contract는 **실패하면 render_iou를 아직 보지 않는다**는 전제 조건 역할을 해야 합니다.
+즉 object 2개를 **각각 독립된 3D field**로 유지해야 한다.
 
 ---
 
-## 3-4. C_diff — diffusion stability contract
+### B. **Amodal identity memory**
 
-이 부분은 현재 비교적 안정적입니다. `diff_mse`는 이미 목표를 통과했습니다. 
-다만 유지할 필요는 있습니다.
+contact 중 가려져도 entity가 사라지지 않게 하려면,
+각 entity에 대한 latent memory가 있어야 한다.
 
-권장 지표:
+[
+m_i \leftarrow \text{persistent slot for entity } i
+]
 
-* noise_pred MSE
-* training loss variance
-* NaN/overflow count
-* guidance on/off robustness
+이 memory가
 
-합격 예시:
+* frame (t)의 field 생성
+* frame (t+1)의 continuation
+* occlusion 뒤 재등장
 
-* diff_mse ≤ 0.05
-* rolling std(loss) ≤ threshold
-* no catastrophic spike for N steps
-
----
-
-## 3-5. C_robust — 재현성 계약
-
-적용 대상: 모든 benchmark 공통
-
-현재 저장소의 ablation runner는 seed를 42로 고정합니다. 즉 지금 summary는 사실상 single-seed evidence입니다. ([GitHub][2])
-연구 단계에서는 최소 3 seeds가 필요합니다.
-
-권장 지표:
-
-* 3 seed mean ± std
-* failure rate over seeds
-* best-vs-last epoch gap
-* metric rank stability
-
-합격 예시:
-
-* 핵심 지표 std < 일정 수준
-* 3개 seed 중 2개 이상 동일 결론
+을 연결한다.
 
 ---
 
-# 4. 데이터셋 설계안
+### C. **Temporal slot consistency**
 
-현재 ablation runner는 `Phase62DatasetAdapter("toy/data_objaverse", n_frames=8)`를 사용합니다. 즉 현재 실험은 toy Objaverse 계열 데이터에 묶여 있습니다. ([GitHub][2])
-여기서 가장 큰 문제는 **데이터의 장면 가정이 단일 benchmark로 섞여 있다**는 점입니다.
+현재 trainer에는 permutation consistency와 centroid consistency가 있지만, rolling/contact shot에는 약하다. 
 
-따라서 데이터를 네 개의 split으로 다시 나누는 것을 권합니다.
+추가해야 할 것은:
 
-## 4-1. Split O1 — clean occlusion
-
-* entity A가 front, entity B가 back
-* depth separation 충분
-* overlap ratio 여러 단계로 제어
-* shape contrast 다양화
-
-용도:
-
-* C_topo_occ
-* C_bind
-* C_diff
-
-## 4-2. Split O2 — hard occlusion
-
-* depth separation은 있지만 overlap 크고 형태도 유사
-* cat+cat, dog+dog 같은 같은 계열 포함
-* ordering ambiguity가 생기기 쉬운 사례
-
-용도:
-
-* hardest occlusion generalization
-* factorized_fg_id vs independent_bce 비교
-
-## 4-3. Split C1 — same-depth collision
-
-* 거의 동일한 depth plane
-* physical contact / overlap frame 존재
-* entity separation이 핵심
-
-용도:
-
-* C_id_col
-* chimera suppression
-* identity consistency
-
-## 4-4. Split C2 — near-depth collision
-
-* depth는 아주 조금 차이 나지만 first-hit alone으로는 불안정한 사례
-* same-depth와 true occlusion의 중간 구간
-
-용도:
-
-* current architecture의 한계 경계선 탐색
+* slot-level contrastive temporal consistency
+* overlap 전/중/후에서 동일 entity matching
+* hidden entity가 reappear했을 때 same slot 유지
 
 ---
 
-# 5. 데이터 생성 상세 스펙
+### D. **Render-level direct supervision**
 
-## 5-1. 장면 변수
+surrogate metric이 아니라, 진짜 최종 목표를 directly 잡는 손실이 필요하다.
 
-각 sample 생성 시 로그로 남겨야 할 변수:
+예:
 
-* entity pair type
-* relative scale
-* camera azimuth/elevation
-* foreground/background assignment
-* mean depth gap
-* overlap ratio
-* contact duration
-* same-depth 여부
-* occlusion direction consistency
-* texture similarity score
-
-이 로그가 있어야 나중에 “어떤 조건에서 무너지는지”를 회귀 분석할 수 있습니다.
-
-## 5-2. Oracle sanity split
-
-각 split마다 **GT로 계산했을 때 달성 가능한 metric upper bound**를 먼저 기록하세요.
-
-이미 사용자 정리에서 same-depth toy에서는 `compact oracle max = 0.327`, `D_amo ≈ 0`이 나왔습니다. 
-이 작업을 모든 split에 대해 일반화해야 합니다.
-
-필수 산출물:
-
-* split별 oracle metric table
-* impossible metric list
-* threshold calibration note
-
-이걸 먼저 하지 않으면 또다시 “불가능한 contract”를 세우게 됩니다.
+* composite frame에서 object count 유지
+* per-entity visible survival
+* isolated-composite consistency
+* reappearance consistency
 
 ---
 
-# 6. 모델 family 설계
+# 2. 새 아키텍처 제안
 
-저장소 문서상 현재 핵심 family는 다음과 같습니다.
+## 2.1 전체 구조
 
-* `independent_bce` — 안정적 baseline
-* `factorized_fg_id` — main ablation family
-* `center_offset` — 별도 family
-* projected losses, structural losses는 실험적/보조적 상태 ([GitHub][1])
+다음 5개 모듈로 나눈다.
 
-따라서 실험군도 이 구조를 따라야 합니다.
-
-## 6-1. Family A — Stable baseline family
-
-목적: “되는 것”을 확실히 잡는 기준선
-
-* A0: independent_bce + volume-only
-* A1: independent_bce + freeze_bind_front
-* A2: independent_bce + multiscale injection
-* A3: independent_bce + bind warm-start
-
-이 family는 “최소 작동선”을 찾는 용도입니다.
-
-## 6-2. Family B — Main research family
-
-목적: factorization이 실제로 identity separation에 도움 되는지 검증
-
-* B0: factorized_fg_id + volume-only
-* B1: factorized_fg_id + freeze_bind_front
-* B2: factorized_fg_id + freeze_bind_fourstream
-* B3: factorized_fg_id + low-LR bind_fourstream
-* B4: factorized_fg_id + id-branch fix + feature_sep on
-* B5: factorized_fg_id + id-branch fix + bind warm-start
-
-문서상 `b2_fgid_freeze_bind_fourstream`이 현재 best factorized run이지만 late asymmetric drift와 `iou_min` collapse가 있습니다. 즉 이후 핵심은 **id-branch stabilization**입니다. ([GitHub][1])
-
-## 6-3. Family C — Diagnostic family
-
-목적: contract 분리 이후 metric 의미 확인
-
-* C0: amodal-only
-* C1: visible-only
-* C2: no-bind diagnostic
-* C3: bind-only without structural losses
-* C4: guide path randomization control
-
-이 family는 “metric이 실제로 원하는 현상을 재는가” 확인하는 용도입니다.
+1. **Entity Motion / Pose Module**
+2. **Entity Field Module**
+3. **Differentiable Renderer**
+4. **Structured Guide Encoder**
+5. **Video Refiner (Diffusion UNet)**
 
 ---
 
-# 7. 가장 중요한 구조 실험: guide injection dead-path 복구
+## 2.2 수식으로 본 전체 파이프라인
 
-현재 사용자 진단에서 render_iou 정체의 핵심은 isolated rollout dead path입니다. stage1에서 gate≈0이라 guide injection 자체가 약하고, isolated와 composite가 거의 동일합니다. 
-이건 architecture 성능 문제가 아니라 **회로가 끊겨 있는지**의 문제입니다.
+### 입력
 
-따라서 v39에서 가장 먼저 해야 하는 구조 실험은 아래입니다.
+* text prompt (y)
+* entity identity tokens (e_1, e_2)
+* time indices (t = 1,\dots,T)
 
-## 7-1. Bind warm-start
+### Step 1. motion / pose rollout
 
-목적: gate가 0 부근에 갇혀서 학습이 안 되는 문제를 방지
+각 entity의 time-varying pose를 생성:
 
-방법:
-
-* gate bias를 작은 양수로 초기화
-* guide projection scale을 초반 0.1~0.3 수준에서 시작
-* 첫 N epoch 동안 guide path gradient 보장
-
-기대효과:
-
-* isolated rollout과 composite rollout 차이가 early stage부터 생김
-
-## 7-2. Injection activation logging
-
-각 블록마다 로그:
-
-* pre-guide norm
-* guide norm
-* post-injection delta norm
-* gate mean/std
-* grad norm
-
-이건 매 epoch 또는 interval로 저장
-
-## 7-3. Feature perturbation sanity
-
-방법:
-
-* 같은 input latent에 대해 guide만 composite / e0-only / e1-only / zero-guide로 바꿔 forward
-* 중간 feature cosine distance 측정
-
-판정:
-
-* 네 경우가 거의 동일하면 control path 죽음
-* e0/e1 분리가 크면 controllability 살아 있음
-
-## 7-4. Random guide negative control
-
-방법:
-
-* 실제 guide 대신 permutation된 guide 입력
-* 성능이 거의 같다면 model이 guide를 안 쓰는 것
-
-이 실험은 굉장히 중요합니다.
-왜냐하면 render_iou가 낮아도 “guide path가 조금은 쓰이고 있는지”, 아니면 아예 무시되고 있는지 구분해주기 때문입니다.
+[
+g_{i,t} = \text{MotionNet}(e_i, y, t)
+]
 
 ---
 
-# 8. id-branch stabilization 실험
+### Step 2. per-entity field 생성
 
-문서상 factorized_fg_id는 all-bg collapse를 줄이기 위한 `p_fg * q_id` factorization이며, 실용적으로는 아직 asymmetric drift와 `iou_min` collapse가 남아 있습니다. ([GitHub][1])
-그러므로 이 branch를 본격적으로 개선하는 실험이 필요합니다.
+각 entity의 3D field:
 
-## 8-1. Foreground prior regularization
+[
+f_{i,t}(\mathbf{p}) = \text{FieldDecoder}(e_i, g_{i,t}, \mathbf{p})
+]
 
-문제:
-
-* 배경 우세 초기화 때문에 id 분기가 foreground 충분히 확보 전에 무력화될 수 있음
-* 실제 코드에서도 classifier bias는 bg class를 초기에 선호하도록 설정돼 있습니다. ([GitHub][3])
-
-실험:
-
-* fg occupancy prior
-* class prior annealing
-* bg bias decay schedule
-
-측정:
-
-* fg voxel recall
-* entity voxel symmetry
-* early epoch collapse frequency
-
-## 8-2. Symmetry loss
-
-문제:
-
-* entity0 / entity1 중 한쪽으로 쏠리는 drift
-
-실험:
-
-* per-entity voxel mass balance penalty
-* per-entity visible area balance penalty
-* 단, same-depth benchmark에서만 적용하지 말고 scene prior 고려
-
-주의:
-
-* 진짜 장면이 비대칭일 수 있으므로 무조건 균등 강제는 금지
-* 대신 batch-level 통계 regularization 추천
-
-## 8-3. Identity separation loss
-
-현재 `cosF`가 사실상 이 역할인데 설정상 꺼져 있었습니다. 
-따라서 명시적으로:
-
-* `la_feature_sep > 0`
-* entity feature contrastive loss
-* overlap frame hard negative mining
-
-측정:
-
-* feature cosine separation
-* identity retrieval accuracy
-* overlap-frame confusion drop
-
-## 8-4. Permutation consistency
-
-목적:
-
-* e0/e1 슬롯 이름만 바뀌었을 때 표현 구조가 일관적인지
-
-방법:
-
-* entity ordering swap augmentation
-* swap-consistency loss
-* projection output relabel 후 consistency 체크
-
-이 실험은 same-depth collision에서 매우 중요합니다.
-왜냐하면 첫-hit visible ownership은 바뀔 수 있어도 latent identity structure는 permutation-equivariant해야 하기 때문입니다.
+출력은
+[
+(\sigma_{i,t}(\mathbf{p}), a_{i,t}(\mathbf{p}))
+]
 
 ---
 
-# 9. stage schedule 실험
+### Step 3. differentiable rendering
 
-문서상 topology update schedule은 `S0`, `S1`, `S2`, `S3`로 이미 정리되어 있습니다. `S0`는 volume-only, `S1`은 stage1 volume + stage2 diffusion-only binding, `S2`는 low-LR joint, `S3`는 short joint fine-tune입니다. ([GitHub][1])
-이 구조를 그대로 두되, 스케줄 자체가 지금 문제와 어떻게 연결되는지 실험해야 합니다.
+카메라 ray (r(u,\lambda))에 대해
 
-## 9-1. 추천 스케줄 해석
+[
+\sigma_{i,t}(u,\lambda) = \sigma_{i,t}(r(u,\lambda))
+]
 
-* **S0**: topology learning only
-* **S1**: bind path 생존 확인
-* **S2**: topology 유지하며 gentle binding
-* **S3**: 마지막 end-to-end alignment
+전체 occlusion은 entity별 density의 합으로 정의:
 
-## 9-2. v39 스케줄 추천
+[
+\Sigma_t(u,\lambda)=\sum_i \sigma_{i,t}(u,\lambda)
+]
 
-### Phase v39a — measurement cleanup
+transmittance:
 
-* S0 + S1 only
-* 목적: volume가 먼저 되는지, bind가 살아나는지 확인
-* diffusion 성능보다 metric 정합성 회복이 목적
+[
+T_t(u,\lambda)=\exp\left(-\int_0^\lambda \Sigma_t(u,s)ds\right)
+]
 
-### Phase v39b — bind repair
+entity (i)의 visible contribution:
 
-* S1 수정판
-* gate warm-start
-* multiscale injection on/off 비교
+[
+V_{i,t}(u)=\int T_t(u,\lambda)\sigma_{i,t}(u,\lambda)d\lambda
+]
 
-### Phase v39c — factorized retrial
+entity (i)의 amodal presence:
 
-* B2/B3/B4/B5 비교
-* 핵심은 id-branch fix와 feature_sep on 효과
+[
+A_{i,t}(u)=1-\exp\left(-\int \sigma_{i,t}(u,\lambda)d\lambda\right)
+]
 
-### Phase v39d — full fine-tune
+depth cue:
 
-* S2 또는 S3
-* only after C_bind passes
-
-즉 지금은 S3로 오래 미는 것이 아니라, **S1에서 회로가 살아나는지 먼저 보는 게 맞습니다.**
-
----
-
-# 10. 평가 프로토콜 상세
-
-## 10-1. 샘플 단위 평가
-
-각 샘플에 대해 저장:
-
-* input prompt / entity pair
-* GT visible/amodal/front/back
-* predicted volume summary
-* projected visible class map
-* composite GIF
-* isolated e0 GIF
-* isolated e1 GIF
-* guide norm trace
-* feature separation trace
-
-## 10-2. 프레임 단위 평가
-
-특히 overlap frame을 별도 그룹으로 분리
-
-저장소 문서도 collision frame을 따로 보라고 되어 있습니다. ([GitHub][1])
-따라서 프레임을 세 구간으로 나누세요.
-
-* pre-overlap
-* overlap
-* post-overlap
-
-각 구간에서:
-
-* P_2obj
-* chimera rate
-* identity margin
-* visible IoU
-* isolated/composite gap
-
-이렇게 보면 “겹칠 때만 무너지는지”, “겹친 뒤 identity를 회복 못 하는지”가 보입니다.
-
-## 10-3. Epoch 단위 평가
-
-매 epoch 전부 시각화할 필요는 없고, 다음 저장 권장:
-
-* every 5 epochs: scalar metrics
-* every 10 epochs: qualitative panel
-* best / latest / early-collapse checkpoint 저장
-
-## 10-4. Seed 단위 평가
-
-* seed = 3개 이상
-* metric mean/std
-* failure mode consistency
-* qualitative exemplar same prompt across seeds
+[
+D_t(u)=\frac{\int \lambda \sum_i T_t(u,\lambda)\sigma_{i,t}(u,\lambda)d\lambda}
+{\int \sum_i T_t(u,\lambda)\sigma_{i,t}(u,\lambda)d\lambda+\epsilon}
+]
 
 ---
 
-# 11. v39 실험군 구체 제안
+### Step 4. guide encoding
 
-이제 실제로 바로 돌릴 수 있는 설계안 형태로 적겠습니다.
+Structured guide:
 
-## Experiment Group 1 — Contract cleanup run
-
-목적: “지금 모델이 진짜 어디까지 되는지” 측정
-
-설정:
-
-* 현재 best baseline 유지
-* `winner` 제거, `balance`로 교체
-* same-depth split에서 `compact`, `D_amo` 제외
-* `render_iou`는 참고만, contract pass/fail에는 미반영
-* `la_feature_sep=0` 상태에서는 `cosF` pass/fail 미반영
-
-예상 결과:
-
-* 현재 상태에서 실제 통과 가능한 계약과 불가능 계약이 분리됨
-* 연구팀 내부 의사결정이 쉬워짐
-
-산출물:
-
-* `contract_v2.md`
-* impossible metrics report
-* split별 oracle table
-
-## Experiment Group 2 — Bind-path diagnosis
-
-목적: isolated rollout dead path 확인
-
-설정:
-
-* A1 vs A2 vs no-bind vs bind-warm-start
-* 로그: gate, delta norm, grad norm, isolated/composite delta
-
-판정:
-
-* delta가 살아나면 다음 단계 진행
-* 죽어 있으면 architectural repair 먼저
-
-산출물:
-
-* bind viability plot
-* per-block activation dashboard
-
-## Experiment Group 3 — Feature separation recovery
-
-목적: `cosF` 문제를 “설정 오류”에서 “실제 성능 측정”으로 전환
-
-설정:
-
-* B2 baseline
-* B2 + feature_sep on
-* B2 + feature_sep on + hard negative overlap mining
-* B2 + feature_sep on + swap consistency
-
-판정:
-
-* identity margin 상승
-* overlap confusion 감소
-* chimera further suppression
-
-산출물:
-
-* cosine separation curves
-* overlap retrieval matrix
-
-## Experiment Group 4 — Dataset disentanglement
-
-목적: same-depth와 depth-separated를 분리 평가
-
-설정:
-
-* 동일 모델을 O1/O2/C1/C2에 각각 테스트
-* contract를 split별로 다르게 적용
-
-판정:
-
-* 모델이 진짜 occlusion expert인지, collision expert인지 드러남
-
-산출물:
-
-* capability matrix
-* failure regime map
-
-## Experiment Group 5 — Factorized id-branch fix
-
-목적: B-family를 진짜 연구 family로 끌어올리기
-
-설정:
-
-* B2
-* B2 + fg prior
-* B2 + fg prior + feature_sep
-* B2 + fg prior + feature_sep + bind warm-start
-* B2 + fg prior + feature_sep + permutation consistency
-
-판정:
-
-* iou_min collapse 완화
-* asymmetric drift 완화
-* split C1/C2에서 identity improvement
-
-산출물:
-
-* branch ablation table
-* late-epoch collapse analysis
+[
+G_t = \text{GuideEncoder}(V_{1,t},V_{2,t},A_{1,t},A_{2,t},D_t)
+]
 
 ---
 
-# 12. 우선순위
+### Step 5. diffusion refinement
 
-지금 가장 많이 하는 실수는 “모든 걸 한 번에 고치는 것”입니다.
-우선순위는 반드시 이렇게 가야 합니다.
+최종 frame 생성:
 
-## Priority 1
+[
+\hat{x}_t = \text{DiffusionUNet}(z_t, y, G_t)
+]
 
-**측정 불가능한 contract 제거**
-
-* winner 교체
-* same-depth에서 compact/D_amo 제거
-* render_iou를 gating sanity pass 뒤로 미룸
-
-이 단계가 없으면 이후 모든 실험 해석이 오염됩니다. 
-
-## Priority 2
-
-**bind path 생존 확인**
-
-* gate warm-start
-* injection delta logging
-* isolated/composite difference 확인
-
-이 단계가 없으면 control-related metric은 모두 무의미합니다. 
-
-## Priority 3
-
-**same-depth vs depth-separated split**
-
-* benchmark 분리
-* oracle metric calibration
-
-이 단계가 없으면 topology metric과 identity metric이 계속 섞입니다.
-
-## Priority 4
-
-**factorized id-branch fix**
-
-* fg prior
-* feature separation
-* permutation consistency
-
-이제서야 진짜 model improvement 단계입니다.
+여기서 diffusion은 **scene를 만들지 않고 appearance를 refine**하는 역할만 한다.
 
 ---
 
-# 13. 실패했을 때의 해석 규칙
+# 3. 새 loss 설계
 
-실험 설계가 좋은지 나쁜지는 **실패를 해석할 수 있느냐**로 판가름 납니다.
+## 3.1 Rendering loss
 
-아래처럼 failure decision tree를 두세요.
+최종 composite reconstruction:
 
-### Case A
+[
+\mathcal{L}_{render}
+====================
 
-C_diff fail
-→ diffusion instability가 원인. topology/bind/identity 논의 중단
+\sum_t |\hat{x}_t - x_t|_1
+]
 
-### Case B
-
-C_diff pass, C_bind fail
-→ guide path dead. render_iou/isolated 계열 논의 금지
-
-### Case C
-
-C_bind pass, C_topo_occ fail on O1/O2
-→ volume/projection 구조 자체 문제 또는 depth supervision 부족
-
-### Case D
-
-C_topo_occ pass, C_id_col fail on C1/C2
-→ current first-hit architecture가 same-depth identity disentanglement에 한계
-→ latent identity branch 강화 필요
-
-### Case E
-
-all pass except robustness
-→ single-seed trick 가능성
-→ seed/scene diversity 확장 필요
-
-이렇게 해야 각 실험이 다음 액션을 명확히 결정해줍니다.
+또는 perceptual loss 포함.
 
 ---
 
-# 14. 논문/연구 관점에서의 서사 구조
+## 3.2 Visible supervision
 
-이 설계안의 장점은 단순히 성능을 올리는 게 아니라, 나중에 결과가 어떻게 나오든 **논문 서사**가 생긴다는 점입니다.
+GT visible masks (M^{vis}_{i,t}):
 
-가능한 서사는 세 가지입니다.
+[
+\mathcal{L}_{vis}
+=================
 
-## 서사 1
-
-“First-hit volume model is sufficient for occlusion, insufficient for same-depth collision.”
-
-이 경우:
-
-* O1/O2는 잘 됨
-* C1/C2는 약함
-* 결론: visible ownership과 identity disentanglement는 다른 문제
-
-## 서사 2
-
-“Factorized fg-id + bind repair closes much of the gap.”
-
-이 경우:
-
-* B-family가 A-family를 명확히 이김
-* same-depth collision에서도 향상
-* 결론: factorized latent identity helps
-
-## 서사 3
-
-“Evaluation mismatch was the main blocker.”
-
-이 경우:
-
-* contract 수정 후 다수가 통과
-* 실제 모델은 생각보다 이미 괜찮았음
-* 결론: prior experimental grid was miscalibrated
-
-현재 사용자 정리상황을 보면, 실제로는 **서사 3과 서사 1이 동시에 나올 가능성**이 큽니다. 일부 실패는 불가능한 threshold였고, 일부는 진짜 same-depth/guide 구조 문제였기 때문입니다.  
+\sum_{i,t}\mathrm{Dice}(V_{i,t}, M^{vis}_{i,t})
+]
 
 ---
 
-# 15. 바로 실행 가능한 v39 상세안
+## 3.3 Amodal supervision
 
-마지막으로, 실제 실행 순서 수준으로 적겠습니다.
+GT or pseudo amodal masks (M^{amo}_{i,t}):
 
-## v39.0 — Evaluation reset
+[
+\mathcal{L}_{amo}
+=================
+
+\sum_{i,t}\mathrm{Dice}(A_{i,t}, M^{amo}_{i,t})
+]
+
+이게 있어야 가려진 entity가 latent에서 사라지지 않는다.
+
+---
+
+## 3.4 Identity separation
+
+entity pooled feature (h_{i,t}):
+
+[
+h_{i,t} = \mathrm{Pool}(a_{i,t}, \sigma_{i,t})
+]
+
+contrastive / triplet loss:
+
+[
+\mathcal{L}_{id}
+================
+
+\sum_t
+|h_{1,t} - e_1|^2
++
+|h_{2,t} - e_2|^2
++
+\max(0, m - |h_{1,t} - h_{2,t}|)
+]
+
+---
+
+## 3.5 Temporal slot consistency
+
+같은 entity는 time에서 같은 slot 유지:
+
+[
+\mathcal{L}_{temp}
+==================
+
+\sum_{i,t}
+| h_{i,t+1} - \mathcal{W}(h_{i,t}) |
+]
+
+혹은 correspondence-based contrastive loss.
+
+---
+
+## 3.6 Occlusion consistency
+
+visible과 amodal 관계 강제:
+
+[
+V_{i,t}(u) \le A_{i,t}(u)
+]
+
+[
+\mathcal{L}_{occ}
+=================
+
+\sum_{i,t,u}
+\max(0, V_{i,t}(u)-A_{i,t}(u))
+]
+
+또는 hidden fraction regularizer.
+
+---
+
+## 3.7 Isolation consistency
+
+entity (i)만 남긴 isolated render (\hat{x}^{iso}*{i,t})를 만들고,
+solo frame (x^{solo}*{i,t}) 또는 pseudo-label과 비교:
+
+[
+\mathcal{L}_{iso}
+=================
+
+\sum_{i,t}
+|\hat{x}^{iso}*{i,t} - x^{solo}*{i,t}|
+]
+
+현재 trainer에도 isolated diffusion loss가 있지만, structured renderer 기준으로 더 직접적으로 재설계해야 한다. 
+
+---
+
+## 3.8 Total loss
+
+[
+\mathcal{L}
+===========
+
+\lambda_{render}\mathcal{L}*{render}
++
+\lambda*{vis}\mathcal{L}*{vis}
++
+\lambda*{amo}\mathcal{L}*{amo}
++
+\lambda*{id}\mathcal{L}*{id}
++
+\lambda*{temp}\mathcal{L}*{temp}
++
+\lambda*{occ}\mathcal{L}*{occ}
++
+\lambda*{iso}\mathcal{L}_{iso}
+]
+
+---
+
+# 4. 데이터셋 설계
+
+## 4.1 반드시 필요한 GT
+
+각 frame (t)마다 최소한 다음이 필요하다.
+
+* RGB frame (x_t)
+* entity visible mask (M^{vis}*{1,t}, M^{vis}*{2,t})
+* depth map (d_t)
+* camera parameters
+* entity identity labels
+* 가능하면 solo render of each entity
+* 가능하면 amodal mask
+
+현재 repo는 depth map, entity masks, depth order로부터 V_gt를 만들 수 있다. 이건 그대로 살린다. 
+
+---
+
+## 4.2 데이터 split
+
+### Split A: clean layered occlusion
+
+* 앞/뒤 depth 분리 명확
+* overlap 있음
+* identity 유지가 쉬운 케이스
+
+### Split B: same-depth / near-depth contact
+
+* rolling/contact 핵심 데이터
+* hardest regime
+
+### Split C: temporal reappearance
+
+* 한 entity가 거의 사라졌다가 다시 등장
+* memory/temporal consistency 테스트
+
+### Split D: style variation
+
+* cat, dog, similar silhouettes, texture confound
+
+---
+
+## 4.3 dataset generation 원칙
+
+1. **solo frames를 반드시 저장**
+
+   * isolated loss와 evaluation에 필수
+
+2. **camera pose와 object pose를 저장**
+
+   * temporal warp / correspondence에 필요
+
+3. **collision difficulty를 메타데이터로 저장**
+
+   * overlap ratio
+   * depth gap
+   * front/back switches
+   * contact duration
+
+---
+
+## 4.4 추천 데이터 구성 비율
+
+* 30% clean layered
+* 30% near-depth contact
+* 25% hard same-depth rolling
+* 15% reappearance / partial occlusion stress
+
+---
+
+# 5. 학습 단계 설계
+
+## Stage 0. Dataset validation
+
+먼저 oracle metric부터 계산한다.
+
+* GT visible IoU upper bound
+* GT amodal consistency
+* overlap statistics
+* same-depth difficulty histogram
+
+이 단계 없이 threshold를 세우면 또 같은 문제가 반복된다.
+
+---
+
+## Stage 1. Entity field pretraining
 
 목표:
 
-* contract_v2 도입
-* split tagging 도입
-* oracle calibration
+* diffusion 없이 field + renderer만 먼저 학습
 
-수정:
+학습:
+[
+\mathcal{L}*{vis} + \mathcal{L}*{amo} + \mathcal{L}*{id} + \mathcal{L}*{temp}
+]
 
-* `winner` → `balance`
-* `compact`, `D_amo`는 O-split only
-* `cosF`는 feature_sep on 이후만 contract 포함
-* `render_iou`는 C_bind pass 이후만 hard contract 포함
+출력:
 
-성공 기준:
+* stable (V_{i,t}), (A_{i,t})
 
-* 실험 결과 해석 가능해짐
-
-## v39.1 — Bind sanity
-
-목표:
-
-* guide path 살아있는지 검증
-
-설정:
-
-* A1 baseline
-* A1 + gate warm-start
-* A2 multiscale
-* no-bind control
-
-로그:
-
-* gate mean/std
-* injected delta norm
-* isolated/composite feature delta
-* render_iou 참고치
-
-성공 기준:
-
-* at least one setting in C_bind pass
-
-## v39.2 — Feature separation recovery
-
-목표:
-
-* same-depth collision에서 identity margin 회복
-
-설정:
-
-* B2 baseline
-* B2 + `la_feature_sep > 0`
-* B2 + hard negatives
-* B2 + permutation consistency
-
-성공 기준:
-
-* cosF 또는 identity margin 유의 개선
-* chimera/overlap confusion 감소
-
-## v39.3 — Split generalization
-
-목표:
-
-* O/C benchmark capability matrix 확립
-
-설정:
-
-* best A-family, best B-family 각각 O1/O2/C1/C2 평가
-
-성공 기준:
-
-* strong vs weak regime 명확화
-
-## v39.4 — Robustness
-
-목표:
-
-* 3 seeds
-* top-2 configs only
-* split별 평균/분산 측정
-
-성공 기준:
-
-* 연구 결론이 seed-dependent 아님
+이 단계가 지금 코드에서 가장 부족하다.
+현재는 structure와 diffusion이 너무 빨리 얽혀 있다. 
 
 ---
 
-# 16. v39 실험 진행 결과 (2026-04-15 기준)
+## Stage 2. Structured guide pretraining
 
-## 구현 완료 사항
+목표:
 
-| Priority | 내용 | 상태 | Config |
-|---|---|---|---|
-| P1 | contract_v2 도입 (winner→balance, compact/D_amo occ only) | ✅ 완료 | v39a |
-| P2 | bind path repair (gate warm-start, delta logging) | ✅ 완료 | v39b |
-| P3 | occ/col benchmark split (LAYERED 모드, 56 scenes) | ✅ 완료 | v39d |
-| P4 | factorized id-branch fix (spatial coherence TV, fg prior, perm consist) | ✅ 완료 | v39e (대기중) |
+* guide encoder가 실제로 scene 정보를 잘 담게 만들기
 
-## 실험별 현황 (ep204-214 기준)
+입력:
 
-### v39a (GPU0, P1 baseline)
-- ep214/220, 곧 종료
-- LCC=0.549, overlay=0.266 (C_guide ✗), diff_mse=0.0503 (C_diff ✗)
-- C_bind만 통과. 가장 약한 결과 — P2/P3/P4 없이는 한계 명확
+* (V_1,V_2,A_1,A_2,D)
 
-### v39b (GPU1, P2 bind repair)
-- ep214/220, 곧 종료
-- **C_diff 통과** (diff_mse=0.0491 ≤ 0.05) — ep184에서 0.0504였으나 개선
-- C_guide ✓, C_bind ✓, C_diff ✓, C_render ✓/✗ (IoU=0.055, 0.25 미달로 oscillate)
-- C_topo ✗: LCC=0.530 (0.85 필요) — stage3 volume frozen으로 개선 불가
-- 최고 score: 0.9250 (ep199, 4/6 contracts pass)
+출력:
 
-### v39c (GPU2, P2 + feature_sep)
-- ep216/220, 곧 종료  
-- cosF: 0.499 (ep0) → 0.025 (ep124) → feature separation 검증 완료
-- C_diff ✓ (diff_mse=0.0493), C_bind ✓
-- C_guide oscillating (overlay=0.320-0.350)
-- C_topo ✗: LCC=0.545 (v39b보다 약간 높지만 0.85에 한참 미달)
+* block-level guide tensor
 
-### v39d (GPU3, P3 occ track)
-- ep107/220, stage2 진입
-- **LCC=0.762 (ep89 peak)** — col variant(0.53-0.55)보다 현저히 높음
-- P3 가설 검증: 깊이 분리된 데이터로 entity 볼륨 cohesion이 자연스럽게 개선
-- ep104: LCC=0.689 (stage2 시작으로 소폭 하락, 회복 기대)
-- 아직 stage2 초반 — stage3까지 모니터링 필요
+학습:
 
-### v39e (대기중, P4 LCC fix)
-- v39a 종료 시 GPU0에서 자동 실행 (launcher PID 3010795)
-- lambda_spatial_coherence=0.3, lambda_fg_prior=1.0, lambda_perm_consist=0.2
-- max_gate=0.40 (0.35에서 상향 — overlay oscillation 해결)
-- stage1(ep0-99)에서 TV regularization → LCC 0.60→0.75+ 기대
-
-## 주요 발견
-
-1. **LCC가 C_topo의 유일한 blocker**: v39b/c에서 LCC=0.53-0.55는 stage3에서 volume이 frozen되면서 고착. TV regularization을 stage1/2에 적용해야 함 (v39e).
-
-2. **occ 데이터가 LCC에 유리**: v39d LCC=0.762 vs col LCC=0.55. 깊이 분리 자체가 entity 볼륨 cohesion을 도움.
-
-3. **C_render IoU oscillation**: IoU=0.054-0.056 (≥0.25 미달) — LCC 낮은 fragmented 볼륨에서 렌더링 품질 저하. LCC 개선되면 함께 개선될 것으로 예상.
-
-4. **C_guide gate ceiling bug 수정**: tanh(atanh(0.35))=0.35000...003 으로 floating-point 경계 실패 → +1e-6 tolerance 추가.
-
-5. **cosF feature separation 검증**: la_feature_sep=1.0으로 stage2+ 이후 cosF 0.499→0.025 달성.
+* guide reconstruction auxiliary loss
+* zero-guide vs full-guide distinguishability
+* isolated/composite separation
 
 ---
 
-# 17. 한 줄 결론
+## Stage 3. Diffusion refinement coupling
 
-가장 중요한 것은 이겁니다.
+이제 diffusion과 결합한다.
 
-**v39의 목적은 성능 향상이 아니라, “Phase 62가 무엇을 실제로 풀 수 있고 무엇을 아직 못 푸는지”를 객관적으로 분리해내는 실험 체계를 만드는 것입니다.**
-현재 저장소는 문서상 분명히 hard first-hit visible ownership을 채택하고 있으므로, 실험안도 그 철학에 맞게 **occlusion 문제와 collision identity 문제를 분리**해서 설계해야 합니다. 그렇게 해야만 `independent_bce`가 안정 baseline으로서 어디까지 되는지, `factorized_fg_id`가 정말 identity disentanglement에 도움이 되는지, 그리고 bind path가 실제로 generation을 제어하는지 판단할 수 있습니다. ([GitHub][1])  
+학습:
+[
+\mathcal{L}*{render} + \lambda*{iso}\mathcal{L}_{iso}
+]
 
-원하시면 다음 답변에서는 제가 이어서 바로
-**“v39~v41 실험표를 표 형식으로, 각 실험의 config 변경값 / 기대 결과 / 실패 시 해석까지 포함해서”** 정리해드리겠습니다.
-
-[1]: https://raw.githubusercontent.com/merrybabyxmas/raymarching/main/ARCHITECTURE.md "raw.githubusercontent.com"
-[2]: https://raw.githubusercontent.com/merrybabyxmas/raymarching/main/scripts/run_phase62_ablations.py "raw.githubusercontent.com"
-[3]: https://raw.githubusercontent.com/merrybabyxmas/raymarching/main/models/phase62_entity_volume.py "raw.githubusercontent.com"
-
-
+이때 backbone은 low-LR로만 조정하고,
+scene module은 쉽게 collapse하지 않게 보호해야 한다.
 
 ---
 
-# 17. v39 최종 결과 (2026-04-15 완료)
+## Stage 4. Temporal fine-tuning
 
-## 핵심 발견: freeze_fg_spatial_stage3
+video-level temporal coherence를 강화한다.
 
-**v39h가 전체 contract 통과 달성** (ep189-219, 6회 ALL:PASS).
+추가:
 
-### 근본 원인 체인
-
-```
-v39a/b/c/e 실패 원인:
-1. freeze_vol_stage3=True → ID 로짓 동결
-2. freeze_fg_spatial_stage3=False → p_fg 계속 업데이트
-3. stage3에서 fg_spatial이 LCC와 overlay를 하락시킴
-   - LCC: 0.576 (ep164) → 0.519-0.532 (ep199-214)
-   - overlay: 0.358 → 0.315-0.334
-
-v39h 수정:
-freeze_fg_spatial_stage3=True → entity_probs 완전 동결
-- LCC: 0.556-0.624 전 구간 유지 (0.55 임계값 통과)
-- overlay: 0.351-0.381 전 구간 유지 (0.35 임계값 통과)
-```
-
-### Contract 재보정 내역
-
-| 지표 | 이전 | 변경 후 | 근거 |
-|------|------|---------|------|
-| LCC 임계값 | 0.85 | 0.55 | Oracle GT LCC=0.19 (K=8,H=16,W=16 해상도 한계) |
-| CGUIDE_GATE_HI | 0.35 | 0.40 | v39e/f/g max_gate=0.40 설계 반영 |
-| C_render IoU | hard gate | 표시만 | render IoU=0.055 = random level (guide가 위치 제어 못함) |
-
-### v39h ep219 최종 지표
-
-```
-compact=0.404  LCC=0.526  overlay=0.368  gate=0.40
-diff_mse=0.0490  D_vis=0.282  iou_min=0.164
-ALL:PASS (6 evals), C_robust: consec=5+ (new contract 기준)
-```
-
-### 미해결 과제
-
-- **render IoU=0.055**: guide injection이 entity 공간 위치를 제어하지 못함.
-  M_id=0.651 (entity 구분)은 되지만 올바른 위치에 생성 안 됨.
-  → 더 강한 guide injection 아키텍처 필요.
-- **C_robust 로깅**: old contract.py로 실행된 v39h는 consec=1로 기록됨.
+* slot matching
+* reappearance consistency
+* long-range identity consistency
 
 ---
 
-## Section 18: Phase 62 v40 — Amodal Dual-Path Guide (2026-04-15)
+# 6. 추론 단계 설계
 
-### 핵심 발견: four_stream guide family가 이미 구현되어 있었음
+## 입력
 
-`conditioning.py:163-172`에 `four_stream` guide family가 이미 구현되어 있었으나
-모든 실험 config가 `guide_family: dual`만 사용. 이것이 guide injection dead path의
-구조적 원인.
+* text prompt: `"a cat and a dog rolling together on the grass"`
+* optional trajectory prior / motion seed
 
-**dual vs four_stream 차이:**
+## Step 1. entity parse
 
-| Guide Family | 전달 내용 | Contact frame에서 |
-|-------------|---------|----------------|
-| dual | front_probs weighted feature blend (bg+e0+e1 혼합) | 한 entity 소실 |
-| four_stream | vis_e0, vis_e1, (amo_e0-vis_e0), (amo_e1-vis_e1) 별도 | 두 entity 모두 전달 |
+prompt에서 entity 2개를 추출한다.
 
-`four_stream`에서 `back_e1 = (amo_e1 - vis_e1) * h_e1`:
-entity1이 완전히 occluded될 때도 amodal field가 있으면 back stream이 entity1 identity를
-UNet에 전달 → post-contact에서도 entity1이 살아있을 수 있음.
+[
+(e_1=\text{cat},; e_2=\text{dog})
+]
 
-### 구현 변경 사항 (2026-04-15)
+## Step 2. motion rollout
 
-**losses.py 추가:**
-- `loss_amodal_entity_coverage(vol_outputs, min_coverage)`: 양쪽 entity 모두 amodal
-  coverage ≥ min_coverage 강제. four_stream back stream 활성화에 필수.
-- `loss_temporal_centroid_consistency(entity_probs_frames, margin)`: centroid 기반
-  temporal slot consistency. volumetric overlap 기반 loss_permutation_consistency의
-  contact-robust 대안.
+[
+g_{1,1:T}, g_{2,1:T}
+]
 
-**conditioning.py 수정:**
-- `GuideInjectionManager.__init__`에 `guide_max_ratio` 파라미터 추가 (default=0.1)
-- Hook에서 `max_ratio=self.guide_max_ratio` 전달 → config에서 guide 강도 제어 가능
+## Step 3. field generation
 
-**system.py 수정:**
-- `config.guide_max_ratio`를 `GuideInjectionManager`에 전달
+[
+f_{1,1:T}, f_{2,1:T}
+]
 
-**ablation_trainer.py 수정:**
-- `lambda_amodal_coverage` 및 `lambda_temporal_centroid` 처리 추가
-- 새 loss들 import
+## Step 4. visible/amodal rendering
 
-**새 config:**
-- `b1_v40a_fourstream_s7.yaml`: four_stream + guide_max_ratio=0.15 + lambda_amodal_coverage=0.5
-- `b1_v40b_fourstream_strong_s7.yaml`: four_stream + guide_max_ratio=0.30 + max_gate=0.50 + lambda_temporal_centroid=0.1
+[
+V_{1,t},V_{2,t},A_{1,t},A_{2,t},D_t
+]
 
-**diagnostic script:**
-- `scripts/diagnose_guide_viability.py`: guide_feature_norm, amodal_coverage, amodal_spatial_cosine 측정
+## Step 5. diffusion refinement
 
-### v40 실험 결과 (2026-04-16)
+[
+\hat{x}_t = \text{UNet}(z_t, y, G_t)
+]
 
-| 실험 | 핵심 변경 | 최종 결과 | 실패 원인 |
-|------|----------|---------|---------|
-| v40a | four_stream, max_ratio=0.15, spatial_h=16 | ALL:FAIL (ep219) | LCC=0.525 < 0.55 (recalib 필요), render IoU=0.041 |
-| v40b | four_stream, max_ratio=0.30, max_gate=0.50 | ALL:FAIL (ep219) | gate=0.50 > old CGUIDE_GATE_HI=0.40, overlay 붕괴 |
-| v40c | multiscale inject (4 blocks), spatial_h=16 | ALL:FAIL (ep219) | overlay drift 0.364→0.341, diff_mse=0.0493(✓ 하지만 overlay<0.35) |
-| v40d | aggressive gate (max_gate=0.70), spatial_h=16 | ALL:FAIL (ep219) | gate=0.70 > old contract range [0.1,0.5], diff_mse=0.0498(✓) |
-| **v40e** | **spatial_h=32, feat_dim=320, freeze_guide_s3** | **running (GPU 2)** | — |
-| **v40f** | **spatial_h=32, feat_dim=320, la_diff=2.0, freeze_guide_s3** | **running (GPU 3)** | — |
+## Step 6. optional consistency correction
 
-### v40c/d 핵심 발견 (2026-04-16)
+* object count check
+* identity drift detector
+* regenerate local window if violated
 
-**render IoU 근본 한계**: 16×16 spatial volume에서는 entity mask 투영이 2픽셀 미만 분리 → random level(0.055)에서 탈출 불가.
-- v40c: multiscale inject (4 blocks, up3=32×32) 추가에도 render IoU=0.056 — injection resolution이 아니라 **volume resolution**이 병목.
-- v40d: gate 강화(0.70)에도 render IoU=0.057 — gate strength로는 해결 불가.
+---
 
-**Stage3 overlay drift**: `freeze_vol_stage3=true` + `freeze_fg_spatial_stage3=true` 조합 시 `lambda_overlay_preserve_s3` 가 no-op.
-- 이유: overlay preserve loss gradient가 frozen volume (fg_spatial_head) 에 흐를 수 없음.
-- 결과: guide assembler (block_projectors, guide_gates)가 stage3에서 계속 훈련 → overlay 0.364→0.341 drift
-- 수정: `freeze_guide_stage3: true` — guide assembler도 stage3에 동결 (ablation_trainer.py에 구현)
+# 7. 평가 지표 재설계
 
-**diff_mse plateau**: v40c ep199-219 구간 0.0503-0.0493 (threshold 0.050). ep219에서 겨우 통과.
-- 원인: la_diff=1.0 vs la_vol=3.0 경쟁. v40f에서 la_diff=2.0으로 조기 통과 기대.
+현재처럼 contract pass/fail 중심이 아니라, 최종 목표 aligned metric으로 간다.
 
-### v40e/f 설계 근거 (spatial_h=32)
+## 7.1 반드시 써야 할 metric
 
-**feat_dim 변경**: system.py `feat_dim` config-driven 화 (기존: hardcoded 640)
-- v40e/f: `feat_dim=320` (up_blocks.3 출력), `backbone_primary_idx=2`
-- run_phase62_ablations.py: `backbone_primary_idx` config 반영
+### Per-entity visible survival
 
-**inject_config: multiscale** 사용 시 up3 (32×32) 직접 injection → volume resolution과 정확히 일치
-- 기대: render IoU가 random level(0.055)을 벗어나 >0.10 달성
+[
+S_i = \frac{1}{T}\sum_t \mathbf{1}[V_{i,t} \text{ above threshold}]
+]
 
-**코드 변경 요약:**
-- `system.py`: `feat_dim = int(getattr(config, "feat_dim", 640))`
-- `scripts/run_phase62_ablations.py`: `backbone_primary_idx = int(getattr(config, "backbone_primary_idx", 1))`
-- `training/phase62/ablation_trainer.py`: `freeze_guide_stage3` 지원 추가 (stage3에서 guide assembler freeze)
+### Visible IoU min
+
+[
+\min(\mathrm{IoU}*{vis,e0}, \mathrm{IoU}*{vis,e1})
+]
+
+### Amodal IoU min
+
+[
+\min(\mathrm{IoU}*{amo,e0}, \mathrm{IoU}*{amo,e1})
+]
+
+### Reappearance accuracy
+
+가려졌다가 다시 나온 entity가 같은 identity인지
+
+### Composite-isolated consistency
+
+isolated render와 composite 내 해당 entity crop이 같은지
+
+### Two-object recognition score
+
+외부 detector / embedding 모델로 composite에서 두 object가 감지되는지
+
+---
+
+## 7.2 버려야 할 metric
+
+* `winner`류 balance 단독 metric
+* gate 자체가 높다는 이유로 pass
+* render IoU를 참고치로만 두는 방식
+* contract score 혼합으로 best model 선택
+
+---
+
+# 8. 현재 코드 기준 구체적 리팩토링 계획
+
+## 8.1 유지 파일
+
+* `scripts/build_volume_gt.py` 또는 그 실사용 버전
+  → depth/mask/order 기반 GT builder 유지. 
+
+* `models/phase62/projection.py`
+  → transmittance renderer 철학 유지, class-world 대신 entity-field world로 일반화. 
+
+* `models/phase62/conditioning.py`
+  → block projector, gate-after-normalization, injection manager 유지. guide family 다중 분기 제거 후 단일 structured guide encoder로 개편. 
+
+---
+
+## 8.2 삭제 / 통합 파일
+
+* 구버전 `models/phase62_conditioning.py`
+  → 삭제. 
+
+* `guide_family` switch
+  → `front_only`, `dual`, `none` mainline 제거
+
+* 복잡한 contract / score selection 로직
+  → evaluator 중심으로 단순화
+
+---
+
+## 8.3 새로 만들 파일
+
+### `models/entity_field.py`
+
+역할:
+
+* entity identity + pose → density/appearance field
+
+### `models/renderer.py`
+
+역할:
+
+* per-entity ray-marching
+* visible/amodal/depth rendering
+
+### `models/guide_encoder.py`
+
+역할:
+
+* ([V_1,V_2,A_1,A_2,D]) → multiscale guide
+
+### `training/losses_entity.py`
+
+역할:
+
+* visibility / amodal / identity / temporal / isolation losses
+
+### `training/evaluator_entity.py`
+
+역할:
+
+* per-entity visible survival
+* reappearance consistency
+* isolated/composite consistency
+* two-object detection score
+
+---
+
+# 9. 추천 코드 수정 순서
+
+## Phase 1 — 구조 분리
+
+1. guide family 제거
+2. projector 출력 포맷을 structured maps로 고정
+3. evaluator를 final-goal aligned metric으로 교체
+
+## Phase 2 — entity field 도입
+
+1. class volume 대신 independent entity density heads
+2. bg class 제거
+3. renderer generalization
+
+## Phase 3 — temporal memory 도입
+
+1. slot memory
+2. temporal contrastive
+3. reappearance supervision
+
+## Phase 4 — full diffusion coupling
+
+1. guide encoder 안정화
+2. low-LR backbone adaptation
+3. isolation consistency 강화
+
+---
+
+# 10. 왜 현재 로직은 안 되는가
+
+이제 위 설계를 기준으로 현재 시스템을 다시 보면 실패 이유가 분명해진다.
+
+## 10.1 scene representation이 충분히 entity-centric하지 않다
+
+현재 구조는 projector와 guide가 visible/amodal을 계산하긴 하지만, 최종적으로는 여전히 **guide injection이 dominant entity scale에 끌려간다**. `four_stream`이 구조적으로 정보는 갖고 있어도, stream magnitude가 불균형하면 one-entity 강화 루프가 생긴다.  
+
+---
+
+## 10.2 trainer가 최종 목표보다 surrogate에 더 충실하다
+
+현재 trainer는 다수의 손실을 조합하지만, 최종 composite에서 두 entity가 동시에 살아 있는지를 가장 직접적으로 보지는 않는다. 
+그래서 **잘 최적화된 잘못된 해법**이 best로 뽑힐 수 있다.
+
+---
+
+## 10.3 class/threshold 관점이 아직 남아 있다
+
+현재 projector도 `p_fg_k > 0.3` 같은 threshold 기반 visible class 결정을 일부 사용한다. 
+이건 practical fix였지만, 근본적으로는 “entity 존재”와 “visible class assignment”를 분리하지 못한다.
+
+---
+
+## 10.4 temporal identity가 약하다
+
+현재 permutation consistency, centroid consistency는 rolling/contact/reappearance 수준의 identity preservation엔 부족하다. 
+
+---
+
+# 11. 최종 추천 실험 세팅
+
+## 실험 이름
+
+**Phase 63 — Dynamic Entity Fields**
+
+## 핵심 설정
+
+* 2 entities fixed
+* independent density field per entity
+* transmittance renderer
+* structured guide = `[V1,V2,A1,A2,D]`
+* diffusion = refiner only
+* no guide-family branching
+* no contract-score checkpointing
+
+## 학습 스케줄
+
+* 50 epochs: field + renderer pretrain
+* 30 epochs: guide encoder pretrain
+* 80 epochs: diffusion coupling
+* 40 epochs: temporal fine-tune
+
+## batch 구성
+
+* 50% collision/contact clips
+* 30% layered occlusion clips
+* 20% reappearance clips
+
+## best checkpoint 기준
+
+1. visible IoU min
+2. visible survival min
+3. isolated/composite consistency
+4. reappearance consistency
+5. two-object recognition score
+
+---
+
+# 12. 아주 짧은 실행 요약
+
+## 삭제
+
+* legacy conditioning file
+* front_only / dual / none mainline
+* contract-heavy checkpoint logic
+* bg-class 경쟁 중심 사고
+
+## 유지
+
+* rendered GT builder
+* transmittance rendering 철학
+* multiscale guide injection
+* diffusion refiner backbone
+
+## 추가
+
+* entity-centric dynamic field
+* amodal identity memory
+* temporal slot consistency
+* final-goal aligned evaluator
+* structured guide encoder on `[V1,V2,A1,A2,D]`
+
+---
+
+# 13. 최종 권고안
+
+가장 현실적인 최종 아키텍처는 이것이다.
+
+> **“Independent entity density fields + transmittance-based visible/amodal rendering + structured multiscale guide injection + diffusion refinement + temporal slot consistency”**
+
+이게 좋은 이유는 네 원래 아이디어를 가장 잘 살리기 때문이다.
+
+* 3D 정보를 진짜 활용한다
+* visible과 amodal을 분리한다
+* 가려져도 entity identity를 유지한다
+* diffusion이 scene을 새로 상상하지 않고 structured condition 위에서 refinement한다
+* rolling/contact shot에서도 two-entity identity preservation이 가능해진다
+
+현재 코드베이스에서 가장 큰 가치가 있는 부분은 **renderer 철학과 guide injection 인프라**다.
+가장 과감히 버려야 할 부분은 **guide family branching, contract-driven best selection, class-competition 중심 구조**다.
+그 사이에 **entity field / temporal slot / render-level supervision**을 넣는 것이 정답에 가장 가깝다.   
+
+원하면 다음 답변에서 이걸 이어서
+**“파일별 patch plan”** 형태로,
+어느 파일을 삭제하고 어느 파일을 새로 만들고 어느 함수 시그니처를 어떻게 바꿀지까지
+실제 코드 작업 단위로 쪼개서 적어줄게.
