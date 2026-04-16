@@ -337,7 +337,6 @@ class Stage4TransferEval:
         self.guide_encoder.eval()
         self.sdxl_adapter.eval()
         self.scene_prior.eval()
-        self.renderer.eval()
 
         split_info = (self._splits if self._splits is not None
                       else self.dataset.get_split_indices()
