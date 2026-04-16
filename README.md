@@ -78,27 +78,44 @@ phase65_min3d/
 
 ---
 
-## Training Stages
+## Unified Main Entrypoint
 
-### Stage 1 — Scene-only pretraining
-Train the Scene Module using:
-- visible loss
-- amodal / hidden loss
-- temporal identity consistency
-- optional weak depth ordering
+The preferred main entrypoint is now `scripts/train_main.py`.
 
-### Stage 2 — Backbone alignment
-Attach adapter + backbone and continue training while keeping scene losses active.
+### Stage 1
+```bash
+python scripts/train_main.py train --stage 1
+```
+
+### Stage 2
+```bash
+python scripts/train_main.py train --stage 2 \
+  --stage1_ckpt outputs/phase65/stage1/best_scene_module.pt
+```
+
+### Dataset sanity check
+```bash
+python scripts/train_main.py check-data
+```
+
+### Visualization
+```bash
+python scripts/train_main.py viz
+```
+
+### Smoke tests
+```bash
+python scripts/train_main.py test
+```
+
+### Full pipeline
+```bash
+python scripts/train_main.py pipeline
+```
 
 ---
 
-## Entrypoints
-
-### Unified main entrypoint
-```bash
-python scripts/train_main.py --stage 1
-python scripts/train_main.py --stage 2 --stage1_ckpt outputs/phase65/stage1/best_scene_module.pt
-```
+## Direct Entrypoints
 
 ### Stage 1
 ```bash
@@ -112,7 +129,7 @@ python scripts/train_phase65_stage2.py \
   --stage1_ckpt outputs/phase65/stage1/best_scene_module.pt
 ```
 
-### Full pipeline
+### Full shell pipeline
 ```bash
 bash scripts/run_phase65_pipeline.sh
 ```
@@ -148,11 +165,20 @@ python scripts/viz_phase65.py \
   --out outputs/phase65/viz
 ```
 
+The visualization now includes:
+- input frame,
+- GT overlay,
+- predicted overlay,
+- per-entity visible maps,
+- per-entity hidden maps,
+- depth visualization,
+- frame-level metric text.
+
 ---
 
-## Smoke Tests
+## Smoke Tests and CI
 
-Run the basic smoke tests:
+Run the basic smoke tests locally:
 
 ```bash
 pytest tests/test_phase65_smoke.py
@@ -161,7 +187,13 @@ pytest tests/test_phase65_smoke.py
 These verify:
 - SceneModule forward pass,
 - adapter wiring,
-- decoder baseline output shape.
+- decoder baseline output shape,
+- Stage 1 trainer step,
+- Stage 2 trainer step.
+
+A GitHub Actions workflow is also included:
+
+- `.github/workflows/phase65_smoke.yml`
 
 ---
 
@@ -172,6 +204,20 @@ Main configs:
 - `config/phase65_min3d/main.yaml`
 - `config/phase65_min3d/stage1.yaml`
 - `config/phase65_min3d/stage2.yaml`
+
+---
+
+## Checkpoint Policy
+
+Phase 65 uses stricter evaluator gating.
+
+Checkpoints are rejected when they show signs of one-entity collapse, including:
+- low `visible_survival_min`,
+- low `amodal_survival_min`,
+- very low `visible_iou_min`,
+- extreme entity imbalance.
+
+This is intended to prevent numerically smooth but visually collapsed models from being selected as best.
 
 ---
 
