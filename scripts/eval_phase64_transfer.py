@@ -103,21 +103,31 @@ def _run_sample_transfer(
     height = int(getattr(config.training, "height", 256))
     width  = int(getattr(config.training, "width",  256))
 
-    # Unpack sample
+    # Unpack Phase64Sample (or dict fallback)
     if isinstance(sample, dict):
-        frames_np    = sample.get("frames")       # (T, H, W, 3) uint8
-        entity_masks = sample.get("entity_masks") # (T, 2, S) float32
-        visible_masks = sample.get("visible_masks", entity_masks)
-        meta         = sample.get("meta", {})
+        frames_np  = sample.get("frames")
+        scene_gt   = sample.get("scene_gt", None)
+        meta       = sample.get("meta", {})
+        routing_e0 = sample.get("routing_e0", None)
+        routing_e1 = sample.get("routing_e1", None)
     else:
-        # Phase64Sample dataclass
-        frames_np    = sample.frames
-        entity_masks = sample.entity_masks
-        visible_masks = getattr(sample, "visible_masks", entity_masks)
-        meta         = getattr(sample, "meta", {})
+        frames_np  = sample.frames
+        scene_gt   = sample.scene_gt
+        meta       = getattr(sample, "meta", {})
+        routing_e0 = getattr(sample, "routing_e0", None)  # (T, H, W) float32
+        routing_e1 = getattr(sample, "routing_e1", None)
 
-    if frames_np is None or entity_masks is None:
+    if frames_np is None:
         return {}
+
+    # Extract visible GT masks from SceneGT
+    if scene_gt is not None:
+        vis_e0_gt = scene_gt.vis_e0  # (T, H, W) float32
+        vis_e1_gt = scene_gt.vis_e1
+        amo_e0_gt = scene_gt.amo_e0
+        amo_e1_gt = scene_gt.amo_e1
+    else:
+        vis_e0_gt = vis_e1_gt = amo_e0_gt = amo_e1_gt = None
 
     import torch.nn.functional as F
     from PIL import Image
@@ -132,9 +142,33 @@ def _run_sample_transfer(
     frame_t = frame_t.unsqueeze(0).to(device)  # (1, 3, H, W)
 
     # ── Scene prior forward (backbone-agnostic) ───────────────────────────
+    # ScenePriorModule.forward() returns (SceneOutputs, mem_e0, mem_e1)
+    # It renders internally — no separate EntityRenderer call needed.
+    en0 = meta.get("keyword0", meta.get("entity_names", ["entity0"])[0] if "entity_names" in meta else "entity0")
+    en1 = meta.get("keyword1", meta.get("entity_names", ["entity0", "entity1"])[1] if "entity_names" in meta and len(meta["entity_names"]) > 1 else "entity1")
+
+    # Build routing hint tensors (spatial maps, resized to model resolution)
+    def _routing_tensor(r_np):
+        if r_np is None:
+            return None
+        r0 = r_np[0]  # (H_orig, W_orig)
+        from PIL import Image as _PIL
+        r_img = _PIL.fromarray((r0 * 255).clip(0, 255).astype(np.uint8), mode="L")
+        r_img = r_img.resize((width, height), _PIL.BILINEAR)
+        rt = torch.from_numpy(np.array(r_img).astype(np.float32) / 255.0)
+        return rt.unsqueeze(0).unsqueeze(0).to(device)  # (1, 1, H, W)
+
+    r0_t = _routing_tensor(routing_e0)
+    r1_t = _routing_tensor(routing_e1)
+
     with torch.no_grad():
-        density_e0, density_e1 = scene_prior(frame_t)  # (1, depth_bins, H/8, W/8)
-        scene_out: SceneOutputs = renderer(density_e0, density_e1)
+        scene_out, _, _ = scene_prior(
+            img=frame_t,
+            entity_name_e0=en0,
+            entity_name_e1=en1,
+            routing_hint_e0=r0_t,
+            routing_hint_e1=r1_t,
+        )  # SceneOutputs, mem_e0, mem_e1
 
     # ── Guide encoding ────────────────────────────────────────────────────
     with torch.no_grad():
@@ -144,6 +178,29 @@ def _run_sample_transfer(
     results["amodal_mean_e0"] = float(scene_out.amodal_e0.mean())
     results["amodal_mean_e1"] = float(scene_out.amodal_e1.mean())
     results["sep_map_abs_mean"] = float(scene_out.sep_map.abs().mean())
+
+    # ── IoU vs GT ────────────────────────────────────────────────────────
+    if vis_e0_gt is not None:
+        import torch.nn.functional as _F
+        _h = scene_out.visible_e0.shape[-2]
+        _w = scene_out.visible_e0.shape[-1]
+
+        def _iou(pred_t: torch.Tensor, gt_np: np.ndarray) -> float:
+            """pred_t: (1,H,W) or (H,W); gt_np: (T,H,W) or (H,W)"""
+            gt = torch.from_numpy(gt_np[0] if gt_np.ndim == 3 else gt_np).float()
+            gt_r = _F.interpolate(gt.unsqueeze(0).unsqueeze(0), (_h, _w),
+                                  mode="bilinear", align_corners=False).squeeze()
+            p = pred_t.squeeze().cpu().float()
+            inter = (p * gt_r).sum()
+            union = (p + gt_r - p * gt_r).sum()
+            return float(inter / (union + 1e-6))
+
+        results["vis_iou_e0"] = _iou(scene_out.visible_e0, vis_e0_gt)
+        results["vis_iou_e1"] = _iou(scene_out.visible_e1, vis_e1_gt)
+        results["vis_iou_min"] = min(results["vis_iou_e0"], results["vis_iou_e1"])
+        results["amo_iou_e0"] = _iou(scene_out.amodal_e0, amo_e0_gt)
+        results["amo_iou_e1"] = _iou(scene_out.amodal_e1, amo_e1_gt)
+        results["amo_iou_min"] = min(results["amo_iou_e0"], results["amo_iou_e1"])
 
     # ── AnimateDiff guided generation ────────────────────────────────────
     if animatediff_adapter is not None:
@@ -241,8 +298,8 @@ def run_transfer_eval(
     max_samples: int = 50,
 ) -> Dict:
     evaluator = Phase64Evaluator(
-        visible_survival_thresh=float(
-            getattr(config.eval, "visible_survival_thresh", 0.02)),
+        visible_thresh=float(
+            getattr(getattr(config, "eval", object()), "visible_survival_thresh", 0.02)),
     )
 
     val_indices = splits["val"][:max_samples]
@@ -302,6 +359,8 @@ def run_transfer_eval(
     summary: Dict = {"n_samples": len(per_sample)}
     scalar_keys = [
         "amodal_mean_e0", "amodal_mean_e1", "sep_map_abs_mean",
+        "vis_iou_e0", "vis_iou_e1", "vis_iou_min",
+        "amo_iou_e0", "amo_iou_e1", "amo_iou_min",
     ]
     for k in scalar_keys:
         vals = [s[k] for s in per_sample if k in s and isinstance(s[k], (int, float))]
@@ -397,7 +456,7 @@ def main() -> None:
     print("[Transfer Eval] Building scene prior...", flush=True)
     scene_prior = ScenePriorModule(
         depth_bins=int(getattr(mc, "depth_bins", 8)),
-        hidden_dim=int(getattr(mc, "hidden_dim", 64)),
+        hidden=int(getattr(mc, "hidden_dim", 64)),
         id_dim=int(getattr(mc, "id_dim", 128)),
         pose_dim=int(getattr(mc, "pose_dim", 32)),
         slot_dim=int(getattr(mc, "slot_dim", 128)),
@@ -409,8 +468,8 @@ def main() -> None:
     ).to(device)
 
     guide_encoder = SceneGuideEncoder(
-        in_channels=8,  # canonical 8-channel SceneOutputs
-        out_channels=int(getattr(mc, "hidden_dim", 64)),
+        in_ch=8,  # canonical 8-channel SceneOutputs
+        hidden=int(getattr(mc, "hidden_dim", 64)),
     ).to(device)
 
     # Load stage 1 weights
@@ -437,9 +496,9 @@ def main() -> None:
     if stage3_ckpt is not None:
         print("[Transfer Eval] Loading AnimateDiff adapter...", flush=True)
         animatediff_adapter = AnimateDiffAdapter(
-            guide_channels=int(getattr(mc, "hidden_dim", 64)),
+            in_ch=int(getattr(mc, "hidden_dim", 64)),
             guide_max_ratio=float(getattr(mc, "guide_max_ratio", 0.15)),
-            inject_blocks=list(getattr(mc, "inject_blocks", ["up1", "up2", "up3"])),
+            inject_blocks=tuple(getattr(mc, "inject_blocks", ["up1", "up2", "up3"])),
         ).to(device)
         ad_state = torch.load(stage3_ckpt, map_location=device, weights_only=False)
         if "adapter_state" in ad_state:
@@ -450,10 +509,12 @@ def main() -> None:
     sdxl_adapter: Optional[SDXLAdapter] = None
     if stage4_ckpt is not None:
         print("[Transfer Eval] Loading SDXL adapter...", flush=True)
+        # SDXL uses its own block names — always use SDXL-specific defaults,
+        # NOT the AnimateDiff inject_blocks from stage3 config.
         sdxl_adapter = SDXLAdapter(
-            guide_channels=int(getattr(mc, "hidden_dim", 64)),
+            in_ch=int(getattr(mc, "hidden_dim", 64)),
             guide_max_ratio=float(getattr(mc, "guide_max_ratio", 0.1)),
-            inject_blocks=list(getattr(mc, "inject_blocks", ["up0", "up1", "up2"])),
+            inject_blocks=("up0", "up1", "up2"),
         ).to(device)
         sdxl_state = torch.load(stage4_ckpt, map_location=device, weights_only=False)
         if "adapter_state" in sdxl_state:
