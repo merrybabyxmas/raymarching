@@ -250,17 +250,40 @@ class Stage4TransferEval:
         noisy = self.sdxl_pipe.scheduler.add_noise(latents, noise, t)
 
         prompt = str(meta.get("prompt", "two objects"))
-        text_inputs = self.sdxl_pipe.tokenizer(
-            prompt, return_tensors="pt", padding="max_length",
-            max_length=self.sdxl_pipe.tokenizer.model_max_length, truncation=True,
-        ).to(self.device)
+        # SDXL requires both text encoders + added_cond_kwargs
         with torch.no_grad():
-            text_emb = self.sdxl_pipe.text_encoder(**text_inputs).last_hidden_state.half()
+            # Encoder 1 (CLIP ViT-L)
+            tok1 = self.sdxl_pipe.tokenizer(
+                prompt, return_tensors="pt", padding="max_length",
+                max_length=self.sdxl_pipe.tokenizer.model_max_length, truncation=True,
+            ).to(self.device)
+            enc1_out = self.sdxl_pipe.text_encoder(**tok1)
+            text_emb = enc1_out.last_hidden_state.half()
+            # Encoder 2 (OpenCLIP BigG)
+            tok2 = self.sdxl_pipe.tokenizer_2(
+                prompt, return_tensors="pt", padding="max_length",
+                max_length=self.sdxl_pipe.tokenizer_2.model_max_length, truncation=True,
+            ).to(self.device)
+            enc2_out = self.sdxl_pipe.text_encoder_2(**tok2, output_hidden_states=True)
+            text_emb2 = enc2_out.hidden_states[-2].half()
+            # SDXL concatenates both text embeddings
+            text_emb_combined = torch.cat([text_emb, text_emb2], dim=-1)
+            pooled_emb = enc2_out.text_embeds.half()  # (B, 1280)
+            # SDXL time ids: [orig_h, orig_w, crop_top, crop_left, target_h, target_w]
+            time_ids = torch.tensor(
+                [[H_enc, W_enc, 0, 0, H_enc, W_enc]], dtype=torch.float16, device=self.device
+            )
+            added_cond_kwargs = {
+                "text_embeds": pooled_emb,
+                "time_ids": time_ids,
+            }
 
         self.sdxl_adapter.register_hooks(self.sdxl_pipe.unet)
         try:
             noise_pred = self.sdxl_pipe.unet(
-                noisy.half(), t, encoder_hidden_states=text_emb,
+                noisy.half(), t,
+                encoder_hidden_states=text_emb_combined,
+                added_cond_kwargs=added_cond_kwargs,
             ).sample
         finally:
             self.sdxl_adapter.remove_hooks()
