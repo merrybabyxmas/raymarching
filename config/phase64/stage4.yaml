@@ -1,0 +1,39 @@
+# Phase 64 Stage 4 — Transfer to SDXL (same scene prior, new adapter)
+run_name: p64_stage4_sdxl
+
+model:
+  # same scene prior as stage1/2/3
+  depth_bins: 8
+  hidden_dim: 64
+  id_dim: 128
+  pose_dim: 32
+  spatial_h: 32
+  spatial_w: 32
+  slot_dim: 128
+  ctx_dim: 64
+  # sdxl adapter
+  guide_max_ratio: 0.1
+  inject_blocks: ["up0", "up1", "up2"]
+
+training:
+  epochs: 20
+  steps_per_epoch: 30
+  eval_every: 5
+  lr_adapter: 1.0e-4
+  grad_clip: 1.0
+  t_max: 500
+  n_frames: 1
+  height: 256
+  width: 256
+  seed: 42
+  lambda_diff: 1.0
+  lambda_surv: 2.0
+
+stage1_ckpt: checkpoints/phase64/p64_stage1/best.pt
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+
+backbone:
+  pipeline: stabilityai/stable-diffusion-xl-base-1.0

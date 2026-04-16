@@ -1,0 +1,9 @@
+# Phase 64 Stage 0 — Dataset Validation
+run_name: p64_stage0
+data:
+  data_root: toy/data_objaverse
+  n_frames: 8
+  spatial_h: 32
+  spatial_w: 32
+  val_frac: 0.2
+output_dir: outputs/phase64/stage0

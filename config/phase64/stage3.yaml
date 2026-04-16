@@ -1,0 +1,51 @@
+# Phase 64 Stage 3 — AnimateDiff Adapter + Backbone Training
+run_name: p64_stage3_animatediff
+
+model:
+  depth_bins: 8
+  hidden_dim: 64
+  id_dim: 128
+  pose_dim: 32
+  spatial_h: 32
+  spatial_w: 32
+  slot_dim: 128
+  ctx_dim: 64
+  # adapter
+  adapter_guide_ch: 64
+  guide_max_ratio: 0.15
+  inject_blocks: ["up1", "up2", "up3"]
+  # backbone lora
+  lora_rank: 4
+
+training:
+  epochs: 30
+  steps_per_epoch: 30
+  eval_every: 5
+  lr_adapter: 1.0e-4
+  lr_field: 2.0e-4
+  lr_lora: 1.0e-5
+  grad_clip: 1.0
+  t_max: 500
+  n_frames: 1
+  height: 256
+  width: 256
+  seed: 42
+  lambda_diff: 1.0
+  lambda_surv: 2.0
+  lambda_contrast: 0.3
+  contrast_margin: 0.02
+
+stage1_ckpt: checkpoints/phase64/p64_stage1/best.pt
+stage2_ckpt: checkpoints/phase64/p64_stage2/best.pt
+
+eval:
+  visible_survival_thresh: 0.02
+  min_survival: 0.03
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+
+backbone:
+  pipeline: emilianJR/epiCRealism
+  motion_adapter: guoyww/animatediff-motion-adapter-v1-5-3

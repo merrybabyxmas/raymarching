@@ -1,0 +1,44 @@
+# Phase 64 Stage 1 — Backbone-Agnostic Scene Prior Training
+run_name: p64_stage1
+
+model:
+  depth_bins: 8
+  hidden_dim: 64
+  id_dim: 128
+  pose_dim: 32
+  spatial_h: 32
+  spatial_w: 32
+  slot_dim: 128
+  ctx_dim: 64
+
+training:
+  epochs: 60
+  steps_per_epoch: 30
+  eval_every: 5
+  lr_field: 5.0e-4
+  lr_encoder: 2.0e-4
+  lr_memory: 1.0e-4
+  grad_clip: 0.5
+  n_frames: 1
+  height: 256
+  width: 256
+  seed: 42
+  # Loss weights
+  lambda_vis: 2.0
+  lambda_amo: 1.0
+  lambda_occ: 0.5
+  lambda_surv: 10.0
+  lambda_color: 3.0
+  lambda_sep: 0.2
+  lambda_id: 0.0      # activated after slot memory stabilizes
+  lambda_temp: 0.0    # activated in temporal fine-tune
+
+eval:
+  visible_survival_thresh: 0.02
+  min_survival: 0.03
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
+  n_frames: 1
+  volume_gt_render_resolution: 128

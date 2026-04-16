@@ -1,0 +1,38 @@
+# Phase 64 Stage 2 — Structured Decoder Training
+run_name: p64_stage2
+
+model:
+  # same as stage1
+  depth_bins: 8
+  hidden_dim: 64
+  id_dim: 128
+  pose_dim: 32
+  spatial_h: 32
+  spatial_w: 32
+  slot_dim: 128
+  ctx_dim: 64
+  # decoder
+  decoder_upsample_to: 256
+
+training:
+  epochs: 30
+  steps_per_epoch: 30
+  eval_every: 5
+  lr_decoder: 2.0e-4
+  lr_encoder: 0.0    # frozen
+  grad_clip: 1.0
+  n_frames: 1
+  height: 256
+  width: 256
+  seed: 42
+  lambda_recon: 1.0
+  lambda_iso: 0.5
+
+stage1_ckpt: checkpoints/phase64/p64_stage1/best.pt
+
+eval:
+  visible_survival_thresh: 0.02
+
+data:
+  data_root: toy/data_objaverse
+  val_frac: 0.2
