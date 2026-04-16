@@ -5,11 +5,13 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import yaml
-from PIL import Image
+from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader
 
 from phase65_min3d.data import Phase65Dataset, phase65_collate_fn
+from phase65_min3d.evaluator import Phase65Evaluator
 from phase65_min3d.scene_module import SceneModule
 
 
@@ -53,6 +55,14 @@ def _hstack(imgs: list[np.ndarray], gap: int = 4) -> np.ndarray:
     return np.hstack(parts)
 
 
+def _annotate(img: np.ndarray, text: str) -> np.ndarray:
+    pil = Image.fromarray(img)
+    draw = ImageDraw.Draw(pil)
+    draw.rectangle([(0, 0), (pil.size[0], 18)], fill=(255, 255, 255))
+    draw.text((4, 2), text, fill=(0, 0, 0))
+    return np.array(pil)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/phase65_min3d/stage1.yaml")
@@ -79,6 +89,7 @@ def main() -> int:
         Hf=cfg["model"].get("Hf", 32),
         Wf=cfg["model"].get("Wf", 32),
     ).to(device).eval()
+    evaluator = Phase65Evaluator()
     ckpt = torch.load(args.ckpt, map_location=device)
     model.load_state_dict(ckpt["model"], strict=False)
 
@@ -89,24 +100,41 @@ def main() -> int:
     with torch.no_grad():
         for batch in loader:
             frames = batch["frames"].to(device)
+            visible = batch["visible_masks"].to(device)
+            amodal = batch["amodal_masks"].to(device)
             entity_names = batch["entity_names"][0]
             prompt = batch["text_prompts"][0]
             T = frames.shape[1]
-            for t in range(min(T, 2)):
+            sample_dir = out_root / f"sample_{saved:04d}_{entity_names[0]}_{entity_names[1]}"
+            sample_dir.mkdir(parents=True, exist_ok=True)
+            for t in range(min(T, 3)):
                 scene = model(entity_names=entity_names, text_prompt=prompt, prev_state=prev_state, prev_frame=None if t == 0 else frames[:, t - 1], t_index=t)
+                metrics = evaluator.evaluate_scene(scene, visible[:, t], amodal[:, t], prev_state=prev_state)
                 prev_state = scene.detach()
                 frame = (frames[0, t].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
+
                 vis0 = _to_rgb_map(scene.maps.visible_e0[0], "red")
                 vis1 = _to_rgb_map(scene.maps.visible_e1[0], "blue")
                 hid0 = _to_rgb_map(scene.maps.hidden_e0[0], "red")
                 hid1 = _to_rgb_map(scene.maps.hidden_e1[0], "blue")
                 dep = _to_rgb_map(scene.maps.depth_e0[0], "gray")
-                ov = _overlay(_overlay(frame.copy(), scene.maps.visible_e0[0], (255, 80, 80)), scene.maps.visible_e1[0], (80, 80, 255))
-                grid = _hstack([frame, ov, vis0, vis1, hid0, hid1, dep])
-                sample_dir = out_root / f"sample_{saved:04d}_{entity_names[0]}_{entity_names[1]}"
-                sample_dir.mkdir(parents=True, exist_ok=True)
+
+                pred_overlay = _overlay(_overlay(frame.copy(), scene.maps.visible_e0[0], (255, 80, 80)), scene.maps.visible_e1[0], (80, 80, 255))
+                gt_overlay = _overlay(_overlay(frame.copy(), visible[0, t, 0], (255, 80, 80)), visible[0, t, 1], (80, 80, 255))
+
+                vis0 = _annotate(vis0, f"pred vis e0")
+                vis1 = _annotate(vis1, f"pred vis e1")
+                hid0 = _annotate(hid0, f"pred hid e0")
+                hid1 = _annotate(hid1, f"pred hid e1")
+                dep = _annotate(dep, f"depth e0")
+                pred_overlay = _annotate(pred_overlay, f"pred overlay")
+                gt_overlay = _annotate(gt_overlay, f"gt overlay")
+                frame_annot = _annotate(frame, f"frame t={t} vis_min={metrics['visible_iou_min']:.3f}")
+
+                grid = _hstack([frame_annot, gt_overlay, pred_overlay, vis0, vis1, hid0, hid1, dep])
                 Image.fromarray(grid).save(sample_dir / f"frame_{t:02d}.png")
             saved += 1
+            prev_state = None
             if saved >= args.n_samples:
                 break
     print(f"Saved Phase 65 visualizations to {out_root}")
