@@ -1,126 +1,245 @@
-# Phase 62: 3D Entity Volume Generator + First-Hit Projection
+# Phase 65 Mainline Architecture
 
 ## Goal
-Real object identity preservation under collision.
-No soft blending. No transparency. No alpha compositing.
-One pixel = one entity. Period.
+
+Reduce chimera in contact-heavy multi-entity generation by enforcing an **entity-separated layered 2.5D scene representation** before final image/video generation.
+
+The mainline design principle is:
+
+- **representation first**,
+- **backbone alignment second**,
+- **no shared class-volume competition**,
+- **no first-hit winner-take-all scene core**.
 
 ---
 
-## What Changed from Phase 60/61
+## Current Mainline
 
-| Phase 60/61 (REMOVED) | Phase 62 (NEW) |
-|------------------------|----------------|
-| Scalar alpha per entity | 3D volume logits / factorized fg-id volume |
-| Porter-Duff / transmittance | First-hit projection (argmax scan) |
-| Soft ownership BCE | Mainline volume BCE + ablation-only structural losses |
-| Primary-block-only control | Multi-scale injection (mid/up2/multiscale) |
-| Heuristic depth ordering | Learned 3D topology |
+The repository mainline is now **Phase 65 Minimal 3D (`phase65_min3d/`)**.
+
+Historical Phase 62 / Phase 64 code may still exist elsewhere in the repository for reference, but it is **not** the architectural direction for new experiments.
+
+The implementation spec for the new mainline lives at:
+
+- `docs/phase65_min3d_implementation_spec.md`
 
 ---
 
-## File Map
+## Core Idea
 
+A scene with two entities is represented explicitly as:
+
+- visible support for each entity,
+- hidden / occluded support for each entity,
+- per-entity relative depth,
+- per-entity latent identity-aware features,
+- persistent temporal slot memory.
+
+This converts overlap from a **mixing problem** into an **occlusion reasoning problem**.
+
+---
+
+## Mainline File Map
+
+```text
+phase65_min3d/
+├─ scene_outputs.py          # SceneMaps / SceneFeatures / SceneState dataclasses
+├─ slot_encoder.py           # stable per-entity identity slots
+├─ temporal_slots.py         # per-entity memory updates
+├─ motion_rollout.py         # coarse 2.5D layout rollout
+├─ layered_decoder.py        # per-entity visible / hidden / depth decoders
+├─ occlusion_composer.py     # compose entity layers into coherent scene state
+├─ scene_module.py           # top-level Scene Module
+├─ losses.py                 # minimal core losses
+├─ evaluator.py              # per-entity survival / IoU evaluation
+├─ trainer_stage1.py         # scene-only pretraining
+├─ trainer_stage2.py         # backbone alignment
+├─ data.py                   # dataset wrapper / collate
+├─ adapters/
+│  ├─ base.py                # adapter interface
+│  ├─ decoder_adapter.py     # reconstruction baseline adapter
+│  ├─ animatediff.py         # AnimateDiff adapter stub/mainline path
+│  └─ sdxl.py                # SDXL adapter stub/mainline path
+└─ backbones/
+   └─ reconstruction_decoder.py
 ```
-models/phase62_entity_volume.py    # EntityVolumePredictor: independent / factorized / center-offset heads
-models/phase62_projection.py       # FirstHitProjector: depth scan + amodal/visible projections
-models/phase62_conditioning.py     # GuideFeatureAssembler + UNet injection hooks
-training/phase62/objectives/       # Objective families: independent_bce, factorized_fg_id, projected_* , center_offset
-training/phase62/ablation_trainer.py# Config-driven stage schedule + ablation runner
-scripts/train_phase62.py           # Main entry (delegates to v2 path)
-scripts/run_phase62_ablations.py   # Ablation matrix runner
-scripts/build_volume_gt.py         # V_gt from rendered depth / masks
-harness/test_phase62_volume.py     # Volume shape / projection smoke tests
-harness/test_phase62_projection.py  # First-hit tests
-harness/test_phase62_forward.py    # End-to-end smoke test
+
+Entrypoints:
+
+```text
+scripts/train_phase65_stage1.py
+scripts/train_phase65_stage2.py
+config/phase65_min3d/stage1.yaml
+config/phase65_min3d/stage2.yaml
 ```
 
 ---
 
-## Architecture
+## Scene Representation Contract
 
+For each entity `i` at frame `t`, the Scene Module predicts:
+
+- `visible_i_t`
+- `hidden_i_t`
+- `amodal_i_t`
+- `depth_i_t`
+- `feat_i_t`
+
+These are packaged into a `SceneState`:
+
+```text
+SceneState
+├─ maps
+│  ├─ visible_e0 / visible_e1
+│  ├─ hidden_e0 / hidden_e1
+│  ├─ amodal_e0 / amodal_e1
+│  ├─ depth_e0 / depth_e1
+│  └─ contact (optional)
+├─ features
+│  ├─ feat_e0 / feat_e1
+│  └─ global_feat (optional)
+└─ mem_e0 / mem_e1
 ```
-Dataset (rendered depth + masks) ─► build_volume_gt.py ─► V_gt / gt_visible / gt_amodal
-                                              │
-AnimateDiff UNet ─► BackboneFeatureExtractor ─► F_g, F_0, F_1
-                                              │
-                                              ├─► EntityVolumePredictor
-                                              │      └─► V_logits / entity_probs
-                                              │
-                                              ├─► FirstHitProjector
-                                              │      └─► visible_class / front_probs / back_probs
-                                              │
-                                              ├─► GuideFeatureAssembler
-                                              │      └─► guide tensors per injection block
-                                              │
-                                              └─► GuideInjectionManager -> UNet hooks
-                                                      └─► noise_pred
-                                                            └─► L_diffusion
+
+### Invariants
+
+- `amodal_ei >= visible_ei`
+- `hidden_ei = amodal_ei - visible_ei` after clipping
+- entity0 and entity1 remain separate throughout the scene core
+
+---
+
+## End-to-End Mainline Flow
+
+```text
+(entity names, prompt, optional prev state / prev frame)
+        │
+        ▼
+EntitySlotEncoder
+        │
+        ▼
+TemporalSlotMemory
+        │
+        ▼
+MotionRollout
+        │
+        ▼
+LayeredEntityDecoder (e0)
+LayeredEntityDecoder (e1)
+        │
+        ▼
+OcclusionComposer
+        │
+        ▼
+SceneState
+        │
+        ▼
+Backbone-specific Adapter
+        │
+        ▼
+Backbone / Refiner / Decoder
+        │
+        ▼
+Final RGB or backbone-native output
 ```
 
 ---
 
-## Key Design Decisions
+## Training Philosophy
 
-### 1. Volume Representation
-- `V_logits`: (B, N+1, K, H, W) where N=2 entities, K=8 depth bins
-- `independent_bce` is the current stable baseline; `factorized_fg_id` is the main ablation family
-- `factorized_fg_id` uses `p_fg * q_id` factorization to reduce all-bg collapse
-- 3D conv layers provide depth-axis continuity bias
+We use a **2-stage** training schedule.
 
-### 2. V_gt Construction
-- Built from rendered depth + masks in `data.phase62`
-- Each voxel gets a class label: 0=bg, 1=entity0, 2=entity1
-- `VolumeGTBuilder` caches rendered voxel targets per sample
-- Fallback (2D mask + depth_order) exists but is not the default path
+### Stage 1 — Scene-only pretraining
 
-### 3. First-Hit Projection
-- Scan depth axis k=0..K-1 (front to back)
-- First non-background class wins the pixel
-- Produces `visible_class`, `front_probs`, `back_probs`, plus `amodal` / `visible` maps for ablations
-- **No max pooling, no mean, no weighted average, no transparency**
-- Training uses straight-through style gradients where needed; inference is hard argmax
+Train the Scene Module using only scene-aligned losses:
 
-### 4. UNet Injection
-- Projected 2D guide conditions the UNet via spatial addition
-- Configurable injection points:
-  - `mid_only`: mid_block only
-  - `mid_up2`: mid_block + up_blocks.2
-  - `multiscale`: mid + up_blocks.1 + up_blocks.2 + up_blocks.3
-- Each injection point gets a lightweight projection layer
+- visible loss,
+- amodal / hidden loss,
+- temporal identity consistency,
+- optional weak depth ordering.
 
-### 5. Loss Families
-- Mainline baseline: `L_diffusion` + `L_volume_ce`
-- `L_volume_ce` currently runs as the stable baseline in `independent_bce`
-- Ablation-only structural losses are tracked separately in `training/phase62/objectives/`
-- `loss_visible_dice`, `loss_amodal_dice`, `loss_voxel_exclusive` are experimental, not default
+Goal:
+- stable entity-separated layered scene representation,
+- no single-entity collapse in SceneState.
 
-### 6. Topology Update Schedule
-- `S0`: volume-only
-- `S1`: stage1 volume, stage2 diffusion-only binding
-- `S2`: stage1 volume, stage2 low-LR volume + diffusion
-- `S3`: short joint fine-tune after stage2
+### Stage 2 — Backbone alignment
+
+Attach adapter + backbone.
+Keep scene losses active while adding backbone generation loss.
+
+Goal:
+- backbone learns to obey the structured scene representation,
+- scene representation does not collapse into a backbone-preferred one-object shortcut.
 
 ---
 
-## Forbidden (from Phase 60/61)
-- scalar alpha/depth heads
-- Porter-Duff ownership
-- transmittance/cumprod rendering
-- ownership BCE / depth expected / leak / temporal / solo / divergence losses
-- stage2 inpainting
-- soft blending at any level
+## Mainline Losses
+
+The design target is **4 core losses**, plus optional weak depth ordering.
+
+### Core
+
+- `L_vis`
+- `L_amo`
+- `L_temp`
+- `L_backbone`
+
+### Optional weak term
+
+- `L_depth`
+
+### Explicit non-goals
+
+The mainline architecture should not depend on a large collection of heuristic losses such as:
+
+- balance loss,
+- compactness loss,
+- guide-family-specific losses,
+- gate-push losses,
+- class-volume exclusivity losses,
+- many overlapping contrastive auxiliaries.
 
 ---
 
-## Current Results Snapshot
-- `outputs/phase62_ablations/summary.json` records the latest ablation pass.
-- Best current factorized run: `b2_fgid_freeze_bind_fourstream`
-- It improves entity voxels relative to the dead-all-bg regime, but still shows asymmetric drift and `iou_min` collapse in late epochs.
-- Practical takeaway: `independent_bce` remains the conservative baseline; `factorized_fg_id` is the current main ablation to retest after the id-branch fix.
+## Why This Replaces Earlier Approaches
 
-## Evaluation
-- **Primary**: composite GIF visual inspection (cat ≠ dog, no chimera)
-- **Quantitative**: volume accuracy, projected class IoU vs visible mask
-- **Collision**: overlap frames evaluated separately
-- **Best checkpoint**: selected by projected_class_iou and `iou_min`, not by soft CE alone
+Earlier repository phases centered on ideas such as:
+
+- class-volume prediction with bg/entity competition,
+- first-hit projection as the scene core,
+- multi-family guide assembly,
+- frame-conditioned scene parsing.
+
+Those approaches can still be useful for historical comparison, but they are not the recommended mainline for solving the chimera problem.
+
+Phase 65 replaces them with:
+
+- per-entity explicit layered scene modeling,
+- separate visible and hidden support,
+- explicit temporal entity memory,
+- backbone-agnostic scene interface.
+
+---
+
+## Checkpoint Selection Rule
+
+A checkpoint is invalid if it visibly collapses to one entity.
+
+Mainline best-checkpoint logic should enforce hard constraints such as:
+
+- `visible_survival_min > threshold`
+- `visible_iou_min > threshold`
+
+A numerically smooth but single-entity solution must never be selected as best.
+
+---
+
+## Current Refactor Direction
+
+The repository is being actively refactored toward:
+
+- keeping reusable infrastructure,
+- deleting misleading legacy entrypoints and docs,
+- centralizing new work under `phase65_min3d/`.
+
+If a design decision conflicts with legacy Phase 62 / 64 assumptions, prefer the Phase 65 design.
