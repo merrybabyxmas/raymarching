@@ -1,0 +1,37 @@
+device: cuda
+output_dir: outputs/phase65/exp_camera_v2
+
+model:
+  slot_dim: 256
+  feat_dim: 64
+  hidden_dim: 128
+  Hs: 64
+  Ws: 64
+  Hf: 32
+  Wf: 32
+
+train:
+  batch_size: 2
+  stage1_epochs: 50
+  lr_scene_stage1: 1.0e-4
+  grad_clip: 1.0
+  seed: 42
+
+loss:
+  lambda_vis: 1.0
+  lambda_amo: 1.0
+  lambda_temp: 0.05
+  lambda_depth: 0.1
+
+data:
+  root: data/phase65
+  image_size: 256
+  mask_size: 64
+  num_frames: 16
+  split_json: outputs/phase65/splits/random_seed42.json
+  split_name: train
+
+benchmark:
+  split_mode: random
+  val_split_name: val
+  test_split_name: test

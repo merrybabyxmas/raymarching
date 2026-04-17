@@ -101,6 +101,7 @@ def main():
         Path('toy/data_objaverse'),
         Path('toy/data_objaverse_occ'),
         Path('toy/data_synthetic_overlap'),
+        Path('toy/data_synthetic_overlap_hard'),
     ]
 
     all_samples = []
