@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -13,6 +13,9 @@ class LayeredEntityDecoder(nn.Module):
     Emits raw visible, hidden, and depth logits plus a latent feature map.
     The decoder is slot- and layout-conditioned and intentionally avoids
     early fusion between entities.
+
+    v2: supports optional global context maps (for example camera pose context)
+    to improve view-aware decoding under held-out camera evaluation.
     """
 
     def __init__(
@@ -24,6 +27,7 @@ class LayeredEntityDecoder(nn.Module):
         Ws: int = 64,
         Hf: int = 32,
         Wf: int = 32,
+        context_dim: int = 0,
     ):
         super().__init__()
         self.slot_dim = slot_dim
@@ -33,8 +37,9 @@ class LayeredEntityDecoder(nn.Module):
         self.Ws = Ws
         self.Hf = Hf
         self.Wf = Wf
+        self.context_dim = int(context_dim)
 
-        base_ch = slot_dim * 2 + 5  # slot, mem, x/y grid (2), center heatmap (1), scale (1), frontness (1)
+        base_ch = slot_dim * 2 + 5 + self.context_dim  # slot, mem, x/y grid (2), center heatmap (1), scale (1), frontness (1), optional context
         self.trunk = nn.Sequential(
             nn.Conv2d(base_ch, hidden_dim, kernel_size=3, padding=1),
             nn.GELU(),
@@ -78,6 +83,7 @@ class LayeredEntityDecoder(nn.Module):
         slot_i: torch.Tensor,
         mem_i: torch.Tensor,
         layout_i: Dict[str, torch.Tensor],
+        global_context: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         B = slot_i.shape[0]
         device = slot_i.device
@@ -86,7 +92,13 @@ class LayeredEntityDecoder(nn.Module):
         slot_map = slot_i.view(B, self.slot_dim, 1, 1).expand(B, self.slot_dim, self.Hs, self.Ws)
         mem_map = mem_i.view(B, self.slot_dim, 1, 1).expand(B, self.slot_dim, self.Hs, self.Ws)
         layout_maps = self._layout_maps(layout_i, B, device, dtype)
-        x = torch.cat([slot_map, mem_map, layout_maps], dim=1)
+        pieces = [slot_map, mem_map, layout_maps]
+        if self.context_dim > 0:
+            if global_context is None:
+                global_context = torch.zeros(B, self.context_dim, device=device, dtype=dtype)
+            context_map = global_context.view(B, self.context_dim, 1, 1).expand(B, self.context_dim, self.Hs, self.Ws)
+            pieces.append(context_map)
+        x = torch.cat(pieces, dim=1)
 
         h = self.trunk(x)
         raw_visible = self.head_visible(h)
