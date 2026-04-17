@@ -22,6 +22,7 @@ class Stage1Batch:
     gt_amodal: torch.Tensor    # (B, 2, H, W)
     gt_front_idx: Optional[torch.Tensor] = None  # (B,)
     t_index: int = 0
+    camera_context: Optional[torch.Tensor] = None  # (B, Dc)
 
 
 class Stage1Trainer:
@@ -30,7 +31,7 @@ class Stage1Trainer:
     def __init__(
         self,
         scene_module: SceneModule,
-        device: str = "cuda",
+        device: str = 'cuda',
         lr: float = 3e-4,
         lambda_vis: float = 1.0,
         lambda_amo: float = 1.0,
@@ -54,6 +55,7 @@ class Stage1Trainer:
         gt_amodal = batch.gt_amodal.to(self.device)
         prev_frame = None if batch.prev_frame is None else batch.prev_frame.to(self.device)
         gt_front_idx = None if batch.gt_front_idx is None else batch.gt_front_idx.to(self.device)
+        camera_context = None if batch.camera_context is None else batch.camera_context.to(self.device)
 
         self.optimizer.zero_grad(set_to_none=True)
         scene_state = self.scene_module(
@@ -62,6 +64,7 @@ class Stage1Trainer:
             prev_state=prev_state,
             prev_frame=prev_frame,
             t_index=batch.t_index,
+            camera_context=camera_context,
         )
         l_vis = visible_loss(scene_state, gt_visible)
         l_amo = amodal_loss(scene_state, gt_amodal)
@@ -76,11 +79,11 @@ class Stage1Trainer:
         with torch.no_grad():
             metrics = self.evaluator.evaluate_scene(scene_state, gt_visible, gt_amodal, prev_state=prev_state)
         metrics.update({
-            "loss": float(loss.item()),
-            "l_vis": float(l_vis.item()),
-            "l_amo": float(l_amo.item()),
-            "l_occ": float(l_occ.item()),
-            "l_temp": float(l_temp.item()),
-            "l_depth": float(l_depth.item()),
+            'loss': float(loss.item()),
+            'l_vis': float(l_vis.item()),
+            'l_amo': float(l_amo.item()),
+            'l_occ': float(l_occ.item()),
+            'l_temp': float(l_temp.item()),
+            'l_depth': float(l_depth.item()),
         })
         return metrics, scene_state.detach()
