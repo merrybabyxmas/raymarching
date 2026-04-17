@@ -33,11 +33,14 @@ def evaluate_loader(model: SceneModule, loader: DataLoader, device: str) -> tupl
     evaluator = Phase65Evaluator()
     all_metrics = []
     by_clip_type = defaultdict(list)
+    by_camera = defaultdict(list)
     for batch in loader:
         frames = batch['frames'].to(device)
         visible = batch['visible_masks'].to(device)
         amodal = batch['amodal_masks'].to(device)
+        camera_vecs = batch['camera_vecs'].to(device)
         clip_types = batch['clip_types']
+        camera_names = batch['camera_names']
         _B, T = frames.shape[:2]
         prev_state = None
         for t in range(T):
@@ -48,14 +51,18 @@ def evaluate_loader(model: SceneModule, loader: DataLoader, device: str) -> tupl
                 prev_state=prev_state,
                 prev_frame=prev_frame_t,
                 t_index=t,
+                camera_context=camera_vecs,
             )
             metrics = evaluator.evaluate_scene(scene_state, visible[:, t], amodal[:, t], prev_state=prev_state)
             all_metrics.append(metrics)
             for clip_type in clip_types:
                 by_clip_type[clip_type].append(metrics)
+            for camera_name in camera_names:
+                by_camera[camera_name].append(metrics)
             prev_state = scene_state.detach()
     grouped = {k: _mean_dict(v) for k, v in by_clip_type.items()}
-    return _mean_dict(all_metrics), grouped
+    grouped_camera = {k: _mean_dict(v) for k, v in by_camera.items()}
+    return _mean_dict(all_metrics), {'by_clip_type': grouped, 'by_camera': grouped_camera}
 
 
 def main() -> int:
@@ -99,7 +106,7 @@ def main() -> int:
         'split_json': args.split_json,
         'split_name': args.split_name,
         'aggregate': aggregate,
-        'by_clip_type': grouped,
+        **grouped,
         'num_samples': len(subset),
     }
     out_path = Path(args.output_json)
