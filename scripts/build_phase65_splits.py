@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import random
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
@@ -12,18 +11,37 @@ def _read_meta(sample_dir: Path) -> dict:
     return json.loads((sample_dir / 'meta.json').read_text())
 
 
+def _infer_shape_family(name: str) -> str:
+    n = str(name).lower()
+    if 'cylinder' in n:
+        return 'cylinder'
+    if 'ellipsoid' in n:
+        return 'ellipsoid'
+    if 'cone' in n:
+        return 'cone'
+    if 'capsule' in n:
+        return 'capsule'
+    if 'box' in n or 'cube' in n:
+        return 'box'
+    if 'sphere' in n:
+        return 'sphere'
+    return 'other'
+
+
 def _infer_tags(meta: dict) -> dict:
     names = meta.get('entity_names') or [meta.get('keyword0', 'entity0'), meta.get('keyword1', 'entity1')]
     clip_type = meta.get('clip_type') or meta.get('mode', 'unknown')
     camera = meta.get('camera', 'unknown')
-    joined = ' '.join(str(x) for x in names).lower()
+    families = [_infer_shape_family(x) for x in names]
     tags = {
         'entity_names': names,
         'camera': camera,
         'clip_type': clip_type,
-        'has_cylinder': 'cylinder' in joined,
-        'has_box': 'box' in joined or 'cube' in joined,
-        'has_sphere': 'sphere' in joined,
+        'shape_families': families,
+        'has_cylinder': 'cylinder' in families,
+        'has_ellipsoid': 'ellipsoid' in families,
+        'has_cone': 'cone' in families,
+        'has_capsule': 'capsule' in families,
     }
     return tags
 
@@ -48,8 +66,9 @@ def build_splits(sample_dirs: List[Path], mode: str, seed: int = 42, val_ratio: 
         val = ids[n_test:n_test + n_val]
         train = ids[n_test + n_val:]
     elif mode == 'shape_holdout':
-        test = [r['sample_id'] for r in records if r['has_cylinder']]
-        remain = [r['sample_id'] for r in records if not r['has_cylinder']]
+        # Harder holdout: reserve all clips that contain harder unseen morphology.
+        test = [r['sample_id'] for r in records if (r['has_cylinder'] or r['has_ellipsoid'] or r['has_cone'] or r['has_capsule'])]
+        remain = [r['sample_id'] for r in records if r['sample_id'] not in set(test)]
         rng.shuffle(remain)
         n_val = max(1, int(len(remain) * val_ratio))
         val = remain[:n_val]
