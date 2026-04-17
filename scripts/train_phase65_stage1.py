@@ -65,11 +65,14 @@ def main() -> int:
             visible = batch["visible_masks"].to(device)
             amodal = batch["amodal_masks"].to(device)
             _B, T = frames.shape[:2]
+            prev_state = None  # Reset state for each new clip batch
             for t in range(T):
+                # Use zeros for t=0 to maintain batch_size consistency
+                prev_frame_t = torch.zeros_like(frames[:, 0]) if t == 0 else frames[:, t - 1]
                 step_batch = Stage1Batch(
                     entity_names=batch["entity_names"][0],
                     text_prompt=batch["text_prompts"][0],
-                    prev_frame=None if t == 0 else frames[:, t - 1],
+                    prev_frame=prev_frame_t,
                     gt_visible=visible[:, t],
                     gt_amodal=amodal[:, t],
                     gt_front_idx=None,

@@ -34,7 +34,7 @@ class LayeredEntityDecoder(nn.Module):
         self.Hf = Hf
         self.Wf = Wf
 
-        base_ch = slot_dim * 2 + 6  # slot, mem, x/y grid, center heatmap, scale, frontness
+        base_ch = slot_dim * 2 + 5  # slot, mem, x/y grid (2), center heatmap (1), scale (1), frontness (1)
         self.trunk = nn.Sequential(
             nn.Conv2d(base_ch, hidden_dim, kernel_size=3, padding=1),
             nn.GELU(),
