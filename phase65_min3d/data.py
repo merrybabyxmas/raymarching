@@ -11,6 +11,14 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 
+CAMERA_NAME_TO_VEC = {
+    'front_right': np.array([3.0, 3.0, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
+    'front_left': np.array([-3.0, 3.0, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
+    'front': np.array([0.0, 4.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
+    'top': np.array([0.0, 0.5, 4.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float32),
+}
+
+
 @dataclass
 class Phase65Sample:
     frames: torch.Tensor           # (T, 3, H, W)
@@ -20,6 +28,8 @@ class Phase65Sample:
     entity_names: tuple[str, str]
     text_prompt: str
     clip_type: str
+    camera_name: str
+    camera_vec: torch.Tensor       # (Dc,)
 
 
 class Phase65Dataset(Dataset):
@@ -47,12 +57,12 @@ class Phase65Dataset(Dataset):
         return len(self.samples)
 
     def _read_image(self, path: Path, size: int) -> torch.Tensor:
-        img = Image.open(path).convert("RGB").resize((size, size), Image.BILINEAR)
+        img = Image.open(path).convert('RGB').resize((size, size), Image.BILINEAR)
         arr = np.asarray(img, dtype=np.float32) / 255.0
         return torch.from_numpy(arr).permute(2, 0, 1)
 
     def _read_mask(self, path: Path, size: int) -> torch.Tensor:
-        img = Image.open(path).convert("L").resize((size, size), Image.BILINEAR)
+        img = Image.open(path).convert('L').resize((size, size), Image.BILINEAR)
         arr = np.asarray(img, dtype=np.float32) / 255.0
         return torch.from_numpy(arr).unsqueeze(0)
 
@@ -69,31 +79,44 @@ class Phase65Dataset(Dataset):
             arr = (arr - arr.min()) / (arr.max() - arr.min())
         return torch.from_numpy(arr).unsqueeze(0)
 
+    def _camera_vec_from_meta(self, meta: dict) -> torch.Tensor:
+        if 'camera_pose' in meta:
+            pose = np.asarray(meta['camera_pose'], dtype=np.float32)
+            if pose.shape[0] < 8:
+                pose = np.pad(pose, (0, 8 - pose.shape[0]))
+            return torch.from_numpy(pose[:8])
+        name = str(meta.get('camera', 'front'))
+        if name in CAMERA_NAME_TO_VEC:
+            return torch.from_numpy(CAMERA_NAME_TO_VEC[name].copy())
+        return torch.zeros(8, dtype=torch.float32)
+
     def __getitem__(self, idx: int) -> Phase65Sample:
         sample_dir = self.samples[idx]
-        meta = json.loads((sample_dir / "meta.json").read_text())
-        T = min(int(meta.get("num_frames", self.num_frames)), self.num_frames)
+        meta = json.loads((sample_dir / 'meta.json').read_text())
+        T = min(int(meta.get('num_frames', self.num_frames)), self.num_frames)
         frames, visible, amodal, depth = [], [], [], []
         for t in range(T):
-            stem = f"{t:04d}"
-            frames.append(self._read_image(sample_dir / "frames" / f"{stem}.png", self.image_size))
+            stem = f'{t:04d}'
+            frames.append(self._read_image(sample_dir / 'frames' / f'{stem}.png', self.image_size))
             visible.append(torch.cat([
-                self._read_mask(sample_dir / "visible_masks" / f"{stem}_e0.png", self.mask_size),
-                self._read_mask(sample_dir / "visible_masks" / f"{stem}_e1.png", self.mask_size),
+                self._read_mask(sample_dir / 'visible_masks' / f'{stem}_e0.png', self.mask_size),
+                self._read_mask(sample_dir / 'visible_masks' / f'{stem}_e1.png', self.mask_size),
             ], dim=0))
             amodal.append(torch.cat([
-                self._read_mask(sample_dir / "amodal_masks" / f"{stem}_e0.png", self.mask_size),
-                self._read_mask(sample_dir / "amodal_masks" / f"{stem}_e1.png", self.mask_size),
+                self._read_mask(sample_dir / 'amodal_masks' / f'{stem}_e0.png', self.mask_size),
+                self._read_mask(sample_dir / 'amodal_masks' / f'{stem}_e1.png', self.mask_size),
             ], dim=0))
-            depth.append(self._read_depth(sample_dir / "depth" / f"{stem}.npy", self.mask_size))
+            depth.append(self._read_depth(sample_dir / 'depth' / f'{stem}.npy', self.mask_size))
         return Phase65Sample(
             frames=torch.stack(frames, dim=0),
             visible_masks=torch.stack(visible, dim=0),
             amodal_masks=torch.stack(amodal, dim=0),
             depth_maps=torch.stack(depth, dim=0),
-            entity_names=tuple(meta["entity_names"]),
-            text_prompt=meta.get("text_prompt", f"{meta['entity_names'][0]} and {meta['entity_names'][1]}"),
-            clip_type=meta.get("clip_type", "unknown"),
+            entity_names=tuple(meta['entity_names']),
+            text_prompt=meta.get('text_prompt', f"{meta['entity_names'][0]} and {meta['entity_names'][1]}"),
+            clip_type=meta.get('clip_type', 'unknown'),
+            camera_name=str(meta.get('camera', 'front')),
+            camera_vec=self._camera_vec_from_meta(meta),
         )
 
 
@@ -105,12 +128,16 @@ def phase65_collate_fn(batch: List[Phase65Sample]) -> Dict[str, torch.Tensor | l
     entity_names = [b.entity_names for b in batch]
     text_prompts = [b.text_prompt for b in batch]
     clip_types = [b.clip_type for b in batch]
+    camera_names = [b.camera_name for b in batch]
+    camera_vecs = torch.stack([b.camera_vec for b in batch], dim=0)
     return {
-        "frames": frames,
-        "visible_masks": visible,
-        "amodal_masks": amodal,
-        "depth_maps": depth,
-        "entity_names": entity_names,
-        "text_prompts": text_prompts,
-        "clip_types": clip_types,
+        'frames': frames,
+        'visible_masks': visible,
+        'amodal_masks': amodal,
+        'depth_maps': depth,
+        'entity_names': entity_names,
+        'text_prompts': text_prompts,
+        'clip_types': clip_types,
+        'camera_names': camera_names,
+        'camera_vecs': camera_vecs,
     }
