@@ -41,6 +41,7 @@ def evaluate_epoch(trainer: Stage1Trainer, loader: DataLoader, device: str) -> d
         frames = batch['frames'].to(device)
         visible = batch['visible_masks'].to(device)
         amodal = batch['amodal_masks'].to(device)
+        camera_vecs = batch['camera_vecs'].to(device)
         _B, T = frames.shape[:2]
         prev_state = None
         for t in range(T):
@@ -51,6 +52,7 @@ def evaluate_epoch(trainer: Stage1Trainer, loader: DataLoader, device: str) -> d
                 prev_state=prev_state,
                 prev_frame=prev_frame_t,
                 t_index=t,
+                camera_context=camera_vecs,
             )
             metrics = trainer.evaluator.evaluate_scene(scene_state, visible[:, t], amodal[:, t], prev_state=prev_state)
             all_metrics.append(metrics)
@@ -115,6 +117,7 @@ def main() -> int:
             frames = batch['frames'].to(device)
             visible = batch['visible_masks'].to(device)
             amodal = batch['amodal_masks'].to(device)
+            camera_vecs = batch['camera_vecs'].to(device)
             _B, T = frames.shape[:2]
             prev_state = None
             for t in range(T):
@@ -127,6 +130,7 @@ def main() -> int:
                     gt_amodal=amodal[:, t],
                     gt_front_idx=None,
                     t_index=t,
+                    camera_context=camera_vecs,
                 )
                 metrics, prev_state = trainer.step(step_batch, prev_state=prev_state)
                 epoch_metrics.append(metrics)
