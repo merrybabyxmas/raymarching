@@ -1,0 +1,389 @@
+{
+  "samples": [
+    {
+      "sample_id": "sample_000001",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.12383729370776564,
+      "amo_iou_e1": 0.08225690148537979,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000002",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.05332261341391131,
+      "amo_iou_e1": 0.021388919500168413,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000003",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.12172599020414054,
+      "amo_iou_e1": 0.04838777995610144,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000004",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.01914490375202149,
+      "amo_iou_e1": 0.0003102959744865075,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000005",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.20818628650158644,
+      "amo_iou_e1": 0.14604442985728383,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000006",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.30501850228756666,
+      "amo_iou_e1": 0.1956325424835086,
+      "failure_type": "visible_fail"
+    },
+    {
+      "sample_id": "sample_000007",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.32959507405757904,
+      "amo_iou_e1": 0.2164503736421466,
+      "failure_type": "visible_fail"
+    },
+    {
+      "sample_id": "sample_000008",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.21353466622531414,
+      "amo_iou_e1": 0.16662347549572587,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000009",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.1424804768175818,
+      "amo_iou_e1": 0.08709623198956251,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000010",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.16429125610738993,
+      "amo_iou_e1": 0.12407277087913826,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000011",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.2112802464980632,
+      "amo_iou_e1": 0.13005504553439096,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000012",
+      "entity_names": [
+        "cat",
+        "cat"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.1326384038256947,
+      "amo_iou_e1": 0.07092034653760493,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000013",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.09365161962341517,
+      "amo_iou_e1": 0.1475335059221834,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000014",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.11248182362760417,
+      "amo_iou_e1": 0.14997177990153432,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000015",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.1058319978765212,
+      "amo_iou_e1": 0.16184048727154732,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000016",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.05343043687753379,
+      "amo_iou_e1": 0.1578256324864924,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000017",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.09409236325882375,
+      "amo_iou_e1": 0.15767768770456314,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000018",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.19288339116610587,
+      "amo_iou_e1": 0.19807734992355108,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000019",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.19967152480967343,
+      "amo_iou_e1": 0.18839309853501618,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000020",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.01257898801122792,
+      "amo_iou_e1": 0.09297197544947267,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000021",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.29438476730138063,
+      "amo_iou_e1": 0.23771949764341116,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000022",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.2500980421900749,
+      "amo_iou_e1": 0.2630975842475891,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000023",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.20882384665310383,
+      "amo_iou_e1": 0.21653383132070303,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000024",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.29826824460178614,
+      "amo_iou_e1": 0.2673031287267804,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000025",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.3049755375832319,
+      "amo_iou_e1": 0.2595216780900955,
+      "failure_type": "visible_fail"
+    },
+    {
+      "sample_id": "sample_000026",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.49232811108231544,
+      "amo_iou_e1": 0.35220618080347776,
+      "failure_type": "visible_fail"
+    },
+    {
+      "sample_id": "sample_000027",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.46705407835543156,
+      "amo_iou_e1": 0.4344565123319626,
+      "failure_type": "visible_fail"
+    },
+    {
+      "sample_id": "sample_000028",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.1927210446447134,
+      "amo_iou_e1": 0.24929330497980118,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000029",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.17436235479544848,
+      "amo_iou_e1": 0.15628532133996487,
+      "failure_type": "both_fail"
+    },
+    {
+      "sample_id": "sample_000030",
+      "entity_names": [
+        "cat",
+        "dog"
+      ],
+      "vis_iou_e0": 0.0,
+      "vis_iou_e1": 0.0,
+      "amo_iou_e0": 0.17443959775846452,
+      "amo_iou_e1": 0.15291488450020552,
+      "failure_type": "both_fail"
+    }
+  ],
+  "failure_counts": {
+    "success": 0,
+    "visible_fail": 5,
+    "amodal_fail": 0,
+    "both_fail": 25
+  },
+  "entity_stats": {
+    "cat": {
+      "total": 42,
+      "success": 0
+    },
+    "dog": {
+      "total": 18,
+      "success": 0
+    }
+  },
+  "summary": {
+    "total_samples": 30,
+    "success_rate": 0.0,
+    "visible_fail_rate": 0.16666666666666666,
+    "amodal_fail_rate": 0.0,
+    "both_fail_rate": 0.8333333333333334,
+    "cat_success_rate": 0.0,
+    "dog_success_rate": 0.0
+  }
+}

@@ -113,11 +113,11 @@ def main() -> int:
     trainer = Stage1Trainer(
         scene_module=model,
         device=device,
-        lr=cfg['train'].get('lr', cfg['train'].get('lr_scene_stage1', 1e-4)),
-        lambda_vis=cfg['train'].get('lambda_vis', cfg['loss'].get('lambda_vis', 1.0)),
-        lambda_amo=cfg['train'].get('lambda_amo', cfg['loss'].get('lambda_amo', 1.0)),
-        lambda_temp=cfg['train'].get('lambda_temp', cfg['loss'].get('lambda_temp', 0.05)),
-        lambda_depth=cfg['train'].get('lambda_depth', cfg['loss'].get('lambda_depth', 0.1)),
+        lr=float(cfg['train'].get('lr', cfg['train'].get('lr_scene_stage1', 1e-4))),
+        lambda_vis=cfg['train'].get('lambda_vis', cfg.get('loss', {}).get('lambda_vis', 1.0)),
+        lambda_amo=cfg['train'].get('lambda_amo', cfg.get('loss', {}).get('lambda_amo', 1.0)),
+        lambda_temp=cfg['train'].get('lambda_temp', cfg.get('loss', {}).get('lambda_temp', 0.05)),
+        lambda_depth=cfg['train'].get('lambda_depth', cfg.get('loss', {}).get('lambda_depth', 0.1)),
         lambda_sep=cfg['train'].get('lambda_sep', 0.0),
         grad_clip=cfg['train'].get('grad_clip', 1.0),
     )

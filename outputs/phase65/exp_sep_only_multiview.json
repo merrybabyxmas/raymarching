@@ -1,0 +1,8 @@
+{
+  "num_samples": 50,
+  "same_slot_cosine_mean": 0.9999267274141311,
+  "same_slot_cosine_std": 0.0001635705699957452,
+  "cross_slot_cosine_mean": 0.9698123997449875,
+  "cross_slot_cosine_std": 0.023014492343976085,
+  "slot_separation_mean": 1.0316220121821131
+}
