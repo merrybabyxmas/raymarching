@@ -1,0 +1,42 @@
+# Experiment: Separation Loss Only
+# Based on A3 (camera + hard data) but with lambda_sep > 0
+
+device: cuda
+
+data:
+  root: data/phase65
+  image_size: 256
+  mask_size: 64
+  num_frames: 16
+  split_json: outputs/phase65/splits/ablation_all_seed42.json
+  split_name: train
+
+model:
+  slot_dim: 256
+  feat_dim: 64
+  hidden_dim: 128
+  Hs: 64
+  Ws: 64
+  Hf: 32
+  Wf: 32
+
+train:
+  epochs: 50
+  batch_size: 4
+  lr: 3e-4
+  seed: 42
+  lambda_vis: 1.0
+  lambda_amo: 1.0
+  lambda_occ: 0.25
+  lambda_temp: 0.25
+  lambda_depth: 0.0
+  lambda_sep: 0.5  # NEW: Slot separation loss
+  grad_clip: 1.0
+  use_camera_cond: true  # Camera conditioning enabled
+
+ablation:
+  use_camera_cond: true
+
+eval:
+  every_n_epochs: 10
+  batch_size: 4

@@ -64,9 +64,17 @@ def evaluate_epoch(trainer: Stage1Trainer, loader: DataLoader, device: str, use_
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
+    parser.add_argument('--output_dir', type=str, default=None)
+    parser.add_argument('--lambda_sep', type=float, default=None)
     args = parser.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text())
+
+    # Override config with command-line arguments
+    if args.output_dir:
+        cfg['output_dir'] = args.output_dir
+    if args.lambda_sep is not None:
+        cfg['train']['lambda_sep'] = args.lambda_sep
     seed = int(cfg['train'].get('seed', 42))
     set_seed(seed)
     device = cfg.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -105,11 +113,12 @@ def main() -> int:
     trainer = Stage1Trainer(
         scene_module=model,
         device=device,
-        lr=cfg['train'].get('lr_scene_stage1', 1e-4),
-        lambda_vis=cfg['loss'].get('lambda_vis', 1.0),
-        lambda_amo=cfg['loss'].get('lambda_amo', 1.0),
-        lambda_temp=cfg['loss'].get('lambda_temp', 0.05),
-        lambda_depth=cfg['loss'].get('lambda_depth', 0.1),
+        lr=cfg['train'].get('lr', cfg['train'].get('lr_scene_stage1', 1e-4)),
+        lambda_vis=cfg['train'].get('lambda_vis', cfg['loss'].get('lambda_vis', 1.0)),
+        lambda_amo=cfg['train'].get('lambda_amo', cfg['loss'].get('lambda_amo', 1.0)),
+        lambda_temp=cfg['train'].get('lambda_temp', cfg['loss'].get('lambda_temp', 0.05)),
+        lambda_depth=cfg['train'].get('lambda_depth', cfg['loss'].get('lambda_depth', 0.1)),
+        lambda_sep=cfg['train'].get('lambda_sep', 0.0),
         grad_clip=cfg['train'].get('grad_clip', 1.0),
     )
 
