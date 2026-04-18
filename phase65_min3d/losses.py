@@ -43,7 +43,7 @@ def occlusion_consistency_loss(scene_state: SceneState) -> torch.Tensor:
 
 def _masked_avg_pool(feat: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     if feat.shape[-2:] != mask.shape[-2:]:
-        mask = F.interpolate(mask, size=feat.shape[-2:], mode="bilinear", align_corners=False)
+        mask = F.interpolate(mask, size=feat.shape[-2:], mode='bilinear', align_corners=False)
     denom = mask.sum(dim=(2, 3)).clamp(min=1e-6)
     pooled = (feat * mask).sum(dim=(2, 3)) / denom
     return pooled
@@ -57,6 +57,38 @@ def temporal_identity_loss(curr_state: SceneState, prev_state: Optional[SceneSta
     z0_prev = _masked_avg_pool(prev_state.features.feat_e0, prev_state.maps.amodal_e0).detach()
     z1_prev = _masked_avg_pool(prev_state.features.feat_e1, prev_state.maps.amodal_e1).detach()
     return F.mse_loss(z0_curr, z0_prev) + F.mse_loss(z1_curr, z1_prev)
+
+
+def slot_separation_loss(scene_state: SceneState, margin: float = 0.25) -> torch.Tensor:
+    """Encourage entity slots to represent different objects instead of becoming identical.
+
+    Uses the explicit slot embeddings when available and falls back to amodal-pooled
+    features otherwise.
+    """
+    if scene_state.slot_e0 is not None and scene_state.slot_e1 is not None:
+        z0 = scene_state.slot_e0
+        z1 = scene_state.slot_e1
+    else:
+        z0 = _masked_avg_pool(scene_state.features.feat_e0, scene_state.maps.amodal_e0)
+        z1 = _masked_avg_pool(scene_state.features.feat_e1, scene_state.maps.amodal_e1)
+    z0 = F.normalize(z0, dim=-1)
+    z1 = F.normalize(z1, dim=-1)
+    cos = (z0 * z1).sum(dim=-1)
+    return F.relu(cos - margin).mean()
+
+
+def cross_view_slot_consistency_loss(state_a: SceneState, state_b: SceneState, margin: float = 0.20) -> torch.Tensor:
+    if state_a.slot_e0 is None or state_a.slot_e1 is None or state_b.slot_e0 is None or state_b.slot_e1 is None:
+        return torch.tensor(0.0, device=state_a.features.feat_e0.device)
+    a0 = F.normalize(state_a.slot_e0, dim=-1)
+    a1 = F.normalize(state_a.slot_e1, dim=-1)
+    b0 = F.normalize(state_b.slot_e0, dim=-1)
+    b1 = F.normalize(state_b.slot_e1, dim=-1)
+    pos = (2.0 - (a0 * b0).sum(dim=-1) - (a1 * b1).sum(dim=-1)).mean()
+    neg01 = (a0 * b1).sum(dim=-1)
+    neg10 = (a1 * b0).sum(dim=-1)
+    neg = F.relu(neg01 - margin).mean() + F.relu(neg10 - margin).mean()
+    return pos + neg
 
 
 def depth_ordering_loss(scene_state: SceneState, gt_front_idx: Optional[torch.Tensor] = None, margin: float = 0.05) -> torch.Tensor:
