@@ -4,7 +4,6 @@ from typing import Optional, Sequence
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .layered_decoder import LayeredEntityDecoder
 from .motion_rollout import MotionRollout
@@ -90,7 +89,7 @@ class SceneModule(nn.Module):
         text_context: Optional[torch.Tensor] = None,
         camera_context: Optional[torch.Tensor] = None,
     ) -> SceneState:
-        del text_prompt  # reserved for future richer conditioning
+        del text_prompt
         if prev_frame is not None:
             batch_size = prev_frame.shape[0]
             device = prev_frame.device
@@ -106,8 +105,6 @@ class SceneModule(nn.Module):
 
         slot_e0, slot_e1 = self.slot_encoder(entity_names, text_context=text_context, batch_size=batch_size, device=device)
         camera_latent = self._encode_camera(camera_context, batch_size, device, dtype)
-        # Inject a small amount of camera context directly into the slots to make
-        # view-aware decoding easier under held-out camera evaluation.
         slot_e0 = slot_e0 + 0.15 * camera_latent
         slot_e1 = slot_e1 + 0.15 * camera_latent
 
@@ -125,4 +122,6 @@ class SceneModule(nn.Module):
             global_feat=global_feat,
             mem_e0=mem_e0,
             mem_e1=mem_e1,
+            slot_e0=slot_e0,
+            slot_e1=slot_e1,
         )
