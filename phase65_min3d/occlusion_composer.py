@@ -32,6 +32,8 @@ class OcclusionComposer(nn.Module):
         global_feat: Optional[torch.Tensor] = None,
         mem_e0: Optional[torch.Tensor] = None,
         mem_e1: Optional[torch.Tensor] = None,
+        slot_e0: Optional[torch.Tensor] = None,
+        slot_e1: Optional[torch.Tensor] = None,
     ) -> SceneState:
         v0 = torch.sigmoid(raw_visible_e0)
         v1 = torch.sigmoid(raw_visible_e1)
@@ -40,7 +42,6 @@ class OcclusionComposer(nn.Module):
         d0 = torch.sigmoid(raw_depth_e0)
         d1 = torch.sigmoid(raw_depth_e1)
 
-        # Smaller depth means closer / more front. Convert to frontness gates.
         f0 = torch.sigmoid(self.sharpness * (d1 - d0))
         f1 = torch.sigmoid(self.sharpness * (d0 - d1))
 
@@ -68,4 +69,11 @@ class OcclusionComposer(nn.Module):
             contact=contact,
         )
         feats = SceneFeatures(feat_e0=feat_e0, feat_e1=feat_e1, global_feat=global_feat)
-        return SceneState(maps=maps, features=feats, mem_e0=mem_e0, mem_e1=mem_e1)
+        return SceneState(
+            maps=maps,
+            features=feats,
+            mem_e0=mem_e0,
+            mem_e1=mem_e1,
+            slot_e0=slot_e0,
+            slot_e1=slot_e1,
+        )
