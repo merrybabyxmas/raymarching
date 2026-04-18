@@ -8,7 +8,14 @@ import torch.nn as nn
 import torch.optim as optim
 
 from .evaluator import Phase65Evaluator
-from .losses import amodal_loss, depth_ordering_loss, occlusion_consistency_loss, temporal_identity_loss, visible_loss
+from .losses import (
+    amodal_loss,
+    depth_ordering_loss,
+    occlusion_consistency_loss,
+    slot_separation_loss,
+    temporal_identity_loss,
+    visible_loss,
+)
 from .scene_module import SceneModule
 from .scene_outputs import SceneState
 
@@ -18,11 +25,11 @@ class Stage1Batch:
     entity_names: tuple[str, str]
     text_prompt: str
     prev_frame: Optional[torch.Tensor]
-    gt_visible: torch.Tensor   # (B, 2, H, W)
-    gt_amodal: torch.Tensor    # (B, 2, H, W)
-    gt_front_idx: Optional[torch.Tensor] = None  # (B,)
+    gt_visible: torch.Tensor
+    gt_amodal: torch.Tensor
+    gt_front_idx: Optional[torch.Tensor] = None
     t_index: int = 0
-    camera_context: Optional[torch.Tensor] = None  # (B, Dc)
+    camera_context: Optional[torch.Tensor] = None
 
 
 class Stage1Trainer:
@@ -37,6 +44,7 @@ class Stage1Trainer:
         lambda_amo: float = 1.0,
         lambda_temp: float = 0.25,
         lambda_depth: float = 0.1,
+        lambda_sep: float = 0.0,
         grad_clip: float = 1.0,
     ):
         self.scene_module = scene_module.to(device)
@@ -47,6 +55,7 @@ class Stage1Trainer:
         self.lambda_amo = lambda_amo
         self.lambda_temp = lambda_temp
         self.lambda_depth = lambda_depth
+        self.lambda_sep = lambda_sep
         self.grad_clip = grad_clip
 
     def step(self, batch: Stage1Batch, prev_state: Optional[SceneState] = None) -> tuple[Dict[str, float], SceneState]:
@@ -71,7 +80,14 @@ class Stage1Trainer:
         l_occ = occlusion_consistency_loss(scene_state)
         l_temp = temporal_identity_loss(scene_state, prev_state)
         l_depth = depth_ordering_loss(scene_state, gt_front_idx=gt_front_idx)
-        loss = self.lambda_vis * l_vis + self.lambda_amo * (l_amo + 0.25 * l_occ) + self.lambda_temp * l_temp + self.lambda_depth * l_depth
+        l_sep = slot_separation_loss(scene_state)
+        loss = (
+            self.lambda_vis * l_vis
+            + self.lambda_amo * (l_amo + 0.25 * l_occ)
+            + self.lambda_temp * l_temp
+            + self.lambda_depth * l_depth
+            + self.lambda_sep * l_sep
+        )
         loss.backward()
         nn.utils.clip_grad_norm_(self.scene_module.parameters(), self.grad_clip)
         self.optimizer.step()
@@ -85,5 +101,6 @@ class Stage1Trainer:
             'l_occ': float(l_occ.item()),
             'l_temp': float(l_temp.item()),
             'l_depth': float(l_depth.item()),
+            'l_sep': float(l_sep.item()),
         })
         return metrics, scene_state.detach()
